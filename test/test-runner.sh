@@ -5,13 +5,13 @@ AIN_FILE="$(mktemp --suffix=.ain)"
 
 printf "Running test $TEST_FILE... "
 
-if ! sys4c -o "$AIN_FILE" "$TEST_FILE"; then
+if ! ${SYS4C:-sys4c} -o "$AIN_FILE" "$TEST_FILE"; then
     echo compile failed
     rm -f "$AIN_FILE"
     exit 1
 fi
 
-if ! xsystem4 --nodebug "$AIN_FILE"; then
+if ! ${XSYSTEM4:-xsystem4} --nodebug --save-folder=. "$AIN_FILE"; then
     echo execution failed
     rm -f "$AIN_FILE"
     exit 1
