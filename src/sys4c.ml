@@ -21,6 +21,7 @@ open Jaf
 let parse_jaf jaf_file =
   let do_parse file =
     let lexbuf = Lexing.from_channel file in
+    Lexing.set_filename lexbuf jaf_file;
     Parser.jaf Lexer.token lexbuf
   in
   match jaf_file with
@@ -43,6 +44,7 @@ let compile_jaf ctx jaf_file decl_only =
 let compile_hll ctx hll_file =
   let do_parse file =
     let lexbuf = Lexing.from_channel file in
+    Lexing.set_filename lexbuf hll_file;
     Parser.hll Lexer.token lexbuf
   in
   let get_lib_name filename =

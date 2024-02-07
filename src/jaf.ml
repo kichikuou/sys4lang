@@ -93,6 +93,7 @@ type ident_type =
   | FunctionName of int
   | HLLName of int
   | System
+  | BuiltinFunction of Bytecode.builtin
 
 type member_type =
   | ClassVariable of int * int
@@ -213,6 +214,7 @@ type resolved_name =
   | ResolvedFunction of int
   | ResolvedLibrary of int
   | ResolvedSystem
+  | ResolvedBuiltin of Bytecode.builtin
   | UnresolvedName
 
 class ivisitor ctx =
@@ -289,6 +291,10 @@ class ivisitor ctx =
               | Some { super_index = Some super_no; _ } ->
                   ResolvedFunction super_no
               | _ -> UnresolvedName)
+          | "assert" ->
+              ResolvedBuiltin
+                (Option.value_exn
+                   (Bytecode.builtin_function_of_string "assert"))
           | _ -> (
               match self#get_local name with
               | Some v -> ResolvedLocal v
@@ -317,7 +323,7 @@ class ivisitor ctx =
                           | ResolvedLibrary _ ->
                               failwith "importing of libraries not implemented"
                           | ResolvedLocal _ | ResolvedConstant _
-                          | ResolvedSystem ->
+                          | ResolvedSystem | ResolvedBuiltin _ ->
                               failwith "ain_resolve returned invalid result"
                           | UnresolvedName -> UnresolvedName)
                       | result -> result)))

@@ -68,7 +68,7 @@ let func typespec name params body =
 %token IMAINSYSTEM
 /* keywords */
 %token TRUE FALSE IF ELSE WHILE DO FOR SWITCH CASE DEFAULT THIS NEW
-%token GOTO CONTINUE BREAK RETURN
+%token GOTO CONTINUE BREAK RETURN ASSERT
 %token CONST REF OVERRIDE ARRAY WRAP FUNCTYPE DELEGATE STRUCT ENUM
 
 %token EOF
@@ -280,6 +280,7 @@ statement
   | jump_statement { stmt $1 }
   | message_statement { stmt $1 }
   | rassign_statement { stmt $1 }
+  | assert_statement { stmt $1 }
   ;
 
 switch_statement
@@ -352,6 +353,14 @@ message_statement
 
 rassign_statement
   : expression REFASSIGN expression SEMICOLON { RefAssign ($1, $3) }
+
+assert_statement
+  : ASSERT LPAREN expression RPAREN SEMICOLON
+    { let args = [$3;
+                  expr (ConstString (expr_to_string $3));
+                  expr (ConstString $symbolstartpos.Lexing.pos_fname);
+                  expr (ConstInt $symbolstartpos.pos_lnum)] in
+      Expression (expr (Call (expr (Ident ("assert", None)), args, None))) }
 
 declaration
   : declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON

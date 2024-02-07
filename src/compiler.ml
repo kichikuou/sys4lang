@@ -473,6 +473,9 @@ class jaf_compiler ain =
       | Ident (_, Some System) ->
           compiler_bug "tried to compile system identifier"
             (Some (ASTExpression expr))
+      | Ident (_, Some (BuiltinFunction _)) ->
+          compiler_bug "tried to compile built-in function identifier"
+            (Some (ASTExpression expr))
       | Ident (_, None) ->
           compiler_bug "identifier type is none" (Some (ASTExpression expr))
       | Unary (UPlus, e) -> self#compile_expression e
@@ -739,26 +742,32 @@ class jaf_compiler ain =
             self#compile_function_arguments args f;
             self#write_instruction1 CALLSYS f.index
       (* built-in call *)
-      | Call ({ node = Member (e, _, _); _ }, args, Some (BuiltinCall builtin))
-        -> (
+      | Call (lhs, args, Some (BuiltinCall builtin)) -> (
           if Ain.version_gte ain (11, 0) then
             compiler_bug "tried to compile old-style built-in call in ain v11+"
               (Some (ASTExpression expr));
+          (match lhs with
+          | { node = Member (e, _, _); _ } -> (
+              match builtin with
+              | IntString | FloatString | StringInt | StringLength
+              | StringLengthByte | StringEmpty | StringFind | StringGetPart ->
+                  self#compile_expression e
+              | StringPushBack | StringPopBack | StringErase | DelegateSet
+              | DelegateAdd | DelegateNumof | DelegateExist | DelegateErase
+              | DelegateClear ->
+                  self#compile_lvalue e
+              | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
+              | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty
+              | ArrayErase | ArrayInsert | ArraySort ->
+                  self#compile_variable_ref e
+              | Assert ->
+                  compiler_bug "invalid assert expression"
+                    (Some (ASTExpression expr)))
+          | _ -> ());
           let f = function_of_builtin builtin in
-          (match builtin with
-          | IntString | FloatString | StringInt | StringLength
-          | StringLengthByte | StringEmpty | StringFind | StringGetPart ->
-              self#compile_expression e
-          | StringPushBack | StringPopBack | StringErase | DelegateSet
-          | DelegateAdd | DelegateNumof | DelegateExist | DelegateErase
-          | DelegateClear ->
-              self#compile_lvalue e
-          | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
-          | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty | ArrayErase
-          | ArrayInsert | ArraySort ->
-              self#compile_variable_ref e);
           self#compile_function_arguments args f;
           match builtin with
+          | Assert -> self#write_instruction0 ASSERT
           | IntString -> self#write_instruction0 I_STRING
           | FloatString ->
               self#write_instruction1 PUSH 6;
