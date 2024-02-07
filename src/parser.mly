@@ -67,7 +67,7 @@ let func typespec name params body =
 %token VOID CHAR INT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
 %token IMAINSYSTEM
 /* keywords */
-%token TRUE FALSE IF ELSE WHILE DO FOR SWITCH CASE DEFAULT THIS NEW
+%token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT THIS NEW
 %token GOTO CONTINUE BREAK RETURN ASSERT
 %token CONST REF OVERRIDE ARRAY WRAP FUNCTYPE DELEGATE STRUCT ENUM
 
@@ -104,8 +104,6 @@ constant
   : I_CONSTANT { ConstInt ($1) }
   | C_CONSTANT { ConstChar ($1) }
   | F_CONSTANT { ConstFloat ($1) }
-  | TRUE       { ConstInt (1) }
-  | FALSE      { ConstInt (0) }
   (* E_CONSTANT *)
   ;
 

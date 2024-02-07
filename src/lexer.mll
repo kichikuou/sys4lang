@@ -83,8 +83,6 @@ let () =
               "hll_param",    HLL_PARAM;
               "hll_func",     HLL_FUNC;
               "hll_delegate", HLL_DELEGATE;
-              "true",         TRUE;
-              "false",        FALSE;
               "if",           IF;
               "else",         ELSE;
               "while",        WHILE;
