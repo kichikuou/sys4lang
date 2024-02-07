@@ -1,3 +1,7 @@
+/*
+ * This is a block comment.
+ */
+
 int main()
 {
 	return 0;

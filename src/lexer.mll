@@ -136,8 +136,9 @@ let ws = [' ' '\t']
 let sc = [^ '\\' '\n' '"'] | es
 
 rule token = parse
-    [' ' '\t']              { token lexbuf } (* skip blanks *)
+    [' ' '\t' '\r']         { token lexbuf } (* skip blanks *)
   | "//" [^ '\n']*          { token lexbuf }
+  | "/*"                    { block_comment lexbuf }
   | ['\n' ]                 { Lexing.new_line lexbuf; token lexbuf }
   | d+ as n                 { I_CONSTANT(int_of_string n) }
   | (bp b+) as n            { I_CONSTANT(int_of_string n) }
@@ -203,3 +204,8 @@ rule token = parse
                               | None -> IDENTIFIER(s)
                             }
   | eof                     { EOF }
+
+and block_comment = parse
+    "*/"  { token lexbuf }
+  | _     { block_comment lexbuf }
+  | eof   { failwith "unterminated block comment" }
