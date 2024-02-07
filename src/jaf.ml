@@ -169,6 +169,7 @@ type fundecl = {
   return : type_specifier;
   params : variable list;
   body : block_item list;
+  is_label: bool;
   mutable index : int option;
   mutable class_index : int option;
   mutable super_index : int option;
@@ -738,6 +739,7 @@ let jaf_to_ain_function j_f (a_f : Ain.Function.t) =
     vars;
     nr_args = List.length vars;
     return_type = jaf_to_ain_type j_f.return;
+    is_label = j_f.is_label;
   }
 
 let jaf_to_ain_struct j_s (a_s : Ain.Struct.t) =

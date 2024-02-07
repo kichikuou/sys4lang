@@ -195,6 +195,7 @@ rule token = parse
   | ','                     { COMMA }
   | ':'                     { COLON }
   | ';'                     { SEMICOLON }
+  | '#'                     { HASH }
   | l as c                  { IDENTIFIER(c) }
   | (l a* at) as s          {
                               match Hashtbl.find keyword_table s with

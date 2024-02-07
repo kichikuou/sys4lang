@@ -172,6 +172,10 @@ void test_continue_destructor()
 	assert(global == 42);
 }
 
+#scenario_func()
+{
+}
+
 int main()
 {
 	assert(test_if() == 0);

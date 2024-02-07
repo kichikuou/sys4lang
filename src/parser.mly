@@ -40,7 +40,16 @@ let func typespec name params body =
     | [{ type_spec={data=Void; _}; _}] -> []
     | _ -> params
   in
-  { name=name; return=typespec; params=plist; body=body; index=None; class_index=None; super_index=None }
+  {
+    name = name;
+    return = typespec;
+    params = plist;
+    body = body;
+    is_label = false;
+    index = None;
+    class_index = None;
+    super_index = None;
+  }
 
 %}
 
@@ -62,7 +71,7 @@ let func typespec name params body =
 %token ORASSIGN XORASSIGN ANDASSIGN LSHIFTASSIGN RSHIFTASSIGN REFASSIGN
 /* delimiters */
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
-%token QUESTION COLON SEMICOLON COMMA DOT
+%token QUESTION COLON SEMICOLON COMMA DOT HASH
 /* types */
 %token VOID CHAR INT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
 %token IMAINSYSTEM
@@ -390,6 +399,8 @@ external_declaration
     { List.map (fun d -> Global (d)) $1 }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Function (func $1 $2 $3 $4)] }
+  | HASH IDENTIFIER parameter_list block
+    { [Function { (func (qtype None Void) $2 $3 $4) with is_label=true }] }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { [FuncTypeDef (func $2 $3 $4 [])] }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
