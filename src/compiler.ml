@@ -908,9 +908,13 @@ class jaf_compiler ain =
           self#compile_block [ decl ];
           (* loop test *)
           let test_addr = current_address in
-          self#compile_expression test;
-          let break_addr = current_address + 2 in
-          self#write_instruction1 IFZ 0;
+          let break_addr =
+            Option.map test ~f:(fun e ->
+                self#compile_expression e;
+                let break_addr = current_address + 2 in
+                self#write_instruction1 IFZ 0;
+                break_addr)
+          in
           let body_addr = current_address + 2 in
           self#write_instruction1 JUMP 0;
           (* loop increment *)
@@ -928,7 +932,8 @@ class jaf_compiler ain =
           self#compile_statement body;
           self#write_instruction1 JUMP loop_addr;
           (* loop end *)
-          self#write_address_at break_addr current_address;
+          Option.iter break_addr ~f:(fun break_addr ->
+              self#write_address_at break_addr current_address);
           self#end_loop
       | Goto name ->
           self#scope_add_goto name (current_address + 2) stmt;

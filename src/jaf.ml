@@ -145,7 +145,7 @@ and ast_statement =
   | If of expression * statement * statement
   | While of expression * statement
   | DoWhile of expression * statement
-  | For of block_item * expression * expression option * statement
+  | For of block_item * expression option * expression option * statement
   | Goto of string
   | Continue
   | Break
@@ -383,7 +383,7 @@ class ivisitor ctx =
       | For (init, test, inc, body) ->
           environment#push;
           self#visit_block_item init;
-          self#visit_expression test;
+          Option.iter test ~f:self#visit_expression;
           Option.iter inc ~f:self#visit_expression;
           self#visit_statement body;
           environment#pop
@@ -574,10 +574,11 @@ let rec stmt_to_string (stmt : statement) =
   | DoWhile (test, body) ->
       sprintf "do %s while (%s);" (stmt_to_string body) (expr_to_string test)
   | For (init, test, inc, body) ->
+      let expr_opt_to_string = Option.value_map ~default:"" ~f:expr_to_string in
       let s_init = block_item_to_string init in
-      let s_test = expr_to_string test in
+      let s_test = expr_opt_to_string test in
       let s_body = stmt_to_string body in
-      let s_inc = match inc with None -> "" | Some e -> expr_to_string e in
+      let s_inc = expr_opt_to_string inc in
       sprintf "for (%s %s %s) %s" s_init s_test s_inc s_body
   | Goto label -> sprintf "goto %s;" label
   | Continue -> "continue;"

@@ -324,13 +324,13 @@ selection_statement
 iteration_statement
   : WHILE LPAREN expression RPAREN statement { While ($3, $5) }
   | DO statement WHILE LPAREN expression RPAREN { DoWhile ($5, $2) }
-  | FOR LPAREN expression_statement expression SEMICOLON expression? RPAREN statement
+  | FOR LPAREN expression_statement expression? SEMICOLON expression? RPAREN statement
     { For (Statement (stmt $3),
            $4,
            $6,
            $8)
     }
-  | FOR LPAREN declaration expression SEMICOLON expression? RPAREN statement
+  | FOR LPAREN declaration expression? SEMICOLON expression? RPAREN statement
     { For (Declarations $3,
            $4,
            $6,
