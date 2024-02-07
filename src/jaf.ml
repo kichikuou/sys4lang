@@ -61,15 +61,13 @@ type assign_op =
   | LShiftAssign
   | RShiftAssign
 
-type type_qualifier =
-  | Const
-  | Ref
-  | Override
+type type_qualifier = Const | Ref | Override
 
 type type_specifier = {
   mutable data : data_type;
-  qualifier    : type_qualifier option
+  qualifier : type_qualifier option;
 }
+
 and data_type =
   | Untyped
   | Unresolved of string
@@ -78,10 +76,10 @@ and data_type =
   | Bool
   | Float
   | String
-  | Struct   of string * int
+  | Struct of string * int
   (*| Enum*)
-  | Array    of type_specifier
-  | Wrap     of type_specifier
+  | Array of type_specifier
+  | Wrap of type_specifier
   | HLLParam
   | HLLFunc
   | Delegate of string * int
@@ -114,57 +112,55 @@ type call_type =
 
 type expression = {
   mutable valuetype : Ain.Type.t option;
-  mutable node : ast_expression
+  mutable node : ast_expression;
 }
+
 and ast_expression =
-  | ConstInt    of int
-  | ConstFloat  of float
-  | ConstChar   of string
+  | ConstInt of int
+  | ConstFloat of float
+  | ConstChar of string
   | ConstString of string
-  | Ident       of string     * ident_type option
-  | Unary       of unary_op   * expression
-  | Binary      of binary_op  * expression      * expression
-  | Assign      of assign_op  * expression      * expression
-  | Seq         of expression * expression
-  | Ternary     of expression * expression      * expression
-  | Cast        of data_type  * expression
-  | Subscript   of expression * expression
-  | Member      of expression * string * member_type option
-  | Call        of expression * expression list * call_type option
-  | New         of data_type  * expression list * int option
+  | Ident of string * ident_type option
+  | Unary of unary_op * expression
+  | Binary of binary_op * expression * expression
+  | Assign of assign_op * expression * expression
+  | Seq of expression * expression
+  | Ternary of expression * expression * expression
+  | Cast of data_type * expression
+  | Subscript of expression * expression
+  | Member of expression * string * member_type option
+  | Call of expression * expression list * call_type option
+  | New of data_type * expression list * int option
   | This
 
-type block_item =
-  | Statement    of statement
-  | Declarations of variable list
-and statement = {
-  mutable node : ast_statement;
-  mutable delete_vars : int list
-}
+type block_item = Statement of statement | Declarations of variable list
+and statement = { mutable node : ast_statement; mutable delete_vars : int list }
+
 and ast_statement =
   | EmptyStatement
-  | Expression     of expression
-  | Compound       of block_item list
-  | Labeled        of string          * statement
-  | If             of expression      * statement * statement
-  | While          of expression      * statement
-  | DoWhile        of expression      * statement
-  | For            of block_item      * expression * expression option * statement
-  | Goto           of string
+  | Expression of expression
+  | Compound of block_item list
+  | Labeled of string * statement
+  | If of expression * statement * statement
+  | While of expression * statement
+  | DoWhile of expression * statement
+  | For of block_item * expression * expression option * statement
+  | Goto of string
   | Continue
   | Break
-  | Switch         of expression      * statement list
-  | Case           of expression      * statement
-  | Default        of statement
-  | Return         of expression option
-  | MessageCall    of string          * string option * int option
-  | RefAssign      of expression      * expression
+  | Switch of expression * statement list
+  | Case of expression * statement
+  | Default of statement
+  | Return of expression option
+  | MessageCall of string * string option * int option
+  | RefAssign of expression * expression
+
 and variable = {
-  name      : string;
+  name : string;
   array_dim : expression list;
   type_spec : type_specifier;
-  initval   : expression option;
-  mutable index : int option
+  initval : expression option;
+  mutable index : int option;
 }
 
 type fundecl = {
@@ -174,7 +170,7 @@ type fundecl = {
   body : block_item list;
   mutable index : int option;
   mutable class_index : int option;
-  mutable super_index : int option
+  mutable super_index : int option;
 }
 
 type struct_declaration =
@@ -183,14 +179,11 @@ type struct_declaration =
   | Destructor of fundecl
   | Method of fundecl
 
-type structdecl = {
-  name : string;
-  decls : struct_declaration list
-}
+type structdecl = { name : string; decls : struct_declaration list }
 
 type enumdecl = {
-  name   : string option;
-  values : (string * expression option) list
+  name : string option;
+  values : (string * expression option) list;
 }
 
 type declaration =
@@ -210,7 +203,7 @@ type ast_node =
 type context = {
   ain : Ain.t;
   import_ain : Ain.t;
-  mutable const_vars : variable list
+  mutable const_vars : variable list;
 }
 
 type resolved_name =
@@ -222,245 +215,229 @@ type resolved_name =
   | ResolvedSystem
   | UnresolvedName
 
-class ivisitor ctx = object (self)
+class ivisitor ctx =
+  object (self)
+    val environment =
+      object (self)
+        val mutable stack = []
+        val mutable variables = []
+        val mutable current_function = None
+        method push = stack <- variables :: stack
 
-  val environment = object (self)
-    val mutable stack = []
-    val mutable variables = []
-    val mutable current_function = None
+        method pop =
+          match stack with
+          | [] -> failwith "visitor tried to pop root environment"
+          | prev :: rest ->
+              variables <- prev;
+              stack <- rest
 
-    method push =
-      stack <- variables :: stack
+        method push_var decl = variables <- decl :: variables
 
-    method pop =
-      match stack with
-      | [] ->
-          failwith "visitor tried to pop root environment"
-      | prev::rest ->
-          variables <- prev;
-          stack <- rest
+        method var_list =
+          List.append variables (List.fold stack ~init:[] ~f:List.append)
 
-    method push_var decl =
-      variables <- decl :: variables
+        method var_id_list =
+          List.map self#var_list ~f:(fun (v : variable) ->
+              Option.value_exn v.index)
 
-    method var_list =
-      List.append variables (List.fold stack ~init:[] ~f:List.append)
+        method enter_function decl =
+          self#push;
+          current_function <- Some decl;
+          List.iter decl.params ~f:self#push_var
 
-    method var_id_list =
-      List.map (self#var_list) ~f:(fun (v:variable) -> Option.value_exn v.index)
+        method leave_function =
+          self#pop;
+          current_function <- None
 
-    method enter_function decl =
-      self#push;
-      current_function <- Some decl;
-      List.iter decl.params ~f:self#push_var
+        method current_function = current_function
 
-    method leave_function =
-      self#pop;
-      current_function <- None
+        method current_class =
+          match current_function with Some f -> f.class_index | None -> None
 
-    method current_function = current_function
+        method get_local name =
+          let var_eq _ (v : variable) = String.equal v.name name in
+          let rec search vars rest =
+            match List.findi vars ~f:var_eq with
+            | Some (_, v) -> Some v
+            | None -> (
+                match rest with [] -> None | prev :: rest -> search prev rest)
+          in
+          search variables stack
 
-    method current_class =
-      match current_function with
-      | Some f -> f.class_index
-      | None -> None
-
-    method get_local name =
-      let var_eq _ (v : variable) = String.equal v.name name in
-      let rec search vars rest =
-        match List.findi vars ~f:var_eq with
-        | Some (_, v) -> Some v
-        | None ->
-            begin match rest with
-            | [] -> None
-            | prev::rest -> search prev rest
-            end
-      in
-      search variables stack
-
-    method resolve name =
-      let ain_resolve ain =
-        match Ain.get_global ain name with
-        | Some g -> ResolvedGlobal g
-        | None ->
-            begin match Ain.get_function ain name with
-            | Some f -> ResolvedFunction f.index
-            | None ->
-                begin match Ain.get_library_index ain name with
+        method resolve name =
+          let ain_resolve ain =
+            match Ain.get_global ain name with
+            | Some g -> ResolvedGlobal g
+            | None -> (
+                match Ain.get_function ain name with
+                | Some f -> ResolvedFunction f.index
+                | None -> (
+                    match Ain.get_library_index ain name with
+                    | Some i -> ResolvedLibrary i
+                    | None -> UnresolvedName))
+          in
+          match name with
+          | "system" ->
+              (* NOTE: on ain v11+, "system" is a library *)
+              if Ain.version_gte ctx.ain (11, 0) then
+                match Ain.get_library_index ctx.ain "system" with
                 | Some i -> ResolvedLibrary i
                 | None -> UnresolvedName
-                end
-            end
+              else ResolvedSystem
+          | "super" -> (
+              match current_function with
+              | Some { super_index = Some super_no; _ } ->
+                  ResolvedFunction super_no
+              | _ -> UnresolvedName)
+          | _ -> (
+              match self#get_local name with
+              | Some v -> ResolvedLocal v
+              | None -> (
+                  match
+                    List.findi ctx.const_vars ~f:(fun _ (v : variable) ->
+                        String.equal v.name name)
+                  with
+                  | Some (_, v) -> ResolvedConstant v
+                  | None -> (
+                      match ain_resolve ctx.ain with
+                      | UnresolvedName -> (
+                          (* Try to import declaration from import_ain *)
+                          match ain_resolve ctx.import_ain with
+                          | ResolvedGlobal g ->
+                              let no = Ain.write_new_global ctx.ain g in
+                              ResolvedGlobal
+                                (Ain.get_global_by_index ctx.ain no)
+                          | ResolvedFunction i ->
+                              let f =
+                                Ain.get_function_by_index ctx.import_ain i
+                              in
+                              let f = Ain.Function.set_undefined f in
+                              ResolvedFunction
+                                (Ain.write_new_function ctx.ain f)
+                          | ResolvedLibrary _ ->
+                              failwith "importing of libraries not implemented"
+                          | ResolvedLocal _ | ResolvedConstant _
+                          | ResolvedSystem ->
+                              failwith "ain_resolve returned invalid result"
+                          | UnresolvedName -> UnresolvedName)
+                      | result -> result)))
+      end
+
+    method visit_expression (e : expression) =
+      match e.node with
+      | ConstInt _ -> ()
+      | ConstFloat _ -> ()
+      | ConstChar _ -> ()
+      | ConstString _ -> ()
+      | Ident (_, _) -> ()
+      | Unary (_, e) -> self#visit_expression e
+      | Binary (_, lhs, rhs) ->
+          self#visit_expression lhs;
+          self#visit_expression rhs
+      | Assign (_, lhs, rhs) ->
+          self#visit_expression lhs;
+          self#visit_expression rhs
+      | Seq (a, b) ->
+          self#visit_expression a;
+          self#visit_expression b
+      | Ternary (a, b, c) ->
+          self#visit_expression a;
+          self#visit_expression b;
+          self#visit_expression c
+      | Cast (_, obj) -> self#visit_expression obj
+      | Subscript (arr, i) ->
+          self#visit_expression arr;
+          self#visit_expression i
+      | Member (obj, _, _) -> self#visit_expression obj
+      | Call (f, args, _) ->
+          self#visit_expression f;
+          List.iter args ~f:self#visit_expression
+      | New (_, args, _) -> List.iter args ~f:self#visit_expression
+      | This -> ()
+
+    method visit_statement (s : statement) =
+      match s.node with
+      | EmptyStatement -> ()
+      | Expression e -> self#visit_expression e
+      | Compound items ->
+          environment#push;
+          List.iter items ~f:self#visit_block_item;
+          environment#pop
+      | Labeled (_, a) -> self#visit_statement a
+      | If (test, cons, alt) ->
+          self#visit_expression test;
+          self#visit_statement cons;
+          self#visit_statement alt
+      | While (test, body) ->
+          self#visit_expression test;
+          self#visit_statement body
+      | DoWhile (test, body) ->
+          self#visit_statement body;
+          self#visit_expression test
+      | For (init, test, inc, body) ->
+          environment#push;
+          self#visit_block_item init;
+          self#visit_expression test;
+          Option.iter inc ~f:self#visit_expression;
+          self#visit_statement body;
+          environment#pop
+      | Goto _ -> ()
+      | Continue -> ()
+      | Break -> ()
+      | Switch (e, stmts) ->
+          self#visit_expression e;
+          List.iter stmts ~f:self#visit_statement
+      | Case (e, stmt) ->
+          self#visit_expression e;
+          self#visit_statement stmt
+      | Default stmt -> self#visit_statement stmt
+      | Return e -> Option.iter e ~f:self#visit_expression
+      | MessageCall (_, _, _) -> ()
+      | RefAssign (a, b) ->
+          self#visit_expression a;
+          self#visit_expression b
+
+    method visit_local_variable v =
+      List.iter v.array_dim ~f:self#visit_expression;
+      Option.iter v.initval ~f:self#visit_expression;
+      environment#push_var v
+
+    method visit_block_item item =
+      match item with
+      | Statement s -> self#visit_statement s
+      | Declarations ds -> List.iter ds ~f:self#visit_local_variable
+
+    method visit_fundecl f =
+      environment#enter_function f;
+      List.iter f.body ~f:self#visit_block_item;
+      environment#leave_function
+
+    method visit_declaration d =
+      let visit_vardecl d =
+        List.iter d.array_dim ~f:self#visit_expression;
+        Option.iter d.initval ~f:self#visit_expression
       in
-      match name with
-      | "system" ->
-          (* NOTE: on ain v11+, "system" is a library *)
-          if Ain.version_gte ctx.ain (11, 0) then
-            begin match Ain.get_library_index ctx.ain "system" with
-            | Some i -> ResolvedLibrary i
-            | None -> UnresolvedName
-            end
-          else
-            ResolvedSystem
-      | "super" ->
-          begin match current_function with
-          | Some { super_index=Some super_no; _} -> ResolvedFunction super_no
-          | _ -> UnresolvedName
-          end
-      | _ ->
-          begin match self#get_local name with
-          | Some v -> ResolvedLocal v
-          | None ->
-              begin match List.findi ctx.const_vars ~f:(fun _ (v:variable) -> String.equal v.name name) with
-              | Some (_, v) -> ResolvedConstant v
-              | None ->
-                  begin match ain_resolve ctx.ain with
-                  | UnresolvedName ->
-                      (* Try to import declaration from import_ain *)
-                      begin match ain_resolve ctx.import_ain with
-                      | ResolvedGlobal g ->
-                          let no = Ain.write_new_global ctx.ain g in
-                          ResolvedGlobal (Ain.get_global_by_index ctx.ain no)
-                      | ResolvedFunction i ->
-                          let f = Ain.get_function_by_index ctx.import_ain i in
-                          let f = Ain.Function.set_undefined f in
-                          ResolvedFunction (Ain.write_new_function ctx.ain f)
-                      | ResolvedLibrary _ ->
-                          failwith "importing of libraries not implemented"
-                      | ResolvedLocal _ | ResolvedConstant _ | ResolvedSystem ->
-                          failwith "ain_resolve returned invalid result"
-                      | UnresolvedName -> UnresolvedName
-                      end
-                  | result -> result
-                  end
-              end
-          end
+      match d with
+      | Global g -> visit_vardecl g
+      | Function f -> self#visit_fundecl f
+      | FuncTypeDef _ -> ()
+      | DelegateDef _ -> ()
+      | StructDef s ->
+          let visit_structdecl = function
+            | MemberDecl d -> visit_vardecl d
+            | Constructor f -> self#visit_fundecl f
+            | Destructor f -> self#visit_fundecl f
+            | Method f -> self#visit_fundecl f
+          in
+          List.iter s.decls ~f:visit_structdecl
+      | Enum enum ->
+          let visit_enumval (_, expr) =
+            Option.iter expr ~f:self#visit_expression
+          in
+          List.iter enum.values ~f:visit_enumval
+
+    method visit_toplevel decls = List.iter decls ~f:self#visit_declaration
   end
-
-  method visit_expression (e : expression) =
-    match e.node with
-    | ConstInt (_) -> ()
-    | ConstFloat (_) -> ()
-    | ConstChar (_) -> ()
-    | ConstString (_) -> ()
-    | Ident (_, _) -> ()
-    | Unary (_, e) ->
-        self#visit_expression e
-    | Binary (_, lhs, rhs) ->
-        self#visit_expression lhs;
-        self#visit_expression rhs
-    | Assign (_, lhs, rhs) ->
-        self#visit_expression lhs;
-        self#visit_expression rhs
-    | Seq (a, b) ->
-        self#visit_expression a;
-        self#visit_expression b
-    | Ternary (a, b, c) ->
-        self#visit_expression a;
-        self#visit_expression b;
-        self#visit_expression c
-    | Cast (_, obj) ->
-        self#visit_expression obj
-    | Subscript (arr, i) ->
-        self#visit_expression arr;
-        self#visit_expression i
-    | Member (obj, _, _) ->
-        self#visit_expression obj
-    | Call (f, args, _) ->
-        self#visit_expression f;
-        List.iter args ~f:self#visit_expression
-    | New (_, args, _) ->
-        List.iter args ~f:self#visit_expression
-    | This -> ()
-
-  method visit_statement (s : statement) =
-    match s.node with
-    | EmptyStatement -> ()
-    | Expression (e) ->
-        self#visit_expression e
-    | Compound (items) ->
-        environment#push;
-        List.iter items ~f:self#visit_block_item;
-        environment#pop
-    | Labeled (_, a) ->
-        self#visit_statement a
-    | If (test, cons, alt) ->
-        self#visit_expression test;
-        self#visit_statement cons;
-        self#visit_statement alt
-    | While (test, body) ->
-        self#visit_expression test;
-        self#visit_statement body
-    | DoWhile (test, body) ->
-        self#visit_statement body;
-        self#visit_expression test
-    | For (init, test, inc, body) ->
-        environment#push;
-        self#visit_block_item init;
-        self#visit_expression test;
-        Option.iter inc ~f:self#visit_expression;
-        self#visit_statement body;
-        environment#pop
-    | Goto (_) -> ()
-    | Continue -> ()
-    | Break -> ()
-    | Switch (e, stmts) ->
-        self#visit_expression e;
-        List.iter stmts ~f:self#visit_statement
-    | Case (e, stmt) ->
-        self#visit_expression e;
-        self#visit_statement stmt
-    | Default (stmt) ->
-        self#visit_statement stmt
-    | Return (e) ->
-        Option.iter e ~f:self#visit_expression
-    | MessageCall (_, _, _) -> ()
-    | RefAssign (a, b) ->
-        self#visit_expression a;
-        self#visit_expression b
-
-  method visit_local_variable v =
-    List.iter v.array_dim ~f:self#visit_expression;
-    Option.iter v.initval ~f:self#visit_expression;
-    environment#push_var v
-
-  method visit_block_item item =
-    match item with
-    | Statement (s) -> self#visit_statement s
-    | Declarations (ds) -> List.iter ds ~f:self#visit_local_variable
-
-  method visit_fundecl f =
-    environment#enter_function f;
-    List.iter f.body ~f:self#visit_block_item;
-    environment#leave_function
-
-  method visit_declaration d =
-    let visit_vardecl d =
-      List.iter d.array_dim ~f:self#visit_expression;
-      Option.iter d.initval ~f:self#visit_expression
-    in
-    match d with
-    | Global (g) -> visit_vardecl g
-    | Function (f) ->
-        self#visit_fundecl f;
-    | FuncTypeDef (_) -> ()
-    | DelegateDef (_) -> ()
-    | StructDef (s) ->
-        let visit_structdecl = function
-          | MemberDecl (d) -> visit_vardecl d
-          | Constructor (f) -> self#visit_fundecl f
-          | Destructor (f) -> self#visit_fundecl f
-          | Method (f) -> self#visit_fundecl f
-        in
-        List.iter s.decls ~f:visit_structdecl
-    | Enum (enum) ->
-        let visit_enumval (_, expr) = Option.iter expr ~f:self#visit_expression in
-        List.iter enum.values ~f:visit_enumval
-
-  method visit_toplevel decls =
-    List.iter decls ~f:self#visit_declaration
-
-end
 
 let unary_op_to_string op =
   match op with
@@ -523,75 +500,64 @@ let rec data_type_to_string = function
   | Float -> "float"
   | String -> "string"
   | Struct (s, _) | FuncType (s, _) | Delegate (s, _) -> s
-  | Array t -> "array<" ^ (type_spec_to_string t) ^ ">" (* TODO: rank *)
-  | Wrap t -> "wrap<" ^ (type_spec_to_string t) ^ ">"
+  | Array t -> "array<" ^ type_spec_to_string t ^ ">" (* TODO: rank *)
+  | Wrap t -> "wrap<" ^ type_spec_to_string t ^ ">"
   | HLLParam -> "hll_param"
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
+
 and type_spec_to_string ts =
   match ts.qualifier with
-  | Some q -> (type_qualifier_to_string q) ^ " " ^ (data_type_to_string ts.data)
-  | None -> (data_type_to_string ts.data)
+  | Some q -> type_qualifier_to_string q ^ " " ^ data_type_to_string ts.data
+  | None -> data_type_to_string ts.data
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
     | [] -> "()"
-    | arg::args ->
+    | arg :: args ->
         let rec loop result = function
           | [] -> result
-          | arg::args -> loop (sprintf "%s, %s" result (expr_to_string arg)) args
+          | arg :: args ->
+              loop (sprintf "%s, %s" result (expr_to_string arg)) args
         in
         sprintf "(%s)" (loop (expr_to_string arg) args)
   in
   match e.node with
-  | ConstInt (i) ->
-      string_of_int i
-  | ConstFloat (f) ->
-      string_of_float f
-  | ConstChar (s) ->
-      sprintf "'%s'" s
-  | ConstString (s) ->
-      sprintf "\"%s\"" s
-  | Ident (s, _) ->
-      s
-  | Unary (op, e) ->
-      begin match op with
-      | PostInc | PostDec -> (expr_to_string e) ^ (unary_op_to_string op)
-      | _ -> (unary_op_to_string op) ^ (expr_to_string e)
-      end
+  | ConstInt i -> string_of_int i
+  | ConstFloat f -> string_of_float f
+  | ConstChar s -> sprintf "'%s'" s
+  | ConstString s -> sprintf "\"%s\"" s
+  | Ident (s, _) -> s
+  | Unary (op, e) -> (
+      match op with
+      | PostInc | PostDec -> expr_to_string e ^ unary_op_to_string op
+      | _ -> unary_op_to_string op ^ expr_to_string e)
   | Binary (op, a, b) ->
-      sprintf "%s %s %s" (expr_to_string a) (binary_op_to_string op) (expr_to_string b)
+      sprintf "%s %s %s" (expr_to_string a) (binary_op_to_string op)
+        (expr_to_string b)
   | Assign (op, a, b) ->
-      sprintf "%s %s %s" (expr_to_string a) (assign_op_to_string op) (expr_to_string b)
-  | Seq (a, b) ->
-      sprintf "%s, %s" (expr_to_string a) (expr_to_string b)
+      sprintf "%s %s %s" (expr_to_string a) (assign_op_to_string op)
+        (expr_to_string b)
+  | Seq (a, b) -> sprintf "%s, %s" (expr_to_string a) (expr_to_string b)
   | Ternary (a, b, c) ->
-      sprintf "%s ? %s : %s" (expr_to_string a) (expr_to_string b) (expr_to_string c)
-  | Cast (t, e) ->
-      sprintf "(%s)%s" (data_type_to_string t) (expr_to_string e)
-  | Subscript (e, i) ->
-      sprintf "%s[%s]" (expr_to_string e) (expr_to_string i)
-  | Member (e, s, _) ->
-      sprintf "%s.%s" (expr_to_string e) s
+      sprintf "%s ? %s : %s" (expr_to_string a) (expr_to_string b)
+        (expr_to_string c)
+  | Cast (t, e) -> sprintf "(%s)%s" (data_type_to_string t) (expr_to_string e)
+  | Subscript (e, i) -> sprintf "%s[%s]" (expr_to_string e) (expr_to_string i)
+  | Member (e, s, _) -> sprintf "%s.%s" (expr_to_string e) s
   | Call (f, args, _) ->
       sprintf "%s%s" (expr_to_string f) (arglist_to_string args)
   | New (t, args, _) ->
       sprintf "new %s%s" (data_type_to_string t) (arglist_to_string args)
-  | This ->
-      "this"
+  | This -> "this"
 
 let rec stmt_to_string (stmt : statement) =
   match stmt.node with
-  | EmptyStatement ->
-      ";"
-  | Expression (e) ->
-      (expr_to_string e) ^ ";"
-  | Compound (items) ->
-      items
-      |> List.map ~f:block_item_to_string
-      |> List.fold ~init:"" ~f:(^)
-  | Labeled (label, stmt) ->
-      sprintf "%s: %s" label (stmt_to_string stmt)
+  | EmptyStatement -> ";"
+  | Expression e -> expr_to_string e ^ ";"
+  | Compound items ->
+      items |> List.map ~f:block_item_to_string |> List.fold ~init:"" ~f:( ^ )
+  | Labeled (label, stmt) -> sprintf "%s: %s" label (stmt_to_string stmt)
   | If (test, body, alt) ->
       let s_test = expr_to_string test in
       let s_body = stmt_to_string body in
@@ -605,40 +571,32 @@ let rec stmt_to_string (stmt : statement) =
       let s_init = block_item_to_string init in
       let s_test = expr_to_string test in
       let s_body = stmt_to_string body in
-      let s_inc =
-        match inc with
-        | None -> ""
-        | Some e -> expr_to_string e
-      in
+      let s_inc = match inc with None -> "" | Some e -> expr_to_string e in
       sprintf "for (%s %s %s) %s" s_init s_test s_inc s_body
-  | Goto (label) ->
-      sprintf "goto %s;" label
-  | Continue ->
-      "continue;"
-  | Break ->
-      "break;"
+  | Goto label -> sprintf "goto %s;" label
+  | Continue -> "continue;"
+  | Break -> "break;"
   | Switch (expr, body) ->
       let s_expr = expr_to_string expr in
-      let s_body = body |> List.map ~f:stmt_to_string |> List.fold ~init:"" ~f:(^) in
+      let s_body =
+        body |> List.map ~f:stmt_to_string |> List.fold ~init:"" ~f:( ^ )
+      in
       sprintf "switch (%s) { %s }" s_expr s_body
   | Case (expr, stmt) ->
       sprintf "case %s: %s" (expr_to_string expr) (stmt_to_string stmt)
-  | Default (stmt) ->
-      sprintf "default: %s" (stmt_to_string stmt)
-  | Return (None) ->
-      "return;"
-  | Return (Some e) ->
-      sprintf "return %s;" (expr_to_string e)
-  | MessageCall (msg, f, _) ->
-      begin match f with
+  | Default stmt -> sprintf "default: %s" (stmt_to_string stmt)
+  | Return None -> "return;"
+  | Return (Some e) -> sprintf "return %s;" (expr_to_string e)
+  | MessageCall (msg, f, _) -> (
+      match f with
       | Some name -> sprintf "'%s' %s;" msg name
-      | None      -> sprintf "'%s';" msg
-      end
+      | None -> sprintf "'%s';" msg)
   | RefAssign (dst, src) ->
       sprintf "%s <- %s;" (expr_to_string dst) (expr_to_string src)
+
 and var_to_string' d =
   let t = type_spec_to_string d.type_spec in
-  let dim_iter l r = l ^ (sprintf "[%s]" (expr_to_string r)) in
+  let dim_iter l r = l ^ sprintf "[%s]" (expr_to_string r) in
   let dims = List.fold d.array_dim ~init:"" ~f:dim_iter in
   let init =
     match d.initval with
@@ -646,81 +604,83 @@ and var_to_string' d =
     | Some e -> sprintf " = %s" (expr_to_string e)
   in
   sprintf "%s %s%s%s" t dims d.name init
-and var_to_string d =
-  (var_to_string' d) ^ ";"
+
+and var_to_string d = var_to_string' d ^ ";"
+
 and block_item_to_string item =
   match item with
-  | Statement (s) -> stmt_to_string s
-  | Declarations (ds) -> List.fold (List.map ds ~f:var_to_string) ~init:"" ~f:(^)
+  | Statement s -> stmt_to_string s
+  | Declarations ds ->
+      List.fold (List.map ds ~f:var_to_string) ~init:"" ~f:( ^ )
 
 let decl_to_string d =
   let params_to_string = function
     | [] -> "()"
-    | p::ps ->
+    | p :: ps ->
         let rec loop result = function
           | [] -> result
-          | p::ps -> loop (sprintf "%s, %s" result (var_to_string' p)) ps
+          | p :: ps -> loop (sprintf "%s, %s" result (var_to_string' p)) ps
         in
         sprintf "(%s)" (loop (var_to_string' p) ps)
   in
   let block_to_string block =
-    List.fold (List.map block ~f:block_item_to_string) ~init:"" ~f:(^)
+    List.fold (List.map block ~f:block_item_to_string) ~init:"" ~f:( ^ )
   in
   match d with
-  | Global (d) ->
-      var_to_string d
-  | Function (d) ->
+  | Global d -> var_to_string d
+  | Function d ->
       let return = type_spec_to_string d.return in
       let params = params_to_string d.params in
       let body = block_to_string d.body in
       sprintf "%s %s%s { %s }" return d.name params body
-  | FuncTypeDef (d) ->
+  | FuncTypeDef d ->
       let return = type_spec_to_string d.return in
       let params = params_to_string d.params in
       sprintf "functype %s %s%s;" return d.name params
-  | DelegateDef (d) ->
+  | DelegateDef d ->
       let return = type_spec_to_string d.return in
       let params = params_to_string d.params in
       sprintf "delegate %s %s%s;" return d.name params
-  | StructDef (d) ->
+  | StructDef d ->
       let sdecl_to_string = function
-        | MemberDecl (d) ->
-            var_to_string d
-        | Constructor (d) ->
+        | MemberDecl d -> var_to_string d
+        | Constructor d ->
             let params = params_to_string d.params in
             let body = block_to_string d.body in
             sprintf "%s%s { %s }" d.name params body
-        | Destructor (d) ->
+        | Destructor d ->
             let params = params_to_string d.params in
             let body = block_to_string d.body in
             sprintf "~%s%s { %s }" d.name params body
-        | Method (d) ->
+        | Method d ->
             let return = type_spec_to_string d.return in
             let params = params_to_string d.params in
             let body = block_to_string d.body in
             sprintf "%s %s%s { %s }" return d.name params body
       in
-      let body = List.fold (List.map d.decls ~f:sdecl_to_string) ~init:"" ~f:(^) in
+      let body =
+        List.fold (List.map d.decls ~f:sdecl_to_string) ~init:"" ~f:( ^ )
+      in
       sprintf "struct %s { %s };" d.name body
-  | Enum (d) ->
+  | Enum d ->
       let enumval_to_string = function
-        | (s, None) -> s
-        | (s, Some e) -> sprintf "%s = %s" s (expr_to_string e)
+        | s, None -> s
+        | s, Some e -> sprintf "%s = %s" s (expr_to_string e)
       in
       let enumvals_fold l r = l ^ ", " ^ r in
-      let body = List.fold (List.map d.values ~f:enumval_to_string) ~init:"" ~f:enumvals_fold in
-      let name =
-        match d.name with
-        | None -> ""
-        | Some s -> s ^ " "
+      let body =
+        List.fold
+          (List.map d.values ~f:enumval_to_string)
+          ~init:"" ~f:enumvals_fold
       in
+      let name = match d.name with None -> "" | Some s -> s ^ " " in
       sprintf "enum %s{ %s };" name body
 
 let ast_to_string = function
-  | ASTExpression (e) -> expr_to_string e
-  | ASTStatement (s) -> stmt_to_string s
-  | ASTVariable (v) -> var_to_string v
-  | ASTDeclaration (d) -> decl_to_string d
+  | ASTExpression e -> expr_to_string e
+  | ASTStatement s -> stmt_to_string s
+  | ASTVariable v -> var_to_string v
+  | ASTDeclaration d -> decl_to_string d
 
 let rec jaf_to_ain_data_type data =
   match data with
@@ -739,72 +699,77 @@ let rec jaf_to_ain_data_type data =
   | Delegate (_, i) -> Ain.Type.Delegate i
   | FuncType (_, i) -> Ain.Type.FuncType i
   | IMainSystem -> Ain.Type.IMainSystem
+
 and jaf_to_ain_type spec =
-  let is_ref =
-    match spec.qualifier with
-    | Some Ref -> true
-    | _ -> false
-  in
+  let is_ref = match spec.qualifier with Some Ref -> true | _ -> false in
   Ain.Type.make ~is_ref (jaf_to_ain_data_type spec.data)
 
 let jaf_to_ain_variables j_p =
-  let rec convert_params (params:variable list) (result:Ain.Variable.t list) index =
+  let rec convert_params (params : variable list) (result : Ain.Variable.t list)
+      index =
     match params with
     | [] -> List.rev result
-    | x::xs ->
-        let var = Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec) in
-        begin match x.type_spec with
-        | { data=(Int|Bool|Float|FuncType(_,_)); qualifier=Some Ref } ->
-            let void = Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void) in
-            convert_params xs (void::var::result) (index + 2)
-        | _ ->
-            convert_params xs (var::result) (index + 1)
-        end
+    | x :: xs -> (
+        let var =
+          Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec)
+        in
+        match x.type_spec with
+        | { data = Int | Bool | Float | FuncType (_, _); qualifier = Some Ref }
+          ->
+            let void =
+              Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
+            in
+            convert_params xs (void :: var :: result) (index + 2)
+        | _ -> convert_params xs (var :: result) (index + 1))
   in
   convert_params j_p [] 0
 
-let jaf_to_ain_function j_f (a_f:Ain.Function.t) =
+let jaf_to_ain_function j_f (a_f : Ain.Function.t) =
   let vars = jaf_to_ain_variables j_f.params in
-  { a_f with
+  {
+    a_f with
     vars;
     nr_args = List.length vars;
-    return_type = jaf_to_ain_type j_f.return
+    return_type = jaf_to_ain_type j_f.return;
   }
 
-let jaf_to_ain_struct j_s (a_s:Ain.Struct.t) =
-  let members = List.filter_map j_s.decls ~f:(function
-    | MemberDecl (v) -> Some v
-    | _ -> None
-  ) |> jaf_to_ain_variables
+let jaf_to_ain_struct j_s (a_s : Ain.Struct.t) =
+  let members =
+    List.filter_map j_s.decls ~f:(function MemberDecl v -> Some v | _ -> None)
+    |> jaf_to_ain_variables
   in
   let is_ctor = function Constructor _ -> true | _ -> false in
-  let constructor = match List.find j_s.decls ~f:is_ctor with
-  | Some (Constructor ctor) -> Option.value_exn ctor.index
-  | _ -> -1
+  let constructor =
+    match List.find j_s.decls ~f:is_ctor with
+    | Some (Constructor ctor) -> Option.value_exn ctor.index
+    | _ -> -1
   in
   let is_dtor = function Destructor _ -> true | _ -> false in
-  let destructor = match List.find j_s.decls ~f:is_dtor with
-  | Some (Destructor dtor) -> Option.value_exn dtor.index
-  | _ -> -1
+  let destructor =
+    match List.find j_s.decls ~f:is_dtor with
+    | Some (Destructor dtor) -> Option.value_exn dtor.index
+    | _ -> -1
   in
-  { a_s with
-    members; 
+  {
+    a_s with
+    members;
     constructor;
     destructor
     (* TODO: interfaces *)
-    (* TODO: vmethods *)
+    (* TODO: vmethods *);
   }
 
-let jaf_to_ain_functype j_f (a_f:Ain.FunctionType.t) =
+let jaf_to_ain_functype j_f (a_f : Ain.FunctionType.t) =
   let variables = jaf_to_ain_variables j_f.params in
-  { a_f with
+  {
+    a_f with
     variables;
     nr_arguments = List.length variables;
-    return_type = jaf_to_ain_type j_f.return
+    return_type = jaf_to_ain_type j_f.return;
   }
 
 let jaf_to_ain_hll_function j_f =
-  let jaf_to_ain_hll_argument (param:variable) =
+  let jaf_to_ain_hll_argument (param : variable) =
     Ain.Library.Argument.create param.name (jaf_to_ain_type param.type_spec)
   in
   let return_type = jaf_to_ain_type j_f.return in

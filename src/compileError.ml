@@ -28,31 +28,18 @@ exception LinkError of string
 exception LinkerBug of string
 
 let data_type_error data expr parent =
-  raise (Type_error ({data=data; is_ref=false}, expr, parent))
+  raise (Type_error ({ data; is_ref = false }, expr, parent))
 
 let ref_type_error data expr parent =
-  raise (Type_error ({data=data; is_ref=true}, expr, parent))
+  raise (Type_error ({ data; is_ref = true }, expr, parent))
 
 let undefined_variable_error name parent =
   raise (Undefined_variable (name, parent))
 
-let arity_error t args parent =
-  raise (Arity_error (t, args, parent))
-
-let not_an_lvalue_error expr parent =
-  raise (Not_lvalue_error (expr, parent))
-
-let const_error v =
-  raise (Const_error (v))
-
-let compile_error str node =
-  raise (CompileError (str, node))
-
-let compiler_bug str node =
-  raise (CompilerBug (str, node))
-
-let link_error str =
-  raise (LinkError (str))
-
-let linker_bug str =
-  raise (LinkerBug (str))
+let arity_error t args parent = raise (Arity_error (t, args, parent))
+let not_an_lvalue_error expr parent = raise (Not_lvalue_error (expr, parent))
+let const_error v = raise (Const_error v)
+let compile_error str node = raise (CompileError (str, node))
+let compiler_bug str node = raise (CompilerBug (str, node))
+let link_error str = raise (LinkError str)
+let linker_bug str = raise (LinkerBug str)
