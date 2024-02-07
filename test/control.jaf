@@ -1,0 +1,184 @@
+int test_if()
+{
+	if (1)
+		return 0;
+	return 1;
+}
+
+int test_if_else()
+{
+	if (0)
+		return 1;
+	else
+		return 0;
+	return 1;
+}
+
+void test_while()
+{
+	int i = 3;
+	int j = 0;
+	while (i > 0) {
+		i--;
+		j++;
+	}
+	assert(j == 3);
+}
+
+void test_do_while()
+{
+	int i = 0;
+	do {
+		i++;
+	} while (0);
+	assert(i == 1);
+}
+
+void test_for()
+{
+	int j = 3;
+	for (int i = 0; i < 3; i++) {
+		j--;
+	}
+	assert(j == 0);
+}
+
+void test_switch()
+{
+	int i = 0;
+	switch (i+1) {
+	case 0:
+		i = 0;
+		break;
+	case 1:
+		while (true) {
+			break;
+		}
+		i = 42;
+		break;
+	default:
+		i = 0;
+		break;
+	}
+	assert(i == 42);
+}
+
+void test_switch_default()
+{
+	int i = 0;
+	switch (i+1) {
+	case 0:
+		i = 0;
+		break;
+	default:
+		while (true) {
+			break;
+		}
+		i = 42;
+		break;
+	}
+	assert(i == 42);
+}
+
+void test_ternary()
+{
+	int zero = 0;
+	assert(zero ? 0 : 1);
+}
+
+void test_goto()
+{
+	int one = 1;
+	goto skip;
+	one = 5;
+skip:
+	assert(one + 1 == 2);
+}
+
+void test_break_nested()
+{
+	int i = 42;
+	while (true) {
+		{
+			break;
+		}
+		i = 0;
+	}
+	assert(i == 42);
+}
+
+void test_continue_nested()
+{
+	int i = 42;
+	do {
+		{
+			continue;
+		}
+		i = 0;
+	} while (false);
+	assert(i == 42);
+}
+
+int global;
+
+struct S {
+	int m;
+	~S() {
+		global = 42;
+	}
+};
+
+void test_goto_destructor()
+{
+	global = 0;
+	{
+		S obj;
+		goto end;
+		// destructor normally called here
+	}
+	global = 0;
+end:
+	assert(global == 42);
+}
+
+void test_break_destructor()
+{
+	global = 0;
+	while (true) {
+		S obj;
+		break;
+		// destructor normally called here
+	}
+	assert(global == 42);
+}
+
+void test_continue_destructor()
+{
+	global = 0;
+	do {
+		S obj;
+		continue;
+		// destructor normally called here
+	} while (false);
+	assert(global == 42);
+}
+
+int main()
+{
+	assert(test_if() == 0);
+	assert(test_if_else() == 0);
+	test_while();
+	test_do_while();
+	test_for();
+	test_switch();
+	test_switch_default();
+	test_ternary();
+	test_goto();
+	test_break_nested();
+	test_continue_nested();
+	test_goto_destructor();
+	test_break_destructor();
+	test_continue_destructor();
+
+	return 0;
+}

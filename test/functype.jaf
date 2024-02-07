@@ -1,12 +1,31 @@
 functype int arithmetic(int, int);
+functype int ref_arithmetic(ref int, int);
+functype int thunk(void);
 
 int add(int a, int b)
 {
 	return a + b;
 }
 
+int ref_add(ref int a, int b)
+{
+	return a + b;
+}
+
+int one(void)
+{
+	return 1;
+}
+
 int main()
 {
-	arithmetic f = &add;
-	return !(f(1, 2) == 3);
+	arithmetic fa = &add;
+	assert(fa(1, 2) == 3);
+
+	int a = 1;
+	ref_arithmetic fr = &ref_add;
+	assert(fr(a, 2) == 3);
+
+	thunk ft = &one;
+	assert(ft() == 1);
 }

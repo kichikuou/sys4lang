@@ -1,5 +1,0 @@
-int main()
-{
-	int zero = 0;
-	return zero ? 1 : 0;
-}

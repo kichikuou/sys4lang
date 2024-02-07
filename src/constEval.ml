@@ -112,7 +112,7 @@ class const_eval_visitor ctx =
           let const_eq = mk_compare ( = ) in
           let const_neq a b = if a = b then 0 else 1 in
           let const_lt = mk_compare ( < ) in
-          let const_gt = mk_compare ( < ) in
+          let const_gt = mk_compare ( > ) in
           let const_lte = mk_compare ( <= ) in
           let const_gte = mk_compare ( >= ) in
           let const_feq = mk_compare Float.equal in

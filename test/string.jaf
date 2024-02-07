@@ -1,0 +1,28 @@
+int main()
+{
+	assert("a" + "b" == "ab");
+	assert("a" < "b");
+	assert("b" > "a");
+	assert("a" <= "a");
+	assert("a" >= "a");
+	assert("a" == "a");
+	assert("a" != "b");
+
+	string concatenated = "asdf\n" "\nfdsa";
+	assert(concatenated == "asdf\n\nfdsa");
+
+	// s-length
+	// s-lengthbyte
+	// s-empty
+	// s-find
+	// s-getpart
+	// s-pushback
+	// s-popback
+	// s-erase
+	// s-mod
+	// s-from-int
+	// s-from-float
+	// s-to-int
+
+	return 0;
+}

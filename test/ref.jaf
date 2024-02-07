@@ -1,0 +1,45 @@
+void intref(ref int a)
+{
+	a = 13;
+}
+
+void floatref(ref float a)
+{
+	a = 1.3;
+}
+
+void stringref(ref string a)
+{
+	a = "13";
+}
+
+int main()
+{
+	int i;
+	intref(i);
+	assert(i == 13);
+
+	int a;
+	ref int ra;
+	ref int rb;
+	ra <- a;
+	rb <- ra;
+	rb = 1;
+	assert(a == 1);
+
+	float f;
+	floatref(f);
+	assert(f == 1.3);
+
+	string s;
+	stringref(s);
+	assert(s == "13");
+
+	string s;
+	ref string rs;
+	ref string rt;
+	rs <- s;
+	rt <- rs;
+	rt = "1";
+	assert(s == "1");
+}

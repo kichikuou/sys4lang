@@ -1,0 +1,11 @@
+const int g_two = 2;
+
+int main()
+{
+   	const int l_two = 2;
+	int three = 3;
+	assert(g_two + three == 5);
+	assert(l_two + three == 5);
+
+	return 0;
+}
