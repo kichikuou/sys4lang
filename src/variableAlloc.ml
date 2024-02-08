@@ -224,7 +224,7 @@ class variable_alloc_visitor ctx =
       super#visit_fundecl f;
       self#end_scope ScopeAnon;
       (* write updated fundecl to ain file *)
-      (match Ain.get_function ctx.ain f.name with
+      (match Ain.get_function ctx.ain (mangled_name f) with
       | Some obj ->
           obj |> jaf_to_ain_function f |> add_vars |> Ain.write_function ctx.ain
       | None ->

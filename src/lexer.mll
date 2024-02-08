@@ -125,8 +125,7 @@ let d  = ['0'-'9']
 let h  = ['a'-'f' 'A'-'F' '0'-'9']
 let hp = '0' ['x' 'X']
 let l  = ['a'-'z' 'A'-'Z' '_'] | uch
-let a  = ['a'-'z' 'A'-'Z' '_' '0'-'9' ':' '@' '#'] | uch
-let at = ['a'-'z' 'A'-'Z' '_' '0'-'9'] | uch
+let a  = ['a'-'z' 'A'-'Z' '_' '0'-'9'] | uch
 let e  = ['E' 'e'] ['+' '-']? d+
 let p  = ['P' 'p'] ['+' '-']? d+
 let es = '\\' ( ['\'' '"' '?' '\\' 'a' 'b' 'f' 'n' 'r' 't' 'v'] | 'x' h+ )
@@ -194,10 +193,11 @@ rule token = parse
   | '.'                     { DOT }
   | ','                     { COMMA }
   | ':'                     { COLON }
+  | "::"                    { COCO }
   | ';'                     { SEMICOLON }
   | '#'                     { HASH }
   | l as c                  { IDENTIFIER(c) }
-  | (l a* at) as s          {
+  | (l a*) as s             {
                               match Hashtbl.find keyword_table s with
                               | Some kw -> kw
                               | None -> IDENTIFIER(s)

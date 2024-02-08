@@ -173,6 +173,7 @@ and variable = {
 type fundecl = {
   mutable name : string;
   loc : Lexing.position * Lexing.position;
+  struct_name : string option;
   return : type_specifier;
   params : variable list;
   body : statement list;
@@ -181,6 +182,11 @@ type fundecl = {
   mutable class_index : int option;
   mutable super_index : int option;
 }
+
+let mangled_name fdecl =
+  match fdecl.struct_name with
+  | Some s -> s ^ "@" ^ fdecl.name
+  | None -> fdecl.name
 
 type struct_declaration =
   | MemberDecl of variable

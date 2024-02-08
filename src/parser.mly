@@ -57,6 +57,7 @@ let func loc typespec name params body =
   {
     name;
     loc;
+    struct_name = None;
     return = typespec;
     params = plist;
     body;
@@ -65,6 +66,11 @@ let func loc typespec name params body =
     class_index = None;
     super_index = None;
   }
+
+let member_func loc typespec_opt struct_name is_dtor name params body =
+  let name = if is_dtor then "~" ^ name else name in
+  let fundecl = func loc (Option.value typespec_opt ~default:(qtype None Void)) name params body in
+  { fundecl with struct_name=Some struct_name }
 
 %}
 
@@ -86,7 +92,7 @@ let func loc typespec name params body =
 %token ORASSIGN XORASSIGN ANDASSIGN LSHIFTASSIGN RSHIFTASSIGN REFASSIGN
 /* delimiters */
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
-%token QUESTION COLON SEMICOLON COMMA DOT HASH
+%token QUESTION COLON COCO SEMICOLON COMMA DOT HASH
 /* types */
 %token VOID CHAR INT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
 %token IMAINSYSTEM
@@ -414,6 +420,8 @@ external_declaration
     { List.map (fun d -> Global (d)) $1 }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Function (func $sloc $1 $2 $3 $4)] }
+  | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
+    { [Function (member_func $sloc $1 $2 $4 $5 $6 $7)] }
   | HASH IDENTIFIER parameter_list block
     { [Function { (func $sloc (qtype None Void) $2 $3 $4) with is_label=true }] }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON

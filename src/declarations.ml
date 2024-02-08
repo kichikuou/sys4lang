@@ -27,7 +27,8 @@ class type_declare_visitor ctx =
     val functions = Stack.create ()
 
     method declare_function decl =
-      (match (decl.return.qualifier, Ain.get_function ctx.ain decl.name) with
+      let name = mangled_name decl in
+      (match (decl.return.qualifier, Ain.get_function ctx.ain name) with
       | Some Override, None ->
           compile_error "function doesn't exist for override"
             (ASTDeclaration (Function decl))
@@ -42,7 +43,7 @@ class type_declare_visitor ctx =
       | _, Some _ ->
           compile_error "Duplicate function definition"
             (ASTDeclaration (Function decl))
-      | _, None -> decl.index <- Some (Ain.add_function ctx.ain decl.name).index);
+      | _, None -> decl.index <- Some (Ain.add_function ctx.ain name).index);
       Stack.push functions decl
 
     method! visit_declaration decl =
@@ -150,8 +151,8 @@ class type_resolve_visitor ctx decl_only =
 
     method! visit_declaration decl =
       let function_class (f : fundecl) =
-        match String.split_on_chars f.name ~on:[ '@' ] with
-        | hd :: _ -> Ain.get_struct_index ctx.ain hd
+        match f.struct_name with
+        | Some name -> Ain.get_struct_index ctx.ain name
         | _ -> None
       in
       let resolve_function f =
