@@ -471,6 +471,7 @@ class type_analyze_visitor ctx =
       super#visit_statement stmt;
       match stmt.node with
       | EmptyStatement -> ()
+      | Declarations _ -> ()
       | Expression _ -> ()
       | Compound _ -> ()
       | Labeled (_, _) -> ()

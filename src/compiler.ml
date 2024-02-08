@@ -850,10 +850,11 @@ class jaf_compiler ain =
           self#compile_delete_var (self#get_local i));
       match stmt.node with
       | EmptyStatement -> ()
+      | Declarations vars -> List.iter vars ~f:self#compile_variable_declaration
       | Expression e ->
           self#compile_expression e;
           self#compile_pop (Option.value_exn e.valuetype)
-      | Compound items -> self#compile_block items
+      | Compound stmts -> self#compile_block stmts
       | Labeled (name, s) ->
           self#scope_add_label name;
           self#compile_statement s
@@ -1140,14 +1141,9 @@ class jaf_compiler ain =
                 compile_error "Unimplemented variable type" (ASTVariable decl))
 
     (** Emit the code for a block of statements. *)
-    method compile_block (items : block_item list) =
-      let compile_item = function
-        | Statement stmt -> self#compile_statement stmt
-        | Declarations vars ->
-            List.iter vars ~f:self#compile_variable_declaration
-      in
+    method compile_block (stmts : statement list) =
       self#start_scope;
-      List.iter items ~f:compile_item;
+      List.iter stmts ~f:self#compile_statement;
       self#end_scope
 
     (** Emit the code for a default return value. *)

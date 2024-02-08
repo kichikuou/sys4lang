@@ -279,7 +279,8 @@ type_specifier
   | IDENTIFIER { Unresolved ($1) }
 
 statement
-  : labeled_statement { stmt $1 }
+  : declaration_statement { stmt $1 }
+  | labeled_statement { stmt $1 }
   | compound_statement { stmt $1 }
   | expression_statement { stmt $1 }
   | selection_statement { stmt $1 }
@@ -296,6 +297,9 @@ switch_statement
   | statement { $1 }
   ;
 
+declaration_statement
+  : declaration { Declarations $1 }
+
 labeled_statement
   : IDENTIFIER COLON statement { Labeled ($1, $3) }
   (* case *)
@@ -306,13 +310,8 @@ compound_statement
   : block { match $1 with [] -> EmptyStatement | _ -> Compound $1 }
   ;
 
-block_item
-  : declaration { Declarations ($1) }
-  | statement { Statement ($1) }
-  ;
-
 block
-  : LBRACE nonempty_list(block_item) RBRACE { $2 }
+  : LBRACE nonempty_list(statement) RBRACE { $2 }
   | LBRACE RBRACE { [] }
   ;
 
@@ -334,13 +333,13 @@ iteration_statement
   : WHILE LPAREN expression RPAREN statement { While ($3, $5) }
   | DO statement WHILE LPAREN expression RPAREN { DoWhile ($5, $2) }
   | FOR LPAREN expression_statement expression? SEMICOLON expression? RPAREN statement
-    { For (Statement (stmt $3),
+    { For (stmt $3,
            $4,
            $6,
            $8)
     }
   | FOR LPAREN declaration expression? SEMICOLON expression? RPAREN statement
-    { For (Declarations $3,
+    { For (stmt (Declarations $3),
            $4,
            $6,
            $8)
