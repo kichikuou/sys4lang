@@ -92,7 +92,7 @@ let member_func loc ty_opt struct_name is_dtor name params body =
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
 %token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH
 /* types */
-%token VOID CHAR INT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
+%token VOID CHAR INT LINT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
 %token IMAINSYSTEM
 /* keywords */
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
@@ -275,6 +275,7 @@ atomic_type_specifier
   : VOID         { Void }
   | CHAR         { Int }
   | INT          { Int }
+  | LINT         { LongInt }
   | FLOAT        { Float }
   | BOOL         { Bool }
   | STRING       { String }

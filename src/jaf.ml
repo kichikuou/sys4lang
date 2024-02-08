@@ -727,6 +727,7 @@ and jaf_to_ain_type = function
 let rec data_type_to_jaf_type = function
   | Ain.Type.Void -> Void
   | Int -> Int
+  | LongInt -> LongInt
   | Bool -> Bool
   | Float -> Float
   | String -> String

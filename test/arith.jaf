@@ -49,12 +49,31 @@ int main()
 	f = 2.0; assert((f *= 3.3) == 6.6);
 	f = 12.4; assert((f /= 3.1) == 4.0);
 
+	// long int ops
+	lint l;
+	l = 2; assert(l + 3 == 5);
+	l = 2; assert(l - 3 == -1);
+	l = 2; assert(l * 3 == 6);
+	l = 12; assert(l / 3 == 4);
+	l = 12; assert(l % 10 == 2);
+	l = 2; assert((l += 3) == 5);
+	l = 2; assert((l -= 3) == -1);
+	l = 2; assert((l *= 3) == 6);
+	l = 12; assert((l /= 3) == 4);
+	l = 12; assert((l %= 10) == 2);
+	l = 1; assert((l <<= 3) == 8);
+	l = 8; assert((l >>= 3) == 1);
+	l = 3; assert((l &= 2) == 2);
+	l = 1; assert((l |= 2) == 3);
+	l = 2; assert((l ^= 3) == 1);
+
 	// mixed ops
 	i = 2; f = 3.3; assert(i + f == 5.3);
 	f = 2.5; i = 3; assert(f - i == -0.5);
 	i = 2; f = 3.3; assert((f += i) == 5.3);
 	f = 2.0; i = f; assert(i == 2);
 	i = 2; f = 2.0; assert(f == i);
+	i = 2; l = 3; assert(i + l == 5);
 
 	return 0;
 }

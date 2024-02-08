@@ -76,6 +76,7 @@ let () =
             [ "void",         VOID;
               "char",         CHAR;
               "int",          INT;
+              "lint",         LINT;
               "float",        FLOAT;
               "bool",         BOOL;
               "string",       STRING;

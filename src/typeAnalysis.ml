@@ -69,7 +69,7 @@ let type_castable (dst : jaf_type) (src : jaf_type) =
   match (dst, src) with
   (* FIXME: cast to void should be allowed *)
   | Void, _ -> compiler_bug "type checker cast to void type" None
-  | (Int | Bool | Float), (Int | Bool | Float) -> true
+  | (Int | LongInt | Bool | Float), (Int | LongInt | Bool | Float) -> true
   | _ -> false
 
 let type_check parent expected (actual : expression) =
@@ -82,8 +82,8 @@ let type_check parent expected (actual : expression) =
 
 let type_check_numeric parent (actual : expression) =
   match actual.ty with
-  | Int | Bool | Float -> ()
-  | Ref (Int | Bool | Float) -> ()
+  | Int | Bool | LongInt | Float -> ()
+  | Ref (Int | Bool | LongInt | Float) -> ()
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
   | _ -> type_error Int (Some actual) parent

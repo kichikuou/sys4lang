@@ -585,6 +585,13 @@ class jaf_compiler ain =
           | Int, (LogOr | LogAnd) ->
               compiler_bug "invalid integer operator"
                 (Some (ASTExpression expr))
+          | LongInt, Plus -> self#write_instruction0 LI_ADD
+          | LongInt, Minus -> self#write_instruction0 LI_SUB
+          | LongInt, Times -> self#write_instruction0 LI_MUL
+          | LongInt, Divide -> self#write_instruction0 LI_DIV
+          | LongInt, Modulo -> self#write_instruction0 LI_MOD
+          | LongInt, Equal -> self#write_instruction0 EQUALE
+          | LongInt, NEqual -> self#write_instruction0 NOTE
           | Float, Plus -> self#write_instruction0 F_ADD
           | Float, Minus -> self#write_instruction0 F_SUB
           | Float, Times -> self#write_instruction0 F_MUL
@@ -641,6 +648,17 @@ class jaf_compiler ain =
           | (Int | Bool), AndAssign -> self#write_instruction0 ANDA
           | (Int | Bool), LShiftAssign -> self#write_instruction0 LSHIFTA
           | (Int | Bool), RShiftAssign -> self#write_instruction0 RSHIFTA
+          | LongInt, EqAssign -> self#write_instruction0 LI_ASSIGN
+          | LongInt, PlusAssign -> self#write_instruction0 LI_PLUSA
+          | LongInt, MinusAssign -> self#write_instruction0 LI_MINUSA
+          | LongInt, TimesAssign -> self#write_instruction0 LI_MULA
+          | LongInt, DivideAssign -> self#write_instruction0 LI_DIVA
+          | LongInt, ModuloAssign -> self#write_instruction0 LI_MODA
+          | LongInt, AndAssign -> self#write_instruction0 LI_ANDA
+          | LongInt, OrAssign -> self#write_instruction0 LI_ORA
+          | LongInt, XorAssign -> self#write_instruction0 LI_XORA
+          | LongInt, LShiftAssign -> self#write_instruction0 LI_LSHIFTA
+          | LongInt, RShiftAssign -> self#write_instruction0 LI_RSHIFTA
           | Float, EqAssign -> self#write_instruction0 F_ASSIGN
           | Float, PlusAssign -> self#write_instruction0 F_PLUSA
           | Float, MinusAssign -> self#write_instruction0 F_MINUSA
@@ -684,6 +702,7 @@ class jaf_compiler ain =
           match (src_t, dst_t) with
           | Int, Int -> ()
           | Int, Float -> self#write_instruction0 ITOF
+          | Int, LongInt -> self#write_instruction0 ITOLI
           | Int, String -> self#write_instruction0 I_STRING
           | Float, Float -> ()
           | Float, Int -> self#write_instruction0 FTOI
