@@ -214,6 +214,19 @@ type ast_node =
   | ASTVariable of variable
   | ASTDeclaration of declaration
 
+let ast_node_pos = function
+  | ASTExpression e -> e.loc
+  | ASTStatement s -> s.loc
+  | ASTVariable v -> v.location
+  | ASTDeclaration d -> (
+      match d with
+      | Function f -> f.loc
+      | Global v -> v.location
+      | FuncTypeDef f -> f.loc
+      | DelegateDef f -> f.loc
+      | StructDef s -> s.loc
+      | Enum e -> e.loc)
+
 type context = {
   ain : Ain.t;
   import_ain : Ain.t;
