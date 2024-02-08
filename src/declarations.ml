@@ -70,6 +70,7 @@ class type_declare_visitor ctx =
             compile_error "duplicate struct definition" (ASTDeclaration decl);
           let ain_s = Ain.add_struct ctx.ain s.name in
           let visit_decl = function
+            | AccessSpecifier _ -> ()
             | Constructor f ->
                 if not (String.equal f.name s.name) then
                   compile_error "constructor name doesn't match struct name"
@@ -168,6 +169,7 @@ class type_resolve_visitor ctx decl_only =
       | Global g -> self#resolve_typespec g.type_spec (ASTDeclaration decl)
       | StructDef s ->
           let resolve_structdecl = function
+            | AccessSpecifier _ -> ()
             | MemberDecl d ->
                 self#resolve_typespec d.type_spec (ASTDeclaration decl)
             | Constructor f | Destructor f | Method f -> resolve_function f

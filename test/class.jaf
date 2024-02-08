@@ -1,0 +1,21 @@
+class C {
+public:
+	int m;
+private:
+	int n;
+};
+
+C::set() {
+	// m = 42;
+	this.m = 42;
+}
+
+int main()
+{
+	C f;
+	f.set();
+	assert(f.m == 42);
+	f.n = 42;  // FIXME: should cause a compile error
+
+	return 0;
+}

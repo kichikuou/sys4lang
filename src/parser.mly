@@ -99,7 +99,7 @@ let member_func loc typespec_opt struct_name is_dtor name params body =
 /* keywords */
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT THIS NEW
 %token GOTO CONTINUE BREAK RETURN ASSERT
-%token CONST REF OVERRIDE ARRAY WRAP FUNCTYPE DELEGATE STRUCT ENUM
+%token CONST REF OVERRIDE ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
 
 %token EOF
 
@@ -426,8 +426,8 @@ external_declaration
     { [FuncTypeDef (func $sloc $2 $3 $4 [])] }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { [DelegateDef (func $sloc $2 $3 $4 [])] }
-  | STRUCT IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
-    { [StructDef ({ loc=$sloc; name=$2; decls=(List.concat $4) })] }
+  | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
+    { [StructDef ({ loc=$sloc; is_class=$1; name=$2; decls=(List.concat $4) })] }
   | ENUM enumerator_list SEMICOLON
     { [Enum ({ loc=$sloc; name=None; values=$2 })] }
   | ENUM IDENTIFIER enumerator_list SEMICOLON
@@ -437,8 +437,13 @@ external_declaration
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list SEMICOLON
     { [Function (func $sloc $1 $2 $3 [])] }
-  | STRUCT IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
-    { [StructDef ({ loc=$sloc; name=$2; decls=(List.concat $4) })] }
+  | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
+    { [StructDef ({ loc=$sloc; is_class=$1; name=$2; decls=(List.concat $4) })] }
+  ;
+
+struct_or_class
+  : STRUCT { false }
+  | CLASS { true }
   ;
 
 enumerator_list
@@ -469,7 +474,9 @@ functype_parameter_list
   ;
 
 struct_declaration
-  : declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
+  : access_specifier COLON
+    { [AccessSpecifier $1] }
+  | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
     { decls $1 $2 |> List.map (fun d -> MemberDecl d) }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Method (func $sloc $1 $2 $3 $4)] }
@@ -477,4 +484,9 @@ struct_declaration
     { [Constructor (func $sloc {data=Void; qualifier=None} $1 [] $4)] }
   | BITNOT IDENTIFIER LPAREN RPAREN block
     { [Destructor (func $sloc {data=Void; qualifier=None} $2 [] $5)] }
+  ;
+
+access_specifier
+  : PUBLIC { Public }
+  | PRIVATE { Private }
   ;

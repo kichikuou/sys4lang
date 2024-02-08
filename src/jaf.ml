@@ -188,7 +188,10 @@ let mangled_name fdecl =
   | Some s -> s ^ "@" ^ fdecl.name
   | None -> fdecl.name
 
+type access_specifier = Public | Private
+
 type struct_declaration =
+  | AccessSpecifier of access_specifier
   | MemberDecl of variable
   | Constructor of fundecl
   | Destructor of fundecl
@@ -196,6 +199,7 @@ type struct_declaration =
 
 type structdecl = {
   name : string;
+  is_class : bool;
   loc : Lexing.position * Lexing.position;
   decls : struct_declaration list;
 }
@@ -458,6 +462,7 @@ class ivisitor ctx =
       | DelegateDef _ -> ()
       | StructDef s ->
           let visit_structdecl = function
+            | AccessSpecifier _ -> ()
             | MemberDecl d -> visit_vardecl d
             | Constructor f -> self#visit_fundecl f
             | Destructor f -> self#visit_fundecl f
@@ -674,6 +679,8 @@ let decl_to_string d =
       sprintf "delegate %s %s%s;" return d.name params
   | StructDef d ->
       let sdecl_to_string = function
+        | AccessSpecifier Public -> "public:"
+        | AccessSpecifier Private -> "private:"
         | MemberDecl d -> var_to_string d
         | Constructor d ->
             let params = params_to_string d.params in
@@ -692,7 +699,9 @@ let decl_to_string d =
       let body =
         List.fold (List.map d.decls ~f:sdecl_to_string) ~init:"" ~f:( ^ )
       in
-      sprintf "struct %s { %s };" d.name body
+      sprintf "%s %s { %s };"
+        (if d.is_class then "class" else "struct")
+        d.name body
   | Enum d ->
       let enumval_to_string = function
         | s, None -> s

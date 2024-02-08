@@ -1210,6 +1210,7 @@ class jaf_compiler ain =
         | StructDef d ->
             let compile_struct_decl (d : struct_declaration) =
               match d with
+              | AccessSpecifier _ -> ()
               | MemberDecl _ -> () (* TODO: member initvals? *)
               | Constructor f -> self#compile_function f
               | Destructor f -> self#compile_function f
