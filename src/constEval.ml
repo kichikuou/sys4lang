@@ -30,7 +30,8 @@ let const_replace dst const_expr =
   | ConstString _ -> dst.valuetype <- Some (Ain.Type.make Ain.Type.String)
   | _ ->
       compiler_bug "const_replace: not a constant expression"
-        (Some (ASTExpression { node = const_expr; valuetype = None })));
+        (Some
+           (ASTExpression { node = const_expr; valuetype = None; loc = dst.loc })));
   dst.node <- const_expr
 
 let const_binary dst a b int_op float_op =

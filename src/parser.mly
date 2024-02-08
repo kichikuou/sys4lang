@@ -21,11 +21,11 @@ open Jaf
 let qtype qualifier data =
   { data=data; qualifier=qualifier }
 
-let expr ast =
-  { valuetype=None; node=ast }
+let expr loc ast =
+  { valuetype=None; node=ast; loc }
 
-let stmt ast =
-  { node=ast; delete_vars=[] }
+let stmt loc ast =
+  { node=ast; delete_vars=[]; loc }
 
 let decl typespec ((name, dims), init) =
   { name=name; array_dim=dims; type_spec=typespec; initval=init; index=None }
@@ -102,11 +102,11 @@ hll
   ;
 
 primary_expression
-  : IDENTIFIER { expr (Ident ($1, None)) }
-  | THIS { expr This }
-  | constant { expr $1 }
-  | string { expr $1 }
-  | LPAREN expression RPAREN { $2 }
+  : IDENTIFIER { expr $sloc (Ident ($1, None)) }
+  | THIS { expr $sloc This }
+  | constant { expr $sloc $1 }
+  | string { expr $sloc $1 }
+  | LPAREN expression RPAREN { {$2 with loc=$sloc} }
   ;
 
 constant
@@ -127,22 +127,22 @@ string
 
 postfix_expression
   : primary_expression { $1 }
-  | postfix_expression LBRACKET expression RBRACKET { expr (Subscript ($1, $3)) }
-  | atomic_type_specifier LPAREN expression RPAREN { expr (Cast ($1, $3)) }
-  | postfix_expression arglist { expr (Call ($1, $2, None)) }
-  | NEW IDENTIFIER arglist { expr (New (Unresolved ($2), $3, None)) }
-  | postfix_expression DOT IDENTIFIER { expr (Member ($1, $3, None)) }
-  | postfix_expression INC { expr (Unary (PostInc, $1)) }
-  | postfix_expression DEC { expr (Unary (PostDec, $1)) }
+  | postfix_expression LBRACKET expression RBRACKET { expr $sloc (Subscript ($1, $3)) }
+  | atomic_type_specifier LPAREN expression RPAREN { expr $sloc (Cast ($1, $3)) }
+  | postfix_expression arglist { expr $sloc (Call ($1, $2, None)) }
+  | NEW IDENTIFIER arglist { expr $sloc (New (Unresolved ($2), $3, None)) }
+  | postfix_expression DOT IDENTIFIER { expr $sloc (Member ($1, $3, None)) }
+  | postfix_expression INC { expr $sloc (Unary (PostInc, $1)) }
+  | postfix_expression DEC { expr $sloc (Unary (PostDec, $1)) }
   ;
 
 arglist: LPAREN separated_list(COMMA, assign_expression) RPAREN { $2 }
 
 unary_expression
   : postfix_expression { $1 }
-  | INC unary_expression { expr (Unary (PreInc, $2)) }
-  | DEC unary_expression { expr (Unary (PreDec, $2)) }
-  | unary_operator cast_expression { expr (Unary ($1, $2)) }
+  | INC unary_expression { expr $sloc (Unary (PreInc, $2)) }
+  | DEC unary_expression { expr $sloc (Unary (PreDec, $2)) }
+  | unary_operator cast_expression { expr $sloc (Unary ($1, $2)) }
   ;
 
 unary_operator
@@ -155,75 +155,75 @@ unary_operator
 
 cast_expression
   : unary_expression { $1 }
-  | LPAREN atomic_type_specifier RPAREN cast_expression { expr (Cast ($2, $4)) }
+  | LPAREN atomic_type_specifier RPAREN cast_expression { expr $sloc (Cast ($2, $4)) }
   ;
 
 mul_expression
   : cast_expression { $1 }
-  | mul_expression TIMES cast_expression { expr (Binary (Times, $1, $3)) }
-  | mul_expression DIV cast_expression { expr (Binary (Divide, $1, $3)) }
-  | mul_expression MOD cast_expression { expr (Binary (Modulo, $1, $3)) }
+  | mul_expression TIMES cast_expression { expr $sloc (Binary (Times, $1, $3)) }
+  | mul_expression DIV cast_expression { expr $sloc (Binary (Divide, $1, $3)) }
+  | mul_expression MOD cast_expression { expr $sloc (Binary (Modulo, $1, $3)) }
   ;
 
 add_expression
   : mul_expression { $1 }
-  | add_expression PLUS mul_expression { expr (Binary (Plus, $1, $3)) }
-  | add_expression MINUS mul_expression { expr (Binary (Minus, $1, $3)) }
+  | add_expression PLUS mul_expression { expr $sloc (Binary (Plus, $1, $3)) }
+  | add_expression MINUS mul_expression { expr $sloc (Binary (Minus, $1, $3)) }
   ;
 
 shift_expression
   : add_expression { $1 }
-  | shift_expression LSHIFT add_expression { expr (Binary (LShift, $1, $3)) }
-  | shift_expression RSHIFT add_expression { expr (Binary (RShift, $1, $3)) }
+  | shift_expression LSHIFT add_expression { expr $sloc (Binary (LShift, $1, $3)) }
+  | shift_expression RSHIFT add_expression { expr $sloc (Binary (RShift, $1, $3)) }
   ;
 
 rel_expression
   : shift_expression { $1 }
-  | rel_expression LT shift_expression { expr (Binary (LT, $1, $3)) }
-  | rel_expression GT shift_expression { expr (Binary (GT, $1, $3)) }
-  | rel_expression LTE shift_expression { expr (Binary (LTE, $1, $3)) }
-  | rel_expression GTE shift_expression { expr (Binary (GTE, $1, $3)) }
+  | rel_expression LT shift_expression { expr $sloc (Binary (LT, $1, $3)) }
+  | rel_expression GT shift_expression { expr $sloc (Binary (GT, $1, $3)) }
+  | rel_expression LTE shift_expression { expr $sloc (Binary (LTE, $1, $3)) }
+  | rel_expression GTE shift_expression { expr $sloc (Binary (GTE, $1, $3)) }
   ;
 
 eql_expression
   : rel_expression { $1 }
-  | eql_expression EQUAL rel_expression { expr (Binary (Equal, $1, $3)) }
-  | eql_expression NEQUAL rel_expression { expr (Binary (NEqual, $1, $3)) }
+  | eql_expression EQUAL rel_expression { expr $sloc (Binary (Equal, $1, $3)) }
+  | eql_expression NEQUAL rel_expression { expr $sloc (Binary (NEqual, $1, $3)) }
   ;
 
 and_expression
   : eql_expression { $1 }
-  | and_expression BITAND eql_expression { expr (Binary (BitAnd, $1, $3)) }
+  | and_expression BITAND eql_expression { expr $sloc (Binary (BitAnd, $1, $3)) }
   ;
 
 xor_expression
   : and_expression { $1 }
-  | xor_expression BITXOR and_expression { expr (Binary (BitXor, $1, $3)) }
+  | xor_expression BITXOR and_expression { expr $sloc (Binary (BitXor, $1, $3)) }
   ;
 
 ior_expression
   : xor_expression { $1 }
-  | ior_expression BITOR xor_expression { expr (Binary (BitOr, $1, $3)) }
+  | ior_expression BITOR xor_expression { expr $sloc (Binary (BitOr, $1, $3)) }
   ;
 
 logand_expression
   : ior_expression { $1 }
-  | logand_expression AND ior_expression { expr (Binary (LogAnd, $1, $3)) }
+  | logand_expression AND ior_expression { expr $sloc (Binary (LogAnd, $1, $3)) }
   ;
 
 logor_expression
   : logand_expression { $1 }
-  | logor_expression OR logand_expression { expr (Binary (LogOr, $1, $3)) }
+  | logor_expression OR logand_expression { expr $sloc (Binary (LogOr, $1, $3)) }
   ;
 
 cond_expression
   : logor_expression { $1 }
-  | logor_expression QUESTION expression COLON cond_expression { expr (Ternary ($1, $3, $5)) }
+  | logor_expression QUESTION expression COLON cond_expression { expr $sloc (Ternary ($1, $3, $5)) }
   ;
 
 assign_expression
   : cond_expression { $1 }
-  | unary_expression assign_operator assign_expression { expr (Assign ($2, $1, $3)) }
+  | unary_expression assign_operator assign_expression { expr $sloc (Assign ($2, $1, $3)) }
   ;
 
 assign_operator
@@ -242,7 +242,7 @@ assign_operator
 
 expression
   : assign_expression { $1 }
-  | expression COMMA assign_expression { expr (Seq ($1, $3)) }
+  | expression COMMA assign_expression { expr $sloc (Seq ($1, $3)) }
   ;
 
 constant_expression
@@ -279,21 +279,21 @@ type_specifier
   | IDENTIFIER { Unresolved ($1) }
 
 statement
-  : declaration_statement { stmt $1 }
-  | labeled_statement { stmt $1 }
-  | compound_statement { stmt $1 }
-  | expression_statement { stmt $1 }
-  | selection_statement { stmt $1 }
-  | iteration_statement { stmt $1 }
-  | jump_statement { stmt $1 }
-  | message_statement { stmt $1 }
-  | rassign_statement { stmt $1 }
-  | assert_statement { stmt $1 }
+  : declaration_statement { stmt $sloc $1 }
+  | labeled_statement { stmt $sloc $1 }
+  | compound_statement { stmt $sloc $1 }
+  | expression_statement { stmt $sloc $1 }
+  | selection_statement { stmt $sloc $1 }
+  | iteration_statement { stmt $sloc $1 }
+  | jump_statement { stmt $sloc $1 }
+  | message_statement { stmt $sloc $1 }
+  | rassign_statement { stmt $sloc $1 }
+  | assert_statement { stmt $sloc $1 }
   ;
 
 switch_statement
-  : CASE constant_expression COLON switch_statement { stmt (Case ($2, $4)) }
-  | DEFAULT COLON switch_statement { stmt (Default ($3)) }
+  : CASE constant_expression COLON switch_statement { stmt $sloc (Case ($2, $4)) }
+  | DEFAULT COLON switch_statement { stmt $sloc (Default ($3)) }
   | statement { $1 }
   ;
 
@@ -322,7 +322,7 @@ expression_statement
 
 selection_statement
   : IF LPAREN expression RPAREN statement %prec IFX
-    { If ($3, $5, stmt EmptyStatement) }
+    { If ($3, $5, stmt ($endpos, $endpos) EmptyStatement) }
   | IF LPAREN expression RPAREN statement ELSE statement
     { If ($3, $5, $7) }
   | SWITCH LPAREN expression RPAREN LBRACE switch_statement+ RBRACE
@@ -333,13 +333,13 @@ iteration_statement
   : WHILE LPAREN expression RPAREN statement { While ($3, $5) }
   | DO statement WHILE LPAREN expression RPAREN { DoWhile ($5, $2) }
   | FOR LPAREN expression_statement expression? SEMICOLON expression? RPAREN statement
-    { For (stmt $3,
+    { For (stmt $loc($3) $3,
            $4,
            $6,
            $8)
     }
   | FOR LPAREN declaration expression? SEMICOLON expression? RPAREN statement
-    { For (stmt (Declarations $3),
+    { For (stmt $loc($3) (Declarations $3),
            $4,
            $6,
            $8)
@@ -363,10 +363,10 @@ rassign_statement
 assert_statement
   : ASSERT LPAREN expression RPAREN SEMICOLON
     { let args = [$3;
-                  expr (ConstString (expr_to_string $3));
-                  expr (ConstString $symbolstartpos.Lexing.pos_fname);
-                  expr (ConstInt $symbolstartpos.pos_lnum)] in
-      Expression (expr (Call (expr (Ident ("assert", None)), args, None))) }
+                  expr $loc($3) (ConstString (expr_to_string $3));
+                  expr $loc($1) (ConstString $startpos.Lexing.pos_fname);
+                  expr $loc($1) (ConstInt $startpos.pos_lnum)] in
+      Expression (expr $sloc (Call (expr $loc($1) (Ident ("assert", None)), args, None))) }
 
 declaration
   : declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON

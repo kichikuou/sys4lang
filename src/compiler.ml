@@ -249,7 +249,12 @@ class jaf_compiler ain =
             self#compile_local_ref v.index;
             self#write_instruction0 REF;
             self#compile_CALLHLL "Array" "Free" type_no
-              (ASTStatement { node = EmptyStatement; delete_vars = [] }))
+              (ASTStatement
+                 {
+                   node = EmptyStatement;
+                   delete_vars = [];
+                   loc = (Lexing.dummy_pos, Lexing.dummy_pos);
+                 }))
           else (
             self#compile_local_ref v.index;
             self#write_instruction0 A_FREE)

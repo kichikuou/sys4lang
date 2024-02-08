@@ -114,6 +114,7 @@ type call_type =
 type expression = {
   mutable valuetype : Ain.Type.t option;
   mutable node : ast_expression;
+  loc : Lexing.position * Lexing.position;
 }
 
 and ast_expression =
@@ -137,6 +138,7 @@ and ast_expression =
 type statement = {
   mutable node : ast_statement;
   mutable delete_vars : int list;
+  loc : Lexing.position * Lexing.position;
 }
 
 and ast_statement =
