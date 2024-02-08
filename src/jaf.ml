@@ -163,6 +163,7 @@ and ast_statement =
   | Return of expression option
   | MessageCall of string * string option * int option
   | RefAssign of expression * expression
+  | ObjSwap of expression * expression
 
 and variable = {
   name : string;
@@ -443,6 +444,9 @@ class ivisitor ctx =
       | RefAssign (a, b) ->
           self#visit_expression a;
           self#visit_expression b
+      | ObjSwap (a, b) ->
+          self#visit_expression a;
+          self#visit_expression b
 
     method visit_local_variable v =
       List.iter v.array_dim ~f:self#visit_expression;
@@ -642,6 +646,7 @@ let rec stmt_to_string (stmt : statement) =
       | None -> sprintf "'%s';" msg)
   | RefAssign (dst, src) ->
       sprintf "%s <- %s;" (expr_to_string dst) (expr_to_string src)
+  | ObjSwap (a, b) -> sprintf "%s <=> %s;" (expr_to_string a) (expr_to_string b)
 
 and var_to_string' d =
   let t = type_spec_to_string d.type_spec in

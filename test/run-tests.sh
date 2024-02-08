@@ -12,6 +12,7 @@ cd $(dirname "$0")
 ./test-runner.sh control.jaf
 ./test-runner.sh ref.jaf
 ./test-runner.sh functype.jaf
+./test-runner.sh objswap.jaf
 ./test-runner.sh message.jaf
 ./test-runner.sh char-constant.jaf
 ./test-runner.sh override.jaf

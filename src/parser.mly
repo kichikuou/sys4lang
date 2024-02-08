@@ -90,6 +90,7 @@ let member_func loc typespec_opt struct_name is_dtor name params body =
 /* assignment */
 %token ASSIGN PLUSASSIGN MINUSASSIGN TIMESASSIGN DIVIDEASSIGN MODULOASSIGN
 %token ORASSIGN XORASSIGN ANDASSIGN LSHIFTASSIGN RSHIFTASSIGN REFASSIGN
+%token SWAP
 /* delimiters */
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
 %token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH
@@ -310,6 +311,7 @@ statement
   | jump_statement { stmt $sloc $1 }
   | message_statement { stmt $sloc $1 }
   | rassign_statement { stmt $sloc $1 }
+  | objswap_statement { stmt $sloc $1 }
   | assert_statement { stmt $sloc $1 }
   ;
 
@@ -381,6 +383,9 @@ message_statement
 
 rassign_statement
   : expression REFASSIGN expression SEMICOLON { RefAssign ($1, $3) }
+
+objswap_statement
+  : expression SWAP expression SEMICOLON { ObjSwap ($1, $3) }
 
 assert_statement
   : ASSERT LPAREN expression RPAREN SEMICOLON

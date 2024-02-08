@@ -1006,6 +1006,16 @@ class jaf_compiler ain =
               compiler_bug "Invalid LHS in reference assignment"
                 (Some (ASTStatement stmt)));
           self#compile_unlock_peek
+      | ObjSwap (a, b) ->
+          (* FIXME: this doesn't work for string / struct *)
+          self#compile_lvalue a;
+          self#compile_lvalue b;
+          let type_no =
+            Ain.Type.int_of_data_type (Ain.version ain)
+              (Option.value_exn a.valuetype)
+          in
+          self#write_instruction1 PUSH type_no;
+          self#write_instruction0 OBJSWAP
 
     (** Emit the code for a variable declaration. If the variable has an initval,
       the initval expression is computed and assigned to the variable.
