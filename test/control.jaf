@@ -60,6 +60,7 @@ void test_switch()
 		i = 0;
 		break;
 	case 1:
+	case 2:
 		while (true) {
 			break;
 		}

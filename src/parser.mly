@@ -291,8 +291,8 @@ statement
   ;
 
 switch_statement
-  : CASE constant_expression COLON statement { stmt (Case ($2, $4)) }
-  | DEFAULT COLON statement { stmt (Default ($3)) }
+  : CASE constant_expression COLON switch_statement { stmt (Case ($2, $4)) }
+  | DEFAULT COLON switch_statement { stmt (Default ($3)) }
   | statement { $1 }
   ;
 
