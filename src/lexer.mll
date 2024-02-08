@@ -195,6 +195,7 @@ rule token = parse
   | ':'                     { COLON }
   | "::"                    { COCO }
   | ';'                     { SEMICOLON }
+  | '@'                     { AT }
   | '#'                     { HASH }
   | l as c                  { IDENTIFIER(c) }
   | (l a*) as s             {

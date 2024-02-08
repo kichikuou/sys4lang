@@ -1,9 +1,9 @@
-void set(array<int> a)
+void set(array@int a)
 {
 	a[0] = 1;
 }
 
-void set_ref(ref array<int> a)
+void set_ref(ref array@int a)
 {
 	a[0] = 1;
 }
@@ -15,23 +15,23 @@ void addone(ref int i)
 
 int main()
 {
-	array<int> ia[1];
+	array@int ia[1];
 	ia[0] = 1;
 	assert(ia[0] == 1);
 
-	array<string> sa[1];
+	array@string sa[1];
 	sa[0] = "1";
 	assert(sa[0] == "1");
 
-	array<int> a1[1];
+	array@int a1[1];
 	set(a1);
 	assert(a1[0] == 0);
 
-	array<int> a2[1];
+	array@int a2[1];
 	addone(a2[0]);
 	assert(a2[0] == 1);
 
-	array<int> a3[1];
+	array@int a3[1];
 	set_ref(a3);
 	assert(a3[0] == 1);
 
