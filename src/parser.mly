@@ -27,13 +27,27 @@ let expr loc ast =
 let stmt loc ast =
   { node=ast; delete_vars=[]; loc }
 
-let decl typespec ((name, dims), init) =
-  { name=name; array_dim=dims; type_spec=typespec; initval=init; index=None }
+type varinit = {
+  name: string;
+  loc: Lexing.position * Lexing.position;
+  dims: expression list;
+  initval: expression option;
+}
+
+let decl typespec vi =
+  {
+    name = vi.name;
+    location = vi.loc;
+    array_dim = vi.dims;
+    type_spec = typespec;
+    initval = vi.initval;
+    index = None;
+  }
 
 let decls typespec var_list =
   List.map (decl typespec) var_list
 
-let func typespec name params body =
+let func loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)
   let plist =
     match params with
@@ -41,10 +55,11 @@ let func typespec name params body =
     | _ -> params
   in
   {
-    name = name;
+    name;
+    loc;
     return = typespec;
     params = plist;
-    body = body;
+    body;
     is_label = false;
     index = None;
     class_index = None;
@@ -379,44 +394,45 @@ declaration_specifiers
   ;
 
 init_declarator
-  : declarator ASSIGN assign_expression { ($1, Some $3) }
-  | declarator { ($1, None) }
+  : declarator ASSIGN assign_expression { { $1 with initval = Some $3; loc = $sloc } }
+  | declarator { $1 }
   ;
 
 declarator
-  : IDENTIFIER { ($1, []) }
+  : IDENTIFIER { { name=$1; dims=[]; initval=None; loc=$sloc } }
   | array_allocation { $1 }
   ;
 
 array_allocation
-  : IDENTIFIER LBRACKET expression RBRACKET { ($1, [$3]) }
-  | array_allocation LBRACKET expression RBRACKET { ((fst $1), $3 :: (snd $1)) }
+  : IDENTIFIER LBRACKET expression RBRACKET { { name=$1; loc=$sloc; initval=None; dims=[$3] } }
+  | array_allocation LBRACKET expression RBRACKET
+    { { $1 with dims = $3 :: $1.dims; loc = $sloc } }
   ;
 
 external_declaration
   : declaration
     { List.map (fun d -> Global (d)) $1 }
   | declaration_specifiers IDENTIFIER parameter_list block
-    { [Function (func $1 $2 $3 $4)] }
+    { [Function (func $sloc $1 $2 $3 $4)] }
   | HASH IDENTIFIER parameter_list block
-    { [Function { (func (qtype None Void) $2 $3 $4) with is_label=true }] }
+    { [Function { (func $sloc (qtype None Void) $2 $3 $4) with is_label=true }] }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
-    { [FuncTypeDef (func $2 $3 $4 [])] }
+    { [FuncTypeDef (func $sloc $2 $3 $4 [])] }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
-    { [DelegateDef (func $2 $3 $4 [])] }
+    { [DelegateDef (func $sloc $2 $3 $4 [])] }
   | STRUCT IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
-    { [StructDef ({ name=$2; decls=(List.concat $4) })] }
+    { [StructDef ({ loc=$sloc; name=$2; decls=(List.concat $4) })] }
   | ENUM enumerator_list SEMICOLON
-    { [Enum ({ name=None; values=$2 })] }
+    { [Enum ({ loc=$sloc; name=None; values=$2 })] }
   | ENUM IDENTIFIER enumerator_list SEMICOLON
-    { [Enum ({ name=Some $2; values=$3 })] }
+    { [Enum ({ loc=$sloc; name=Some $2; values=$3 })] }
   ;
 
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list SEMICOLON
-    { [Function (func $1 $2 $3 [])] }
+    { [Function (func $sloc $1 $2 $3 [])] }
   | STRUCT IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
-    { [StructDef ({ name=$2; decls=(List.concat $4) })] }
+    { [StructDef ({ loc=$sloc; name=$2; decls=(List.concat $4) })] }
   ;
 
 enumerator_list
@@ -429,7 +445,7 @@ enumerator
   ;
 
 parameter_declaration
-  : declaration_specifiers declarator { decl $1 ($2, None) }
+  : declaration_specifiers declarator { decl $1 { $2 with loc=$sloc } }
   ;
 
 parameter_list
@@ -438,7 +454,7 @@ parameter_list
   ;
 
 functype_parameter_declaration
-  : declaration_specifiers { decl $1 (("<anonymous>", []), None) }
+  : declaration_specifiers { decl $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
   | parameter_declaration { $1 }
   ;
 
@@ -448,15 +464,11 @@ functype_parameter_list
 
 struct_declaration
   : declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
-    { $2
-      |> List.map (fun d -> (d, None))
-      |> decls $1
-      |> List.map (fun d -> MemberDecl (d))
-    }
+    { decls $1 $2 |> List.map (fun d -> MemberDecl d) }
   | declaration_specifiers IDENTIFIER parameter_list block
-    { [Method (func $1 $2 $3 $4)] }
+    { [Method (func $sloc $1 $2 $3 $4)] }
   | IDENTIFIER LPAREN RPAREN block
-    { [Constructor (func {data=Void; qualifier=None} $1 [] $4)] }
+    { [Constructor (func $sloc {data=Void; qualifier=None} $1 [] $4)] }
   | BITNOT IDENTIFIER LPAREN RPAREN block
-    { [Destructor (func {data=Void; qualifier=None} $2 [] $5)] }
+    { [Destructor (func $sloc {data=Void; qualifier=None} $2 [] $5)] }
   ;

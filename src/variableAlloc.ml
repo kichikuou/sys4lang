@@ -145,6 +145,7 @@ class variable_alloc_visitor ctx =
           let void =
             {
               name = "<void>";
+              location = v.location;
               array_dim = [];
               type_spec = { data = Void; qualifier = None };
               initval = None;
@@ -176,6 +177,7 @@ class variable_alloc_visitor ctx =
           let v =
             {
               name = "<dummy : new " ^ struct_name ^ ">";
+              location = expr.loc;
               array_dim = [];
               type_spec = { data = t; qualifier = Some Ref };
               initval = None;
