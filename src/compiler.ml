@@ -647,7 +647,7 @@ class jaf_compiler ain =
           | Float, TimesAssign -> self#write_instruction0 F_MULA
           | Float, DivideAssign -> self#write_instruction0 F_DIVA
           | String, EqAssign -> self#write_instruction0 S_ASSIGN
-          | String, PlusAssign -> self#write_instruction0 S_PLUSA
+          | String, PlusAssign -> self#write_instruction0 S_PLUSA2
           | Delegate _, _ -> (
               (* XXX: DG_SET and DG_ADD seem to be misnamed... *)
               match (op, (Option.value_exn rhs.valuetype).data) with
@@ -692,10 +692,12 @@ class jaf_compiler ain =
           | String, String -> ()
           | String, Int -> self#write_instruction0 STOI
           | _ -> compiler_bug "invalid cast" (Some (ASTExpression expr)))
-      | Subscript (obj, index) ->
+      | Subscript (obj, index) -> (
           self#compile_lvalue obj;
           self#compile_expression index;
-          self#compile_dereference (Option.value_exn expr.valuetype)
+          match (Option.value_exn obj.valuetype).data with
+          | String -> self#write_instruction0 C_REF
+          | _ -> self#compile_dereference (Option.value_exn expr.valuetype))
       | Member (e, _, Some (ClassVariable (struct_no, member_no))) ->
           let struct_type = Ain.get_struct_by_index ain struct_no in
           self#compile_lvalue e;

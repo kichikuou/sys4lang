@@ -8,6 +8,10 @@ int main()
 	assert("a" == "a");
 	assert("a" != "b");
 
+	string s;
+	s = "a"; assert((s += "b") == "ab");
+	assert(s[0] == 97);
+
 	string concatenated = "asdf\n" "\nfdsa";
 	assert(concatenated == "asdf\n\nfdsa");
 

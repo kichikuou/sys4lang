@@ -269,6 +269,7 @@ class type_analyze_visitor ctx =
           let rhs_type = (Option.value_exn rhs.valuetype).data in
           (match (lhs_type, op) with
           | _, EqAssign -> self#check_assign (ASTExpression expr) lhs_type rhs
+          | String, PlusAssign -> check String rhs
           | Delegate dg_i, (PlusAssign | MinusAssign) ->
               self#check_delegate_compatible (ASTExpression expr) dg_i rhs
           | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
@@ -299,8 +300,10 @@ class type_analyze_visitor ctx =
           check Int i;
           match (Option.value_exn obj.valuetype).data with
           | Array t -> expr.valuetype <- Some t
+          | String -> expr.valuetype <- Some (Ain.Type.make Int)
           | _ ->
-              let array_type = { data = Unresolved "?"; qualifier = None } in
+              (* FIXME: Expected type here is array<?>|string *)
+              let array_type = { data = Void; qualifier = None } in
               let expected = Array array_type in
               data_type_error
                 (jaf_to_ain_data_type expected)
