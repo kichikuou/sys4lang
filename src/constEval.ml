@@ -146,7 +146,8 @@ class const_eval_visitor ctx =
           | BitXor -> const_binary expr a.node b.node (Some ( lxor )) None
           | BitAnd -> const_binary expr a.node b.node (Some ( land )) None
           | LShift -> const_binary expr a.node b.node (Some ( lsl )) None
-          | RShift -> const_binary expr a.node b.node (Some ( lsr )) None)
+          | RShift -> const_binary expr a.node b.node (Some ( lsr )) None
+          | RefEqual | RefNEqual -> ())
       | Assign (_, _, _) -> ()
       | Seq (_, _) -> ()
       | Ternary (test, con, alt) -> (

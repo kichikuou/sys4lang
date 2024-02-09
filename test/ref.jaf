@@ -24,6 +24,7 @@ int main()
 	ref int rb;
 	ra <- a;
 	rb <- ra;
+	// assert(ra === rb);  FIXME: thid doesn't pass typecheck
 	rb = 1;
 	assert(a == 1);
 

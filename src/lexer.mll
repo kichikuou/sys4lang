@@ -171,6 +171,8 @@ rule token = parse
   | ">="                    { GTE }
   | "=="                    { EQUAL }
   | "!="                    { NEQUAL }
+  | "==="                   { REF_EQUAL }
+  | "!=="                   { REF_NEQUAL }
   | "++"                    { INC }
   | "--"                    { DEC }
   | '~'                     { BITNOT }

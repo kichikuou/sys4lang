@@ -36,6 +36,8 @@ type binary_op =
   | Modulo
   | Equal
   | NEqual
+  | RefEqual
+  | RefNEqual
   | LT
   | GT
   | LTE
@@ -501,6 +503,8 @@ let binary_op_to_string op =
   | Modulo -> "%"
   | Equal -> "=="
   | NEqual -> "!="
+  | RefEqual -> "==="
+  | RefNEqual -> "!=="
   | LT -> "<"
   | GT -> ">"
   | LTE -> "<="

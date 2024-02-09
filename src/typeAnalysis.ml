@@ -253,6 +253,15 @@ class type_analyze_visitor ctx =
                   check_numeric b;
                   (* TODO: allow coercion *)
                   check_expr a b);
+              expr.valuetype <- Some (Ain.Type.make Int)
+          | RefEqual | RefNEqual ->
+              (match
+                 ( (Option.value_exn a.valuetype).is_ref,
+                   (Option.value_exn b.valuetype).is_ref )
+               with
+              | true, true -> check_expr a b
+              | false, _ -> ref_type_error Void (Some a) (ASTExpression expr)
+              | _, false -> ref_type_error Void (Some b) (ASTExpression expr));
               expr.valuetype <- Some (Ain.Type.make Int))
       | Assign (op, lhs, rhs) -> (
           self#check_lvalue lhs (ASTExpression expr);
