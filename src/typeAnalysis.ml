@@ -610,57 +610,22 @@ class type_analyze_visitor ctx =
       match decl with Global g -> self#visit_variable g | _ -> ()
 
     method! visit_fundecl f =
-      (* Equality function for function declarations. Two function declarations
-         are considered equal if they have the same number and type of parameters,
-         and the same return type. *)
-      let fundecl_equal (a : Ain.Function.t) (b : Ain.Function.t) =
-        (* extract parameter types from variable list *)
-        let take_arg_types n (vars : Ain.Variable.t list) =
-          let rec take_arg_types' n (vars : Ain.Variable.t list) result =
-            if n = 0 then List.rev result
-            else
-              match vars with
-              | x :: xs -> take_arg_types' (n - 1) xs (x.value_type :: result)
-              | [] ->
-                  compiler_bug "take_arg_types: n > nr_args"
-                    (Some (ASTDeclaration (Function f)))
-          in
-          take_arg_types' n vars []
-        in
-        (* full type comparison (including ref) *)
-        let arg_type_equal (a : Ain.Type.t) (b : Ain.Type.t) =
-          Bool.equal a.is_ref b.is_ref && type_equal a.data b.data
-        in
-        let a_args = take_arg_types a.nr_args a.vars in
-        let b_args = take_arg_types b.nr_args b.vars in
-        a.nr_args = b.nr_args
-        && List.for_all2_exn a_args b_args ~f:arg_type_equal
-        && arg_type_equal a.return_type b.return_type
-      in
       super#visit_fundecl f;
       (match f.return.qualifier with
-      | Some Override ->
-          let child = Ain.Function.create f.name |> jaf_to_ain_function f in
-          let parent =
-            Ain.get_function_by_index ctx.ain (Option.value_exn f.super_index)
-          in
-          if not (fundecl_equal child parent) then
-            compile_error "Override function has incorrect signature"
-              (ASTDeclaration (Function f))
       | Some Const ->
           compile_error "Function cannot be declared const"
             (ASTDeclaration (Function f))
       | _ -> ());
       if String.equal f.name "main" then
         match (f.return, f.params) with
-        | { data = Int; qualifier = None | Some Override }, [] ->
+        | { data = Int; qualifier = None }, [] ->
             Ain.set_main_function ctx.ain (Option.value_exn f.index)
         | _ ->
             compile_error "Invalid declaration of 'main' function"
               (ASTDeclaration (Function f))
       else if String.equal f.name "message" then
         match f.return with
-        | { data = Void; qualifier = None | Some Override } -> (
+        | { data = Void; qualifier = None } -> (
             match List.map f.params ~f:(fun v -> v.type_spec) with
             | [
              { data = Int; qualifier = None };

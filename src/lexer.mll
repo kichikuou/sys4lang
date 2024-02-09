@@ -101,7 +101,6 @@ let () =
               "new",          NEW;
               "const",        CONST;
               "ref",          REF;
-              "override",     OVERRIDE;
               "array",        ARRAY;
               "wrap",         WRAP;
               "functype",     FUNCTYPE;

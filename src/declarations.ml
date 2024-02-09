@@ -28,22 +28,11 @@ class type_declare_visitor ctx =
 
     method declare_function decl =
       let name = mangled_name decl in
-      (match (decl.return.qualifier, Ain.get_function ctx.ain name) with
-      | Some Override, None ->
-          compile_error "function doesn't exist for override"
-            (ASTDeclaration (Function decl))
-      | Some Override, Some super_f -> (
-          decl.index <- Some super_f.index;
-          decl.super_index <- Some (Ain.dup_function ctx.ain super_f.index);
-          (* update index of overridden function, if it was defined in this file *)
-          let is_super f = Option.value_exn f.index = super_f.index in
-          match Stack.find functions ~f:is_super with
-          | Some f -> f.index <- decl.super_index
-          | None -> ())
-      | _, Some _ ->
+      (match Ain.get_function ctx.ain name with
+      | Some _ ->
           compile_error "Duplicate function definition"
             (ASTDeclaration (Function decl))
-      | _, None -> decl.index <- Some (Ain.add_function ctx.ain name).index);
+      | None -> decl.index <- Some (Ain.add_function ctx.ain name).index);
       Stack.push functions decl
 
     method! visit_declaration decl =

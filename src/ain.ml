@@ -1441,8 +1441,6 @@ let add_function ain name =
   let no = Function.create name |> write_new_function ain in
   ain.functions.(no)
 
-let dup_function ain no = ain.functions.(no) |> write_new_function ain
-
 (* structures *)
 
 let get_struct ain name =

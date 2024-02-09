@@ -64,7 +64,6 @@ let func loc typespec name params body =
     is_label = false;
     index = None;
     class_index = None;
-    super_index = None;
   }
 
 let member_func loc typespec_opt struct_name is_dtor name params body =
@@ -100,7 +99,7 @@ let member_func loc typespec_opt struct_name is_dtor name params body =
 /* keywords */
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN ASSERT
-%token CONST REF OVERRIDE ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
+%token CONST REF ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
 
 %token EOF
 
@@ -291,7 +290,6 @@ atomic_type_specifier
 type_qualifier
   : CONST { Const }
   | REF { Ref }
-  | OVERRIDE { Override }
   ;
 
 type_specifier

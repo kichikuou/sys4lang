@@ -63,7 +63,7 @@ type assign_op =
   | LShiftAssign
   | RShiftAssign
 
-type type_qualifier = Const | Ref | Override
+type type_qualifier = Const | Ref
 
 type type_specifier = {
   mutable data : data_type;
@@ -184,7 +184,6 @@ type fundecl = {
   is_label : bool;
   mutable index : int option;
   mutable class_index : int option;
-  mutable super_index : int option;
 }
 
 let mangled_name fdecl =
@@ -326,11 +325,6 @@ class ivisitor ctx =
                 | Some i -> ResolvedLibrary i
                 | None -> UnresolvedName
               else ResolvedSystem
-          | "super" -> (
-              match current_function with
-              | Some { super_index = Some super_no; _ } ->
-                  ResolvedFunction super_no
-              | _ -> UnresolvedName)
           | "assert" ->
               ResolvedBuiltin
                 (Option.value_exn
@@ -538,7 +532,6 @@ let assign_op_to_string op =
 let type_qualifier_to_string = function
   | Const -> "const"
   | Ref -> "ref"
-  | Override -> "override"
 
 let rec data_type_to_string = function
   | Untyped -> "untyped"
