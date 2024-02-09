@@ -35,6 +35,9 @@ int main()
 	set_ref(a3);
 	assert(a3[0] == 1);
 
+	array@int a4[10];
+	assert(a4.Numof() == 10);
+
 	// array@int@2 a[1][2];
 	// a[0][1] = 1;
 	// assert(a[0][1] == 1);

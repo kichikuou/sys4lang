@@ -338,7 +338,11 @@ class type_analyze_visitor ctx =
       | Member
           ( ({
                valuetype =
-                 Some { data = (Int | Float | String | Delegate _) as t; _ };
+                 Some
+                   {
+                     data = (Int | Float | String | Array _ | Delegate _) as t;
+                     _;
+                   };
                _;
              } as e),
             name,
