@@ -105,10 +105,15 @@ class type_resolve_visitor ctx decl_only =
               | None -> compile_error ("Undefined type: " ^ name) node))
 
     method resolve_typespec ts node =
-      match ts.data with
-      | Unresolved t -> ts.data <- self#resolve_type t node
-      | Ref t | Array t | Wrap t -> self#resolve_typespec t node
-      | _ -> ()
+      let rec resolve t =
+        match t with
+        | Unresolved t -> self#resolve_type t node
+        | Ref t -> Ref (resolve t)
+        | Array t -> Array (resolve t)
+        | Wrap t -> Wrap (resolve t)
+        | _ -> t
+      in
+      resolve ts
 
     method! visit_expression expr =
       (match expr.node with
@@ -118,7 +123,7 @@ class type_resolve_visitor ctx decl_only =
       super#visit_expression expr
 
     method! visit_local_variable decl =
-      self#resolve_typespec decl.type_spec (ASTVariable decl);
+      decl.ty <- self#resolve_typespec decl.ty (ASTVariable decl);
       super#visit_local_variable decl
 
     method! visit_declaration decl =
@@ -128,21 +133,22 @@ class type_resolve_visitor ctx decl_only =
         | _ -> None
       in
       let resolve_function f =
-        self#resolve_typespec f.return (ASTDeclaration (Function f));
+        f.return_ty <-
+          self#resolve_typespec f.return_ty (ASTDeclaration (Function f));
         List.iter f.params ~f:(fun v ->
-            self#resolve_typespec v.type_spec (ASTVariable v))
+            v.ty <- self#resolve_typespec v.ty (ASTVariable v))
       in
       (match decl with
       | Function f ->
           resolve_function f;
           f.class_index <- function_class f
       | FuncTypeDef f | DelegateDef f -> resolve_function f
-      | Global g -> self#resolve_typespec g.type_spec (ASTDeclaration decl)
+      | Global g -> g.ty <- self#resolve_typespec g.ty (ASTDeclaration decl)
       | StructDef s ->
           let resolve_structdecl = function
             | AccessSpecifier _ -> ()
             | MemberDecl d ->
-                self#resolve_typespec d.type_spec (ASTDeclaration decl)
+                d.ty <- self#resolve_typespec d.ty (ASTDeclaration decl)
             | Constructor f | Destructor f | Method f -> resolve_function f
           in
           List.iter s.decls ~f:resolve_structdecl
@@ -165,7 +171,7 @@ class type_define_visitor ctx =
       match decl with
       | Global g ->
           if g.is_const then ctx.const_vars <- g :: ctx.const_vars
-          else Ain.set_global_type ctx.ain g.name (jaf_to_ain_type g.type_spec)
+          else Ain.set_global_type ctx.ain g.name (jaf_to_ain_type g.ty)
       | Function f ->
           let obj =
             Ain.get_function_by_index ctx.ain (Option.value_exn f.index)

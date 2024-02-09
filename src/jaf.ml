@@ -63,9 +63,7 @@ type assign_op =
   | LShiftAssign
   | RShiftAssign
 
-type type_specifier = { mutable data : data_type }
-
-and data_type =
+type jaf_type =
   | Untyped
   | Unresolved of string
   | Void
@@ -75,9 +73,9 @@ and data_type =
   | String
   | Struct of string * int
   (*| Enum*)
-  | Ref of type_specifier
-  | Array of type_specifier
-  | Wrap of type_specifier
+  | Ref of jaf_type
+  | Array of jaf_type
+  | Wrap of jaf_type
   | HLLParam
   | HLLFunc
   | Delegate of string * int
@@ -126,11 +124,11 @@ and ast_expression =
   | Assign of assign_op * expression * expression
   | Seq of expression * expression
   | Ternary of expression * expression * expression
-  | Cast of data_type * expression
+  | Cast of jaf_type * expression
   | Subscript of expression * expression
   | Member of expression * string * member_type option
   | Call of expression * expression list * call_type option
-  | New of data_type * expression list * int option
+  | New of jaf_type * expression list * int option
   | This
   | Null
 
@@ -166,7 +164,7 @@ and variable = {
   location : Lexing.position * Lexing.position;
   array_dim : expression list;
   is_const : bool;
-  type_spec : type_specifier;
+  mutable ty : jaf_type;
   initval : expression option;
   mutable index : int option;
 }
@@ -175,7 +173,7 @@ type fundecl = {
   mutable name : string;
   loc : Lexing.position * Lexing.position;
   struct_name : string option;
-  return : type_specifier;
+  mutable return_ty : jaf_type;
   params : variable list;
   body : statement list;
   is_label : bool;
@@ -500,7 +498,7 @@ let assign_op_to_string op =
   | LShiftAssign -> "<<="
   | RShiftAssign -> ">>="
 
-let rec data_type_to_string = function
+let rec jaf_type_to_string = function
   | Untyped -> "untyped"
   | Unresolved s -> "Unresolved<" ^ s ^ ">"
   | Void -> "void"
@@ -509,14 +507,12 @@ let rec data_type_to_string = function
   | Float -> "float"
   | String -> "string"
   | Struct (s, _) | FuncType (s, _) | Delegate (s, _) -> s
-  | Ref t -> "ref " ^ type_spec_to_string t
-  | Array t -> "array<" ^ type_spec_to_string t ^ ">" (* TODO: rank *)
-  | Wrap t -> "wrap<" ^ type_spec_to_string t ^ ">"
+  | Ref t -> "ref " ^ jaf_type_to_string t
+  | Array t -> "array<" ^ jaf_type_to_string t ^ ">" (* TODO: rank *)
+  | Wrap t -> "wrap<" ^ jaf_type_to_string t ^ ">"
   | HLLParam -> "hll_param"
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
-
-and type_spec_to_string ts = data_type_to_string ts.data
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
@@ -549,13 +545,13 @@ let rec expr_to_string (e : expression) =
   | Ternary (a, b, c) ->
       sprintf "%s ? %s : %s" (expr_to_string a) (expr_to_string b)
         (expr_to_string c)
-  | Cast (t, e) -> sprintf "(%s)%s" (data_type_to_string t) (expr_to_string e)
+  | Cast (t, e) -> sprintf "(%s)%s" (jaf_type_to_string t) (expr_to_string e)
   | Subscript (e, i) -> sprintf "%s[%s]" (expr_to_string e) (expr_to_string i)
   | Member (e, s, _) -> sprintf "%s.%s" (expr_to_string e) s
   | Call (f, args, _) ->
       sprintf "%s%s" (expr_to_string f) (arglist_to_string args)
   | New (t, args, _) ->
-      sprintf "new %s%s" (data_type_to_string t) (arglist_to_string args)
+      sprintf "new %s%s" (jaf_type_to_string t) (arglist_to_string args)
   | This -> "this"
   | Null -> "NULL"
 
@@ -607,7 +603,7 @@ let rec stmt_to_string (stmt : statement) =
   | ObjSwap (a, b) -> sprintf "%s <=> %s;" (expr_to_string a) (expr_to_string b)
 
 and var_to_string' d =
-  let t = type_spec_to_string d.type_spec in
+  let t = jaf_type_to_string d.ty in
   let dim_iter l r = l ^ sprintf "[%s]" (expr_to_string r) in
   let dims = List.fold d.array_dim ~init:"" ~f:dim_iter in
   let init =
@@ -635,16 +631,16 @@ let decl_to_string d =
   match d with
   | Global d -> var_to_string d
   | Function d ->
-      let return = type_spec_to_string d.return in
+      let return = jaf_type_to_string d.return_ty in
       let params = params_to_string d.params in
       let body = block_to_string d.body in
       sprintf "%s %s%s { %s }" return d.name params body
   | FuncTypeDef d ->
-      let return = type_spec_to_string d.return in
+      let return = jaf_type_to_string d.return_ty in
       let params = params_to_string d.params in
       sprintf "functype %s %s%s;" return d.name params
   | DelegateDef d ->
-      let return = type_spec_to_string d.return in
+      let return = jaf_type_to_string d.return_ty in
       let params = params_to_string d.params in
       sprintf "delegate %s %s%s;" return d.name params
   | StructDef d ->
@@ -661,7 +657,7 @@ let decl_to_string d =
             let body = block_to_string d.body in
             sprintf "~%s%s { %s }" d.name params body
         | Method d ->
-            let return = type_spec_to_string d.return in
+            let return = jaf_type_to_string d.return_ty in
             let params = params_to_string d.params in
             let body = block_to_string d.body in
             sprintf "%s %s%s { %s }" return d.name params body
@@ -692,8 +688,7 @@ let ast_to_string = function
   | ASTVariable v -> var_to_string v
   | ASTDeclaration d -> decl_to_string d
 
-let rec jaf_to_ain_data_type data =
-  match data with
+let rec jaf_to_ain_data_type = function
   | Untyped -> failwith "tried to convert Untyped to ain data type"
   | Unresolved _ -> failwith "tried to convert Unresolved to ain data type"
   | Ref _ -> failwith "tried to convert Ref to ain data type"
@@ -703,18 +698,17 @@ let rec jaf_to_ain_data_type data =
   | Float -> Ain.Type.Float
   | String -> Ain.Type.String
   | Struct (_, i) -> Ain.Type.Struct i
-  | Array t -> Ain.Type.Array (jaf_to_ain_type t)
-  | Wrap t -> Ain.Type.Wrap (jaf_to_ain_type t)
+  | Array t -> Ain.Type.Array (Ain.Type.make (jaf_to_ain_data_type t))
+  | Wrap t -> Ain.Type.Wrap (Ain.Type.make (jaf_to_ain_data_type t))
   | HLLParam -> Ain.Type.HLLParam
   | HLLFunc -> Ain.Type.HLLFunc
   | Delegate (_, i) -> Ain.Type.Delegate i
   | FuncType (_, i) -> Ain.Type.FuncType i
   | IMainSystem -> Ain.Type.IMainSystem
 
-and jaf_to_ain_type spec =
-  match spec.data with
-  | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t.data)
-  | data -> Ain.Type.make ~is_ref:false (jaf_to_ain_data_type data)
+and jaf_to_ain_type = function
+  | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)
+  | t -> Ain.Type.make (jaf_to_ain_data_type t)
 
 let jaf_to_ain_variables j_p =
   let rec convert_params (params : variable list) (result : Ain.Variable.t list)
@@ -722,11 +716,9 @@ let jaf_to_ain_variables j_p =
     match params with
     | [] -> List.rev result
     | x :: xs -> (
-        let var =
-          Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec)
-        in
-        match x.type_spec with
-        | { data = Ref { data = Int | Bool | Float | FuncType (_, _) } } ->
+        let var = Ain.Variable.make ~index x.name (jaf_to_ain_type x.ty) in
+        match x.ty with
+        | Ref (Int | Bool | Float | FuncType (_, _)) ->
             let void =
               Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
             in
@@ -741,7 +733,7 @@ let jaf_to_ain_function j_f (a_f : Ain.Function.t) =
     a_f with
     vars;
     nr_args = List.length vars;
-    return_type = jaf_to_ain_type j_f.return;
+    return_type = jaf_to_ain_type j_f.return_ty;
     is_label = j_f.is_label;
   }
 
@@ -777,13 +769,13 @@ let jaf_to_ain_functype j_f (a_f : Ain.FunctionType.t) =
     a_f with
     variables;
     nr_arguments = List.length variables;
-    return_type = jaf_to_ain_type j_f.return;
+    return_type = jaf_to_ain_type j_f.return_ty;
   }
 
 let jaf_to_ain_hll_function j_f =
   let jaf_to_ain_hll_argument (param : variable) =
-    Ain.Library.Argument.create param.name (jaf_to_ain_type param.type_spec)
+    Ain.Library.Argument.create param.name (jaf_to_ain_type param.ty)
   in
-  let return_type = jaf_to_ain_type j_f.return in
+  let return_type = jaf_to_ain_type j_f.return_ty in
   let arguments = List.map j_f.params ~f:jaf_to_ain_hll_argument in
   Ain.Library.Function.create j_f.name return_type arguments

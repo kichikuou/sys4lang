@@ -140,15 +140,15 @@ class variable_alloc_visitor ctx =
     method add_var (v : variable) =
       let i = List.length vars in
       v.index <- Some i;
-      match v.type_spec with
-      | { data = Ref { data = Int | Bool | Float | FuncType (_, _) } } ->
+      match v.ty with
+      | Ref (Int | Bool | Float | FuncType (_, _)) ->
           let void =
             {
               name = "<void>";
               location = v.location;
               array_dim = [];
               is_const = false;
-              type_spec = { data = Void };
+              ty = Void;
               initval = None;
               index = Some (i + 1);
             }
@@ -181,7 +181,7 @@ class variable_alloc_visitor ctx =
               location = expr.loc;
               array_dim = [];
               is_const = false;
-              type_spec = { data = Ref { data = t } };
+              ty = Ref t;
               initval = None;
               index = Some (List.length vars);
             }
@@ -215,7 +215,7 @@ class variable_alloc_visitor ctx =
 
     method! visit_fundecl f =
       let conv_var index (v : variable) =
-        Ain.Variable.make ~index v.name (jaf_to_ain_type v.type_spec)
+        Ain.Variable.make ~index v.name (jaf_to_ain_type v.ty)
       in
       let add_vars (a_f : Ain.Function.t) =
         { a_f with vars = List.mapi (List.rev vars) ~f:conv_var }

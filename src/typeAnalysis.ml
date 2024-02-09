@@ -18,7 +18,7 @@ open Core
 open Jaf
 open CompileError
 
-let maybe_deref = function Ref t -> t.data | t -> t
+let maybe_deref = function Ref t -> t | t -> t
 
 let rec type_equal (expected : Ain.Type.data) (actual : Ain.Type.data) =
   match (expected, actual) with
@@ -75,7 +75,7 @@ let rec type_equal (expected : Ain.Type.data) (actual : Ain.Type.data) =
   | NullType, _ ->
       false
 
-let type_castable (dst : data_type) (src : Ain.Type.data) =
+let type_castable (dst : jaf_type) (src : Ain.Type.data) =
   match (dst, src) with
   (* FIXME: cast to void should be allowed *)
   | Void, _ -> compiler_bug "type checker cast to void type" None
@@ -177,10 +177,10 @@ class type_analyze_visitor ctx =
           match environment#resolve name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, Some (LocalVariable (-1)));
-              set_valuetype { data = maybe_deref v.type_spec.data }
+              set_valuetype (maybe_deref v.ty)
           | ResolvedConstant v ->
               expr.node <- Ident (name, Some GlobalConstant);
-              set_valuetype { data = maybe_deref v.type_spec.data }
+              set_valuetype (maybe_deref v.ty)
           | ResolvedGlobal g ->
               expr.node <- Ident (name, Some (GlobalVariable g.index));
               expr.valuetype <- Some g.value_type
@@ -297,7 +297,7 @@ class type_analyze_visitor ctx =
           if not (type_castable t (Option.value_exn e.valuetype).data) then
             data_type_error (jaf_to_ain_data_type t) (Some e)
               (ASTExpression expr);
-          set_valuetype { data = maybe_deref t }
+          set_valuetype (maybe_deref t)
       | Subscript (obj, i) -> (
           check Int i;
           match (Option.value_exn obj.valuetype).data with
@@ -305,8 +305,7 @@ class type_analyze_visitor ctx =
           | String -> expr.valuetype <- Some (Ain.Type.make Int)
           | _ ->
               (* FIXME: Expected type here is array<?>|string *)
-              let array_type = { data = Void } in
-              let expected = Array array_type in
+              let expected = Array Void in
               data_type_error
                 (jaf_to_ain_data_type expected)
                 (Some obj) (ASTExpression expr))
@@ -474,7 +473,7 @@ class type_analyze_visitor ctx =
               | no ->
                   let ctor = Ain.get_function_by_index ctx.ain no in
                   check_call ctor args);
-              set_valuetype { data = maybe_deref t }
+              set_valuetype (maybe_deref t)
           | _ -> data_type_error (Struct (-1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with
@@ -518,7 +517,7 @@ class type_analyze_visitor ctx =
                 (Some (ASTStatement stmt))
           | Some f ->
               type_check (ASTStatement stmt)
-                (jaf_to_ain_data_type f.return.data)
+                (jaf_to_ain_data_type f.return_ty)
                 e)
       | Return None -> (
           match environment#current_function with
@@ -526,11 +525,11 @@ class type_analyze_visitor ctx =
               compiler_bug "return statement outside of function"
                 (Some (ASTStatement stmt))
           | Some f -> (
-              match f.return.data with
+              match f.return_ty with
               | Void -> ()
               | _ ->
                   data_type_error
-                    (jaf_to_ain_data_type f.return.data)
+                    (jaf_to_ain_data_type f.return_ty)
                     None (ASTStatement stmt)))
       | MessageCall (msg, f_name, _) -> (
           match f_name with
@@ -549,7 +548,7 @@ class type_analyze_visitor ctx =
           | Ident (name, _) -> (
               match environment#get_local name with
               | Some v -> (
-                  match v.type_spec.data with
+                  match v.ty with
                   | Ref _ ->
                       type_check (ASTStatement stmt)
                         (Option.value_exn lhs.valuetype).data rhs
@@ -569,12 +568,10 @@ class type_analyze_visitor ctx =
             rhs
 
     method visit_variable var =
-      let rec calculate_array_rank (t : type_specifier) =
-        match t.data with
-        | Array sub_t -> 1 + calculate_array_rank sub_t
-        | _ -> 0
+      let rec calculate_array_rank (t : jaf_type) =
+        match t with Array sub_t -> 1 + calculate_array_rank sub_t | _ -> 0
       in
-      let rank = calculate_array_rank var.type_spec in
+      let rank = calculate_array_rank var.ty in
       let nr_dims = List.length var.array_dim in
       (* Only one array dimension may be specified in ain v11+ *)
       if nr_dims > 1 && Ain.version_gte ctx.ain (11, 0) then
@@ -593,7 +590,7 @@ class type_analyze_visitor ctx =
       (* Check initval matches declared type *)
       match var.initval with
       | Some expr -> (
-          match var.type_spec.data with
+          match var.ty with
           | Ref _ ->
               compile_error "Initial value for ref type not implemented"
                 (ASTVariable var)
@@ -612,17 +609,16 @@ class type_analyze_visitor ctx =
     method! visit_fundecl f =
       super#visit_fundecl f;
       if String.equal f.name "main" then
-        match (f.return, f.params) with
-        | { data = Int }, [] ->
-            Ain.set_main_function ctx.ain (Option.value_exn f.index)
+        match (f.return_ty, f.params) with
+        | Int, [] -> Ain.set_main_function ctx.ain (Option.value_exn f.index)
         | _ ->
             compile_error "Invalid declaration of 'main' function"
               (ASTDeclaration (Function f))
       else if String.equal f.name "message" then
-        match f.return with
-        | { data = Void } -> (
-            match List.map f.params ~f:(fun v -> v.type_spec) with
-            | [ { data = Int }; { data = Int }; { data = String } ] ->
+        match f.return_ty with
+        | Void -> (
+            match List.map f.params ~f:(fun v -> v.ty) with
+            | [ Int; Int; String ] ->
                 Ain.set_message_function ctx.ain (Option.value_exn f.index)
             | _ ->
                 compile_error "Invalid declaration of 'message' function"
