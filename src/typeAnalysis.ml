@@ -109,6 +109,29 @@ let builtin_of_string (t : Jaf.jaf_type) name =
   | Delegate _ -> Bytecode.delegate_builtin_of_string name
   | _ -> None
 
+let insert_cast t (e : expression) =
+  e.node <- Cast (t, clone_expr e);
+  e.ty <- t
+
+let type_coerce_numerics parent a b =
+  type_check_numeric parent a;
+  type_check_numeric parent b;
+  let coerce t e =
+    insert_cast t e;
+    t
+  in
+  match (maybe_deref a.ty, maybe_deref b.ty) with
+  | Float, Float -> Float
+  | Float, _ -> coerce Float b
+  | _, Float -> coerce Float a
+  | LongInt, LongInt -> LongInt
+  | LongInt, _ -> coerce LongInt b
+  | _, LongInt -> coerce LongInt a
+  | Int, _ -> Int
+  | _, Int -> Int
+  | Bool, Bool -> Bool
+  | _ -> compiler_bug "coerce_numerics: non-numeric type" (Some parent)
+
 class type_analyze_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
@@ -155,6 +178,9 @@ class type_analyze_visitor ctx =
                 type_error (FuncType ("", ft_i)) (Some rhs) parent
           | _ -> type_error (Ref (TyFunction (-1))) (Some rhs) parent)
       | Delegate (_, dg_i) -> self#check_delegate_compatible parent dg_i rhs
+      | Int | LongInt | Bool | Float ->
+          type_check_numeric parent rhs;
+          insert_cast t rhs
       | _ -> type_check parent t rhs
 
     method! visit_expression expr =
@@ -162,6 +188,7 @@ class type_analyze_visitor ctx =
       (* convenience functions which always pass parent expression *)
       let check = type_check (ASTExpression expr) in
       let check_numeric = type_check_numeric (ASTExpression expr) in
+      let coerce_numerics = type_coerce_numerics (ASTExpression expr) in
       let check_struct = type_check_struct (ASTExpression expr) in
       let check_expr (a : expression) b = check (maybe_deref a.ty) b in
       (* check function call arguments *)
@@ -222,21 +249,13 @@ class type_analyze_visitor ctx =
           )
       | Binary (op, a, b) -> (
           match op with
-          | Plus ->
-              (match maybe_deref a.ty with
-              | String -> check String b
-              | _ ->
-                  check_numeric a;
-                  check_numeric b;
-                  (* TODO: allow coercion *)
-                  check_expr a b);
-              expr.ty <- a.ty
-          | Minus | Times | Divide ->
-              check_numeric a;
-              check_numeric b;
-              (* TODO: allow coercion *)
-              check_expr a b;
-              expr.ty <- a.ty
+          | Plus -> (
+              match maybe_deref a.ty with
+              | String ->
+                  check String b;
+                  expr.ty <- a.ty
+              | _ -> expr.ty <- coerce_numerics a b)
+          | Minus | Times | Divide -> expr.ty <- coerce_numerics a b
           | LogOr | LogAnd | BitOr | BitXor | BitAnd | LShift | RShift ->
               check Int a;
               check Int b;
@@ -254,11 +273,7 @@ class type_analyze_visitor ctx =
           | Equal | NEqual | LT | GT | LTE | GTE ->
               (match maybe_deref a.ty with
               | String -> check String b
-              | _ ->
-                  check_numeric a;
-                  check_numeric b;
-                  (* TODO: allow coercion *)
-                  check_expr a b);
+              | _ -> coerce_numerics a b |> ignore);
               expr.ty <- Int
           | RefEqual | RefNEqual ->
               (match (a.ty, b.ty) with
@@ -278,7 +293,7 @@ class type_analyze_visitor ctx =
           | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
               check_numeric lhs;
               check_numeric rhs;
-              (* TODO: allow coercion *)
+              insert_cast lhs_type rhs;
               check_expr lhs rhs
           | ( _,
               ( ModuloAssign | OrAssign | XorAssign | AndAssign | LShiftAssign

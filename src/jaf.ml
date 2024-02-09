@@ -136,6 +136,8 @@ and ast_expression =
   | This
   | Null
 
+let clone_expr (e : expression) = { e with loc = e.loc }
+
 type statement = {
   mutable node : ast_statement;
   mutable delete_vars : int list;
