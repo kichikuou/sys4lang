@@ -63,7 +63,7 @@ type assign_op =
   | LShiftAssign
   | RShiftAssign
 
-type type_specifier = { mutable data : data_type; is_ref : bool }
+type type_specifier = { mutable data : data_type }
 
 and data_type =
   | Untyped
@@ -75,6 +75,7 @@ and data_type =
   | String
   | Struct of string * int
   (*| Enum*)
+  | Ref of type_specifier
   | Array of type_specifier
   | Wrap of type_specifier
   | HLLParam
@@ -508,15 +509,14 @@ let rec data_type_to_string = function
   | Float -> "float"
   | String -> "string"
   | Struct (s, _) | FuncType (s, _) | Delegate (s, _) -> s
+  | Ref t -> "ref " ^ type_spec_to_string t
   | Array t -> "array<" ^ type_spec_to_string t ^ ">" (* TODO: rank *)
   | Wrap t -> "wrap<" ^ type_spec_to_string t ^ ">"
   | HLLParam -> "hll_param"
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
 
-and type_spec_to_string ts =
-  if ts.is_ref then "ref " ^ data_type_to_string ts.data
-  else data_type_to_string ts.data
+and type_spec_to_string ts = data_type_to_string ts.data
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
@@ -696,6 +696,7 @@ let rec jaf_to_ain_data_type data =
   match data with
   | Untyped -> failwith "tried to convert Untyped to ain data type"
   | Unresolved _ -> failwith "tried to convert Unresolved to ain data type"
+  | Ref _ -> failwith "tried to convert Ref to ain data type"
   | Void -> Ain.Type.Void
   | Int -> Ain.Type.Int
   | Bool -> Ain.Type.Bool
@@ -711,7 +712,9 @@ let rec jaf_to_ain_data_type data =
   | IMainSystem -> Ain.Type.IMainSystem
 
 and jaf_to_ain_type spec =
-  Ain.Type.make ~is_ref:spec.is_ref (jaf_to_ain_data_type spec.data)
+  match spec.data with
+  | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t.data)
+  | data -> Ain.Type.make ~is_ref:false (jaf_to_ain_data_type data)
 
 let jaf_to_ain_variables j_p =
   let rec convert_params (params : variable list) (result : Ain.Variable.t list)
@@ -723,7 +726,7 @@ let jaf_to_ain_variables j_p =
           Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec)
         in
         match x.type_spec with
-        | { data = Int | Bool | Float | FuncType (_, _); is_ref = true } ->
+        | { data = Ref { data = Int | Bool | Float | FuncType (_, _) } } ->
             let void =
               Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
             in

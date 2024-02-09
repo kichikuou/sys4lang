@@ -19,7 +19,7 @@
 open Jaf
 
 let qtype is_ref data =
-  { data; is_ref }
+  if is_ref then { data = Ref { data } } else { data }
 
 let expr loc ast =
   { valuetype=None; node=ast; loc }
@@ -52,7 +52,7 @@ let func loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)
   let plist =
     match params with
-    | [{ type_spec={data=Void; _}; _}] -> []
+    | [{ type_spec={data=Void}; _}] -> []
     | _ -> params
   in
   {
@@ -485,9 +485,9 @@ struct_declaration
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Method (func $sloc $1 $2 $3 $4)] }
   | IDENTIFIER LPAREN RPAREN block
-    { [Constructor (func $sloc {data=Void; is_ref=false} $1 [] $4)] }
+    { [Constructor (func $sloc {data=Void} $1 [] $4)] }
   | BITNOT IDENTIFIER LPAREN RPAREN block
-    { [Destructor (func $sloc {data=Void; is_ref=false} $2 [] $5)] }
+    { [Destructor (func $sloc {data=Void} $2 [] $5)] }
   ;
 
 access_specifier

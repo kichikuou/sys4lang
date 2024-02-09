@@ -107,7 +107,7 @@ class type_resolve_visitor ctx decl_only =
     method resolve_typespec ts node =
       match ts.data with
       | Unresolved t -> ts.data <- self#resolve_type t node
-      | Array t | Wrap t -> self#resolve_typespec t node
+      | Ref t | Array t | Wrap t -> self#resolve_typespec t node
       | _ -> ()
 
     method! visit_expression expr =

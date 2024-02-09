@@ -141,14 +141,14 @@ class variable_alloc_visitor ctx =
       let i = List.length vars in
       v.index <- Some i;
       match v.type_spec with
-      | { data = Int | Bool | Float | FuncType (_, _); is_ref = true } ->
+      | { data = Ref { data = Int | Bool | Float | FuncType (_, _) } } ->
           let void =
             {
               name = "<void>";
               location = v.location;
               array_dim = [];
               is_const = false;
-              type_spec = { data = Void; is_ref = false };
+              type_spec = { data = Void };
               initval = None;
               index = Some (i + 1);
             }
@@ -181,7 +181,7 @@ class variable_alloc_visitor ctx =
               location = expr.loc;
               array_dim = [];
               is_const = false;
-              type_spec = { data = t; is_ref = true };
+              type_spec = { data = Ref { data = t } };
               initval = None;
               index = Some (List.length vars);
             }
