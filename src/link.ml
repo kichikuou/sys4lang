@@ -107,7 +107,7 @@ let rec link_type reloc ain (v : Type.t) =
   | Enum _ | Enum2 _ -> failwith "enum linking not implemented"
   | Void | Int | Float | String | IMainSystem | Bool | LongInt | HLLFunc2
   | HLLParam | IFace _ | HLLFunc | Unknown98 | IFaceWrap _ | Function _
-  | Method _ ->
+  | Method _ | NullType ->
       v
 
 let link_variable_type reloc ain (v : Variable.t) =

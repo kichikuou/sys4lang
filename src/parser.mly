@@ -97,7 +97,7 @@ let member_func loc typespec_opt struct_name is_dtor name params body =
 %token VOID CHAR INT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
 %token IMAINSYSTEM
 /* keywords */
-%token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT THIS NEW
+%token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN ASSERT
 %token CONST REF OVERRIDE ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
 
@@ -125,6 +125,7 @@ hll
 primary_expression
   : IDENTIFIER { expr $sloc (Ident ($1, None)) }
   | THIS { expr $sloc This }
+  | NULL { expr $sloc Null }
   | constant { expr $sloc $1 }
   | string { expr $sloc $1 }
   | LPAREN expression RPAREN { {$2 with loc=$sloc} }

@@ -179,6 +179,7 @@ class const_eval_visitor ctx =
       | Call (_, _, _) -> ()
       | New (_, _, _) -> ()
       | This -> ()
+      | Null -> ()
 
     method! visit_toplevel decls =
       let eval_global g =

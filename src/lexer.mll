@@ -96,6 +96,7 @@ let () =
               "break",        BREAK;
               "return",       RETURN;
               "assert",       ASSERT;
+              "NULL",         NULL;
               "this",         THIS;
               "new",          NEW;
               "const",        CONST;

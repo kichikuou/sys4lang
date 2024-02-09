@@ -286,7 +286,7 @@ class jaf_compiler ain =
           self#write_instruction0 DG_COPY
       | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
       | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-      | IFaceWrap _ | Function _ | Method _ ->
+      | IFaceWrap _ | Function _ | Method _ | NullType ->
           compiler_bug "dereference not supported for type" None
 
     method compile_local_ref i =
@@ -403,7 +403,7 @@ class jaf_compiler ain =
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ | IMainSystem | FuncType _ | HLLFunc2 | HLLParam | Array _
       | Wrap _ | Option _ | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc
-      | Unknown98 | IFaceWrap _ | Function _ | Method _ ->
+      | Unknown98 | IFaceWrap _ | Function _ | Method _ | NullType ->
           compiler_bug "compile_pop: unsupported value type" None
 
     method compile_argument (expr : expression) (t : Ain.Type.t) =
@@ -846,6 +846,7 @@ class jaf_compiler ain =
           self#compile_lvalue expr;
           self#write_instruction0 A_REF
       | This -> self#write_instruction0 PUSHSTRUCTPAGE
+      | Null -> compiler_bug "not implemented" (Some (ASTExpression expr))
 
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
       state of the stack is unchanged after executing a statement. *)
@@ -1142,7 +1143,7 @@ class jaf_compiler ain =
                 | None -> self#write_instruction0 DG_CLEAR)
             | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
             | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-            | IFaceWrap _ | Function _ | Method _ ->
+            | IFaceWrap _ | Function _ | Method _ | NullType ->
                 compile_error "Unimplemented variable type" (ASTVariable decl))
 
     (** Emit the code for a block of statements. *)
