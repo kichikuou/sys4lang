@@ -53,7 +53,7 @@ let compile_hll ctx hll_file =
   let hll = In_channel.with_file hll_file ~f:(fun file -> do_parse file) in
   Declarations.define_library ctx hll (get_lib_name hll_file)
 
-let compile_sources sources imports major minor decl_only =
+let compile_sources sources major minor decl_only =
   (* open/create the output .ain file *)
   (* XXX: if the first file is a .ain file, open it instead of linking against a blank file *)
   let ain, sources =
@@ -63,24 +63,8 @@ let compile_sources sources imports major minor decl_only =
         (Ain.load file, rest)
     | _ -> (Ain.create major minor, sources)
   in
-  (* open/link the import .ain files *)
-  let import_ain =
-    let load_import_ain base file =
-      let p = Ain.load file in
-      Link.link base p true
-    in
-    match imports with
-    | [] -> Ain.create (Ain.version ain) (Ain.minor_version ain)
-    | file :: rest ->
-        let base = Ain.load file in
-        List.iter rest ~f:(load_import_ain base);
-        base
-  in
-  (* check versions *)
-  if not (Ain.version ain = Ain.version import_ain) then
-    failwith "Import .ain file version doesn't match output version";
   (* compile sources *)
-  let ctx = { ain; import_ain; const_vars = [] } in
+  let ctx = { ain; const_vars = [] } in
   let compile_file f =
     if Filename.check_suffix f ".jaf" || String.equal f "-" then
       compile_jaf ctx f decl_only
@@ -102,16 +86,15 @@ let format_location (s, e) =
 
 let format_node_location node = format_location (ast_node_pos node)
 
-let do_compile sources imports output major minor decl_only compile_unit
-    match_decls =
+let do_compile sources output major minor decl_only compile_unit match_decls =
   try
     (* create output .ain file by compiling/linking inputs *)
-    let ain = compile_sources sources imports major minor decl_only in
+    let ain = compile_sources sources major minor decl_only in
     (* -m option: check if declarations match then return status code *)
     (match match_decls with
     | [] -> ()
     | _ ->
-        let decl_ain = compile_sources match_decls imports major minor true in
+        let decl_ain = compile_sources match_decls major minor true in
         let matched = Link.declarations_match decl_ain ain in
         exit (if matched then 0 else 1));
     (* -c/-d option: skip final check for undefined functions *)
@@ -200,10 +183,6 @@ let cmd_compile_jaf =
           ~doc:"version The output .ain file minor version (default: 0)"
       and decl_only =
         flag "-declarations-only" no_arg ~doc:" Output declarations only"
-      and imports =
-        flag "-import-declarations"
-          (listed Filename_unix.arg_type)
-          ~doc:"ain-file Import declarations from the given .ain file"
       and compile_unit =
         flag "-compile-unit" no_arg
           ~doc:" Compile as a unit (allow undefined functions)"
@@ -219,7 +198,7 @@ let cmd_compile_jaf =
           let ain = Ain.load (Option.value_exn test) in
           Ain.write_file ain output
         else
-          do_compile sources imports output major minor decl_only compile_unit
+          do_compile sources output major minor decl_only compile_unit
             match_decls)
 
 let () = Command_unix.run ~version:"0.1" cmd_compile_jaf

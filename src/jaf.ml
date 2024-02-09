@@ -240,11 +240,7 @@ let ast_node_pos = function
       | StructDef s -> s.loc
       | Enum e -> e.loc)
 
-type context = {
-  ain : Ain.t;
-  import_ain : Ain.t;
-  mutable const_vars : variable list;
-}
+type context = { ain : Ain.t; mutable const_vars : variable list }
 
 type resolved_name =
   | ResolvedLocal of variable
@@ -338,29 +334,7 @@ class ivisitor ctx =
                         String.equal v.name name)
                   with
                   | Some (_, v) -> ResolvedConstant v
-                  | None -> (
-                      match ain_resolve ctx.ain with
-                      | UnresolvedName -> (
-                          (* Try to import declaration from import_ain *)
-                          match ain_resolve ctx.import_ain with
-                          | ResolvedGlobal g ->
-                              let no = Ain.write_new_global ctx.ain g in
-                              ResolvedGlobal
-                                (Ain.get_global_by_index ctx.ain no)
-                          | ResolvedFunction i ->
-                              let f =
-                                Ain.get_function_by_index ctx.import_ain i
-                              in
-                              let f = Ain.Function.set_undefined f in
-                              ResolvedFunction
-                                (Ain.write_new_function ctx.ain f)
-                          | ResolvedLibrary _ ->
-                              failwith "importing of libraries not implemented"
-                          | ResolvedLocal _ | ResolvedConstant _
-                          | ResolvedSystem | ResolvedBuiltin _ ->
-                              failwith "ain_resolve returned invalid result"
-                          | UnresolvedName -> UnresolvedName)
-                      | result -> result)))
+                  | None -> ain_resolve ctx.ain))
       end
 
     method visit_expression (e : expression) =
@@ -529,9 +503,7 @@ let assign_op_to_string op =
   | LShiftAssign -> "<<="
   | RShiftAssign -> ">>="
 
-let type_qualifier_to_string = function
-  | Const -> "const"
-  | Ref -> "ref"
+let type_qualifier_to_string = function Const -> "const" | Ref -> "ref"
 
 let rec data_type_to_string = function
   | Untyped -> "untyped"

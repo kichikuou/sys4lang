@@ -99,29 +99,12 @@ class type_resolve_visitor ctx decl_only =
       match Ain.get_struct_index ctx.ain name with
       | Some i -> Struct (name, i)
       | None -> (
-          match Ain.get_struct ctx.import_ain name with
-          | Some s ->
-              (* import struct declaration *)
-              Struct (name, Ain.write_new_struct ctx.ain s)
+          match Ain.get_functype_index ctx.ain name with
+          | Some i -> FuncType (name, i)
           | None -> (
-              match Ain.get_functype_index ctx.ain name with
-              | Some i -> FuncType (name, i)
-              | None -> (
-                  match Ain.get_functype ctx.import_ain name with
-                  | Some ft ->
-                      (* import functype declaration *)
-                      FuncType (name, Ain.write_new_functype ctx.ain ft)
-                  | None -> (
-                      match Ain.get_delegate_index ctx.ain name with
-                      | Some i -> Delegate (name, i)
-                      | None -> (
-                          match Ain.get_delegate ctx.import_ain name with
-                          | Some ft ->
-                              (* import delegate declaration *)
-                              Delegate (name, Ain.write_new_delegate ctx.ain ft)
-                          | None ->
-                              compile_error ("Undefined type: " ^ name) node))))
-          )
+              match Ain.get_delegate_index ctx.ain name with
+              | Some i -> Delegate (name, i)
+              | None -> compile_error ("Undefined type: " ^ name) node))
 
     method resolve_typespec ts node =
       match ts.data with
