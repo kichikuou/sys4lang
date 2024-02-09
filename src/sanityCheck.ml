@@ -66,12 +66,10 @@ class sanity_check_visitor ctx =
     method! visit_declaration d =
       super#visit_declaration d;
       match d with
-      | Global g -> (
-          match (g.index, g.type_spec.qualifier) with
-          | Some _, _ | None, Some Const -> ()
-          | None, _ ->
-              compiler_bug "global variable index not set"
-                (Some (ASTDeclaration (Global g))))
+      | Global g ->
+          if Option.is_none g.index && not g.is_const then
+            compiler_bug "global variable index not set"
+              (Some (ASTDeclaration (Global g)))
       | _ -> ()
   end
 

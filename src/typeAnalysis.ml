@@ -175,10 +175,10 @@ class type_analyze_visitor ctx =
           match environment#resolve name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, Some (LocalVariable (-1)));
-              set_valuetype { data = v.type_spec.data; qualifier = None }
+              set_valuetype { data = v.type_spec.data; is_ref = false }
           | ResolvedConstant v ->
               expr.node <- Ident (name, Some GlobalConstant);
-              set_valuetype { data = v.type_spec.data; qualifier = None }
+              set_valuetype { data = v.type_spec.data; is_ref = false }
           | ResolvedGlobal g ->
               expr.node <- Ident (name, Some (GlobalVariable g.index));
               expr.valuetype <- Some g.value_type
@@ -295,7 +295,7 @@ class type_analyze_visitor ctx =
           if not (type_castable t (Option.value_exn e.valuetype).data) then
             data_type_error (jaf_to_ain_data_type t) (Some e)
               (ASTExpression expr);
-          set_valuetype { data = t; qualifier = None }
+          set_valuetype { data = t; is_ref = false }
       | Subscript (obj, i) -> (
           check Int i;
           match (Option.value_exn obj.valuetype).data with
@@ -303,7 +303,7 @@ class type_analyze_visitor ctx =
           | String -> expr.valuetype <- Some (Ain.Type.make Int)
           | _ ->
               (* FIXME: Expected type here is array<?>|string *)
-              let array_type = { data = Void; qualifier = None } in
+              let array_type = { data = Void; is_ref = false } in
               let expected = Array array_type in
               data_type_error
                 (jaf_to_ain_data_type expected)
@@ -472,7 +472,7 @@ class type_analyze_visitor ctx =
               | no ->
                   let ctor = Ain.get_function_by_index ctx.ain no in
                   check_call ctor args);
-              set_valuetype { data = t; qualifier = None }
+              set_valuetype { data = t; is_ref = false }
           | _ -> data_type_error (Struct (-1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with
@@ -546,14 +546,13 @@ class type_analyze_visitor ctx =
           match lhs.node with
           | Ident (name, _) -> (
               match environment#get_local name with
-              | Some v -> (
-                  match v.type_spec.qualifier with
-                  | Some Ref ->
-                      type_check (ASTStatement stmt)
-                        (Option.value_exn lhs.valuetype).data rhs
-                  | _ ->
-                      ref_type_error (Option.value_exn rhs.valuetype).data
-                        (Some lhs) (ASTStatement stmt))
+              | Some v ->
+                  if v.type_spec.is_ref then
+                    type_check (ASTStatement stmt)
+                      (Option.value_exn lhs.valuetype).data rhs
+                  else
+                    ref_type_error (Option.value_exn rhs.valuetype).data
+                      (Some lhs) (ASTStatement stmt)
               | None -> undefined_variable_error name (ASTStatement stmt))
           | _ ->
               (* FIXME? this isn't really a _type_ error *)
@@ -590,15 +589,14 @@ class type_analyze_visitor ctx =
       List.iter var.array_dim ~f:(fun e -> type_check (ASTVariable var) Int e);
       (* Check initval matches declared type *)
       match var.initval with
-      | Some expr -> (
-          match var.type_spec.qualifier with
-          | Some Ref ->
-              compile_error "Initial value for ref type not implemented"
-                (ASTVariable var)
-          | _ ->
-              self#check_assign (ASTVariable var)
-                (jaf_to_ain_data_type var.type_spec.data)
-                expr)
+      | Some expr ->
+          if var.type_spec.is_ref then
+            compile_error "Initial value for ref type not implemented"
+              (ASTVariable var)
+          else
+            self#check_assign (ASTVariable var)
+              (jaf_to_ain_data_type var.type_spec.data)
+              expr
       | None -> ()
 
     method! visit_local_variable var =
@@ -611,26 +609,21 @@ class type_analyze_visitor ctx =
 
     method! visit_fundecl f =
       super#visit_fundecl f;
-      (match f.return.qualifier with
-      | Some Const ->
-          compile_error "Function cannot be declared const"
-            (ASTDeclaration (Function f))
-      | _ -> ());
       if String.equal f.name "main" then
         match (f.return, f.params) with
-        | { data = Int; qualifier = None }, [] ->
+        | { data = Int; is_ref = false }, [] ->
             Ain.set_main_function ctx.ain (Option.value_exn f.index)
         | _ ->
             compile_error "Invalid declaration of 'main' function"
               (ASTDeclaration (Function f))
       else if String.equal f.name "message" then
         match f.return with
-        | { data = Void; qualifier = None } -> (
+        | { data = Void; is_ref = false } -> (
             match List.map f.params ~f:(fun v -> v.type_spec) with
             | [
-             { data = Int; qualifier = None };
-             { data = Int; qualifier = None };
-             { data = String; qualifier = None };
+             { data = Int; is_ref = false };
+             { data = Int; is_ref = false };
+             { data = String; is_ref = false };
             ] ->
                 Ain.set_message_function ctx.ain (Option.value_exn f.index)
             | _ ->

@@ -63,12 +63,7 @@ type assign_op =
   | LShiftAssign
   | RShiftAssign
 
-type type_qualifier = Const | Ref
-
-type type_specifier = {
-  mutable data : data_type;
-  qualifier : type_qualifier option;
-}
+type type_specifier = { mutable data : data_type; is_ref : bool }
 
 and data_type =
   | Untyped
@@ -169,6 +164,7 @@ and variable = {
   name : string;
   location : Lexing.position * Lexing.position;
   array_dim : expression list;
+  is_const : bool;
   type_spec : type_specifier;
   initval : expression option;
   mutable index : int option;
@@ -503,8 +499,6 @@ let assign_op_to_string op =
   | LShiftAssign -> "<<="
   | RShiftAssign -> ">>="
 
-let type_qualifier_to_string = function Const -> "const" | Ref -> "ref"
-
 let rec data_type_to_string = function
   | Untyped -> "untyped"
   | Unresolved s -> "Unresolved<" ^ s ^ ">"
@@ -521,9 +515,8 @@ let rec data_type_to_string = function
   | IMainSystem -> "IMainSystem"
 
 and type_spec_to_string ts =
-  match ts.qualifier with
-  | Some q -> type_qualifier_to_string q ^ " " ^ data_type_to_string ts.data
-  | None -> data_type_to_string ts.data
+  if ts.is_ref then "ref " ^ data_type_to_string ts.data
+  else data_type_to_string ts.data
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
@@ -718,8 +711,7 @@ let rec jaf_to_ain_data_type data =
   | IMainSystem -> Ain.Type.IMainSystem
 
 and jaf_to_ain_type spec =
-  let is_ref = match spec.qualifier with Some Ref -> true | _ -> false in
-  Ain.Type.make ~is_ref (jaf_to_ain_data_type spec.data)
+  Ain.Type.make ~is_ref:spec.is_ref (jaf_to_ain_data_type spec.data)
 
 let jaf_to_ain_variables j_p =
   let rec convert_params (params : variable list) (result : Ain.Variable.t list)
@@ -731,8 +723,7 @@ let jaf_to_ain_variables j_p =
           Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec)
         in
         match x.type_spec with
-        | { data = Int | Bool | Float | FuncType (_, _); qualifier = Some Ref }
-          ->
+        | { data = Int | Bool | Float | FuncType (_, _); is_ref = true } ->
             let void =
               Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
             in

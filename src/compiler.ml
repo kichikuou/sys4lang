@@ -1023,140 +1023,138 @@ class jaf_compiler ain =
       the initval expression is computed and assigned to the variable.
       Otherwise a default value is assigned. *)
     method compile_variable_declaration (decl : variable) =
-      match decl.type_spec.qualifier with
-      | Some Const -> ()
-      | _ -> (
-          self#scope_add_var
-            (List.nth_exn (Option.value_exn current_function).vars
-               (Option.value_exn decl.index));
-          let v = self#get_local (Option.value_exn decl.index) in
-          if v.value_type.is_ref then
-            match v.value_type.data with
-            | Int | Bool | Float | LongInt | FuncType _ ->
-                self#compile_lock_peek;
-                self#compile_local_ref v.index;
-                self#compile_delete_ref;
-                self#write_instruction1 PUSH (-1);
-                self#write_instruction1 PUSH 0;
-                self#write_instruction0 R_ASSIGN;
-                self#write_instruction0 POP;
-                self#write_instruction0 POP;
-                self#compile_unlock_peek
-            | String | Struct _ ->
-                self#compile_lock_peek;
-                self#compile_local_delete v.index;
-                self#compile_unlock_peek
-            | _ ->
-                compile_error "This type of reference variable not implemented"
-                  (ASTVariable decl)
-          else
-            match v.value_type.data with
-            | Int | Bool | FuncType _ ->
-                self#compile_local_ref v.index;
+      if decl.is_const then ()
+      else (
+        self#scope_add_var
+          (List.nth_exn (Option.value_exn current_function).vars
+             (Option.value_exn decl.index));
+        let v = self#get_local (Option.value_exn decl.index) in
+        if v.value_type.is_ref then
+          match v.value_type.data with
+          | Int | Bool | Float | LongInt | FuncType _ ->
+              self#compile_lock_peek;
+              self#compile_local_ref v.index;
+              self#compile_delete_ref;
+              self#write_instruction1 PUSH (-1);
+              self#write_instruction1 PUSH 0;
+              self#write_instruction0 R_ASSIGN;
+              self#write_instruction0 POP;
+              self#write_instruction0 POP;
+              self#compile_unlock_peek
+          | String | Struct _ ->
+              self#compile_lock_peek;
+              self#compile_local_delete v.index;
+              self#compile_unlock_peek
+          | _ ->
+              compile_error "This type of reference variable not implemented"
+                (ASTVariable decl)
+        else
+          match v.value_type.data with
+          | Int | Bool | FuncType _ ->
+              self#compile_local_ref v.index;
+              (match decl.initval with
+              | Some e -> self#compile_expression e
+              | None -> self#write_instruction1 PUSH 0);
+              self#write_instruction0 ASSIGN;
+              self#write_instruction0 POP
+          | LongInt ->
+              self#compile_local_ref v.index;
+              (match decl.initval with
+              | Some e -> self#compile_expression e
+              | None -> self#write_instruction1 PUSH 0);
+              self#write_instruction0 LI_ASSIGN;
+              self#write_instruction0 POP
+          | Float ->
+              self#compile_local_ref v.index;
+              (match decl.initval with
+              | Some e -> self#compile_expression e
+              | None -> self#write_instruction1 F_PUSH 0);
+              self#write_instruction0 F_ASSIGN;
+              self#write_instruction0 POP
+          | String ->
+              self#compile_local_ref v.index;
+              if Ain.version_gte ain (14, 0) then (
+                self#write_instruction1 X_DUP 2;
+                self#write_instruction1 X_REF 1;
+                self#write_instruction0 DELETE;
                 (match decl.initval with
                 | Some e -> self#compile_expression e
-                | None -> self#write_instruction1 PUSH 0);
-                self#write_instruction0 ASSIGN;
-                self#write_instruction0 POP
-            | LongInt ->
-                self#compile_local_ref v.index;
+                | None -> self#write_instruction1 S_PUSH 0);
+                self#write_instruction1 X_ASSIGN 1;
+                self#write_instruction0 POP)
+              else (
+                self#write_instruction0 REF;
                 (match decl.initval with
                 | Some e -> self#compile_expression e
-                | None -> self#write_instruction1 PUSH 0);
-                self#write_instruction0 LI_ASSIGN;
-                self#write_instruction0 POP
-            | Float ->
-                self#compile_local_ref v.index;
-                (match decl.initval with
-                | Some e -> self#compile_expression e
-                | None -> self#write_instruction1 F_PUSH 0);
-                self#write_instruction0 F_ASSIGN;
-                self#write_instruction0 POP
-            | String ->
-                self#compile_local_ref v.index;
-                if Ain.version_gte ain (14, 0) then (
-                  self#write_instruction1 X_DUP 2;
-                  self#write_instruction1 X_REF 1;
-                  self#write_instruction0 DELETE;
-                  (match decl.initval with
-                  | Some e -> self#compile_expression e
-                  | None -> self#write_instruction1 S_PUSH 0);
-                  self#write_instruction1 X_ASSIGN 1;
-                  self#write_instruction0 POP)
-                else (
-                  self#write_instruction0 REF;
-                  (match decl.initval with
-                  | Some e -> self#compile_expression e
-                  | None -> self#write_instruction1 S_PUSH 0);
-                  self#write_instruction0 S_ASSIGN;
-                  if Ain.version_gte ain (11, 0) then
-                    self#write_instruction0 DELETE
-                  else self#write_instruction0 S_POP)
-            | Struct no ->
-                (* FIXME: use verbose versions *)
-                self#write_instruction1 SH_LOCALDELETE v.index;
-                self#write_instruction2 SH_LOCALCREATE v.index no
-            | Array t ->
-                let has_dims = List.length decl.array_dim > 0 in
-                self#compile_local_ref v.index;
-                if Ain.version_gte ain (14, 0) then (
-                  self#write_instruction1 X_DUP 2;
-                  self#write_instruction1 X_REF 1;
-                  self#write_instruction0 DELETE;
-                  match decl.initval with
-                  | Some e ->
-                      self#compile_expression e;
-                      self#write_instruction1 X_ASSIGN 1;
-                      self#write_instruction0 POP
-                  | None ->
-                      self#write_instruction1 PUSH 0;
-                      self#write_instruction1 X_A_INIT 0;
-                      self#write_instruction0 POP;
-                      if has_dims then (
-                        self#compile_local_ref v.index;
-                        self#write_instruction0 REF;
-                        self#compile_expression (List.hd_exn decl.array_dim);
-                        self#compile_CALLHLL "Array" "Alloc" 1
-                          (ASTVariable decl)))
-                else if Ain.version_gte ain (11, 0) then (
-                  self#write_instruction0 REF;
-                  match decl.initval with
-                  | Some e ->
-                      self#compile_expression e;
-                      self#write_instruction0 X_SET;
-                      self#write_instruction0 DELETE
-                  | None ->
-                      let type_no =
-                        Ain.Type.int_of_data_type (Ain.version ain) t
-                      in
-                      if has_dims then (
-                        self#write_instruction0 DUP;
-                        self#compile_expression (List.hd_exn decl.array_dim);
-                        self#write_instruction1 PUSH (-1);
-                        self#write_instruction1 PUSH (-1);
-                        self#write_instruction1 PUSH (-1);
-                        self#compile_CALLHLL "Array" "Alloc" type_no
-                          (ASTVariable decl))
-                      else
-                        self#compile_CALLHLL "Array" "Free" type_no
-                          (ASTVariable decl))
-                else if has_dims then (
-                  List.iter decl.array_dim ~f:self#compile_expression;
-                  self#write_instruction1 PUSH (List.length decl.array_dim);
-                  self#write_instruction0 A_ALLOC)
-                else self#write_instruction0 A_FREE
-            | Delegate _ -> (
-                self#compile_local_ref v.index;
+                | None -> self#write_instruction1 S_PUSH 0);
+                self#write_instruction0 S_ASSIGN;
+                if Ain.version_gte ain (11, 0) then
+                  self#write_instruction0 DELETE
+                else self#write_instruction0 S_POP)
+          | Struct no ->
+              (* FIXME: use verbose versions *)
+              self#write_instruction1 SH_LOCALDELETE v.index;
+              self#write_instruction2 SH_LOCALCREATE v.index no
+          | Array t ->
+              let has_dims = List.length decl.array_dim > 0 in
+              self#compile_local_ref v.index;
+              if Ain.version_gte ain (14, 0) then (
+                self#write_instruction1 X_DUP 2;
+                self#write_instruction1 X_REF 1;
+                self#write_instruction0 DELETE;
+                match decl.initval with
+                | Some e ->
+                    self#compile_expression e;
+                    self#write_instruction1 X_ASSIGN 1;
+                    self#write_instruction0 POP
+                | None ->
+                    self#write_instruction1 PUSH 0;
+                    self#write_instruction1 X_A_INIT 0;
+                    self#write_instruction0 POP;
+                    if has_dims then (
+                      self#compile_local_ref v.index;
+                      self#write_instruction0 REF;
+                      self#compile_expression (List.hd_exn decl.array_dim);
+                      self#compile_CALLHLL "Array" "Alloc" 1 (ASTVariable decl)))
+              else if Ain.version_gte ain (11, 0) then (
                 self#write_instruction0 REF;
                 match decl.initval with
                 | Some e ->
                     self#compile_expression e;
-                    self#write_instruction0 DG_SET
-                | None -> self#write_instruction0 DG_CLEAR)
-            | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
-            | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-            | IFaceWrap _ | Function _ | Method _ | NullType ->
-                compile_error "Unimplemented variable type" (ASTVariable decl))
+                    self#write_instruction0 X_SET;
+                    self#write_instruction0 DELETE
+                | None ->
+                    let type_no =
+                      Ain.Type.int_of_data_type (Ain.version ain) t
+                    in
+                    if has_dims then (
+                      self#write_instruction0 DUP;
+                      self#compile_expression (List.hd_exn decl.array_dim);
+                      self#write_instruction1 PUSH (-1);
+                      self#write_instruction1 PUSH (-1);
+                      self#write_instruction1 PUSH (-1);
+                      self#compile_CALLHLL "Array" "Alloc" type_no
+                        (ASTVariable decl))
+                    else
+                      self#compile_CALLHLL "Array" "Free" type_no
+                        (ASTVariable decl))
+              else if has_dims then (
+                List.iter decl.array_dim ~f:self#compile_expression;
+                self#write_instruction1 PUSH (List.length decl.array_dim);
+                self#write_instruction0 A_ALLOC)
+              else self#write_instruction0 A_FREE
+          | Delegate _ -> (
+              self#compile_local_ref v.index;
+              self#write_instruction0 REF;
+              match decl.initval with
+              | Some e ->
+                  self#compile_expression e;
+                  self#write_instruction0 DG_SET
+              | None -> self#write_instruction0 DG_CLEAR)
+          | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
+          | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
+          | IFaceWrap _ | Function _ | Method _ | NullType ->
+              compile_error "Unimplemented variable type" (ASTVariable decl))
 
     (** Emit the code for a block of statements. *)
     method compile_block (stmts : statement list) =
@@ -1211,14 +1209,13 @@ class jaf_compiler ain =
       let compile_decl = function
         | Jaf.Function f -> self#compile_function f
         | Global g -> (
-            match g.type_spec.qualifier with
-            | Some Const -> ()
-            | _ -> (
-                match g.initval with
-                | Some _ ->
-                    compile_error "Global initvals not implemented"
-                      (ASTDeclaration (Global g))
-                | None -> ()))
+            if g.is_const then ()
+            else
+              match g.initval with
+              | Some _ ->
+                  compile_error "Global initvals not implemented"
+                    (ASTDeclaration (Global g))
+              | None -> ())
         | FuncTypeDef _ | DelegateDef _ -> ()
         | StructDef d ->
             let compile_struct_decl (d : struct_declaration) =

@@ -89,12 +89,10 @@ class const_eval_visitor ctx =
       | Ident (name, _) -> (
           match environment#resolve name with
           | ResolvedLocal v | ResolvedConstant v -> (
-              match v.type_spec.qualifier with
-              | Some Const -> (
-                  match v.initval with
-                  | Some e -> const_replace expr e.node
-                  | None -> const_error v)
-              | _ -> ())
+              if v.is_const then
+                match v.initval with
+                | Some e -> const_replace expr e.node
+                | None -> const_error v)
           | _ -> ())
       | Unary (op, e) -> (
           let const_not i = if i = 0 then 1 else 0 in
@@ -197,18 +195,16 @@ class const_eval_visitor ctx =
       self#eval_expression expr
 
     method check_vardecl v =
-      match v.type_spec.qualifier with
-      | Some Const -> (
-          match v.initval with
-          | Some e -> (
-              match e.node with
-              | ConstInt _ -> ()
-              | ConstFloat _ -> ()
-              | ConstChar _ -> ()
-              | ConstString _ -> ()
-              | _ -> const_error v)
-          | None -> const_error v)
-      | _ -> ()
+      if v.is_const then
+        match v.initval with
+        | Some e -> (
+            match e.node with
+            | ConstInt _ -> ()
+            | ConstFloat _ -> ()
+            | ConstChar _ -> ()
+            | ConstString _ -> ()
+            | _ -> const_error v)
+        | None -> const_error v
 
     method! visit_local_variable v =
       super#visit_local_variable v;

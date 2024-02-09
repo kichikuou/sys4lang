@@ -18,8 +18,8 @@
 
 open Jaf
 
-let qtype qualifier data =
-  { data=data; qualifier=qualifier }
+let qtype is_ref data =
+  { data; is_ref }
 
 let expr loc ast =
   { valuetype=None; node=ast; loc }
@@ -34,18 +34,19 @@ type varinit = {
   initval: expression option;
 }
 
-let decl typespec vi =
+let decl is_const type_spec vi =
   {
     name = vi.name;
     location = vi.loc;
     array_dim = vi.dims;
-    type_spec = typespec;
+    is_const;
+    type_spec;
     initval = vi.initval;
     index = None;
   }
 
-let decls typespec var_list =
-  List.map (decl typespec) var_list
+let decls is_const typespec var_list =
+  List.map (decl is_const typespec) var_list
 
 let func loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)
@@ -68,7 +69,7 @@ let func loc typespec name params body =
 
 let member_func loc typespec_opt struct_name is_dtor name params body =
   let name = if is_dtor then "~" ^ name else name in
-  let fundecl = func loc (Option.value typespec_opt ~default:(qtype None Void)) name params body in
+  let fundecl = func loc (Option.value typespec_opt ~default:(qtype false Void)) name params body in
   { fundecl with struct_name=Some struct_name }
 
 %}
@@ -287,16 +288,11 @@ atomic_type_specifier
   | IMAINSYSTEM  { IMainSystem }
   ;
 
-type_qualifier
-  : CONST { Const }
-  | REF { Ref }
-  ;
-
 type_specifier
   : atomic_type_specifier { $1 }
   (* FIXME: this disallows arrays/wraps of ref-qualified types *)
-  | ARRAY AT type_specifier { Array (qtype None $3) }
-  | WRAP AT type_specifier { Wrap (qtype None $3) }
+  | ARRAY AT type_specifier { Array (qtype false $3) }
+  | WRAP AT type_specifier { Wrap (qtype false $3) }
   | IDENTIFIER { Unresolved ($1) }
 
 statement
@@ -394,13 +390,15 @@ assert_statement
       Expression (expr $sloc (Call (expr $loc($1) (Ident ("assert", None)), args, None))) }
 
 declaration
-  : declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { decls $1 $2 }
+  : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
+    { decls true $2 $3 }
+  | declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
+    { decls false $1 $2 }
   ;
 
 declaration_specifiers
-  : type_qualifier type_specifier { qtype (Some $1) $2 }
-  | type_specifier { qtype None $1 }
+  : REF type_specifier { qtype true $2 }
+  | type_specifier { qtype false $1 }
   ;
 
 init_declarator
@@ -427,7 +425,7 @@ external_declaration
   | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
     { [Function (member_func $sloc $1 $2 $4 $5 $6 $7)] }
   | HASH IDENTIFIER parameter_list block
-    { [Function { (func $sloc (qtype None Void) $2 $3 $4) with is_label=true }] }
+    { [Function { (func $sloc (qtype false Void) $2 $3 $4) with is_label=true }] }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { [FuncTypeDef (func $sloc $2 $3 $4 [])] }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
@@ -462,7 +460,7 @@ enumerator
   ;
 
 parameter_declaration
-  : declaration_specifiers declarator { decl $1 { $2 with loc=$sloc } }
+  : declaration_specifiers declarator { decl false $1 { $2 with loc=$sloc } }
   ;
 
 parameter_list
@@ -471,7 +469,7 @@ parameter_list
   ;
 
 functype_parameter_declaration
-  : declaration_specifiers { decl $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
+  : declaration_specifiers { decl false $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
   | parameter_declaration { $1 }
   ;
 
@@ -483,13 +481,13 @@ struct_declaration
   : access_specifier COLON
     { [AccessSpecifier $1] }
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
-    { decls $1 $2 |> List.map (fun d -> MemberDecl d) }
+    { decls false $1 $2 |> List.map (fun d -> MemberDecl d) }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Method (func $sloc $1 $2 $3 $4)] }
   | IDENTIFIER LPAREN RPAREN block
-    { [Constructor (func $sloc {data=Void; qualifier=None} $1 [] $4)] }
+    { [Constructor (func $sloc {data=Void; is_ref=false} $1 [] $4)] }
   | BITNOT IDENTIFIER LPAREN RPAREN block
-    { [Destructor (func $sloc {data=Void; qualifier=None} $2 [] $5)] }
+    { [Destructor (func $sloc {data=Void; is_ref=false} $2 [] $5)] }
   ;
 
 access_specifier

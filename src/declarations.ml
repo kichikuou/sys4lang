@@ -37,14 +37,12 @@ class type_declare_visitor ctx =
 
     method! visit_declaration decl =
       match decl with
-      | Global g -> (
-          match g.type_spec.qualifier with
-          | Some Const -> ()
-          | _ ->
-              if Option.is_some (Ain.get_global ctx.ain g.name) then
-                compile_error "duplicate global variable definition"
-                  (ASTDeclaration decl);
-              g.index <- Some (Ain.add_global ctx.ain g.name))
+      | Global g ->
+          if not g.is_const then (
+            if Option.is_some (Ain.get_global ctx.ain g.name) then
+              compile_error "duplicate global variable definition"
+                (ASTDeclaration decl);
+            g.index <- Some (Ain.add_global ctx.ain g.name))
       | Function f -> self#declare_function f
       | FuncTypeDef f ->
           if Option.is_some (Ain.get_functype ctx.ain f.name) then
@@ -165,11 +163,9 @@ class type_define_visitor ctx =
 
     method! visit_declaration decl =
       match decl with
-      | Global g -> (
-          match g.type_spec.qualifier with
-          | Some Const -> ctx.const_vars <- g :: ctx.const_vars
-          | _ ->
-              Ain.set_global_type ctx.ain g.name (jaf_to_ain_type g.type_spec))
+      | Global g ->
+          if g.is_const then ctx.const_vars <- g :: ctx.const_vars
+          else Ain.set_global_type ctx.ain g.name (jaf_to_ain_type g.type_spec)
       | Function f ->
           let obj =
             Ain.get_function_by_index ctx.ain (Option.value_exn f.index)
