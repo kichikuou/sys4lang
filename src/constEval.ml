@@ -18,20 +18,21 @@ open Core
 open Jaf
 open CompileError
 
-let expr_replace dst expr =
-  dst.valuetype <- expr.valuetype;
+let expr_replace (dst : expression) (expr : expression) =
+  dst.ty <- expr.ty;
   dst.node <- expr.node
 
-let const_replace dst const_expr =
-  (match const_expr with
-  | ConstInt _ -> dst.valuetype <- Some (Ain.Type.make Ain.Type.Int)
-  | ConstFloat _ -> dst.valuetype <- Some (Ain.Type.make Ain.Type.Float)
-  | ConstChar _ -> dst.valuetype <- Some (Ain.Type.make Ain.Type.Int)
-  | ConstString _ -> dst.valuetype <- Some (Ain.Type.make Ain.Type.String)
-  | _ ->
-      compiler_bug "const_replace: not a constant expression"
-        (Some
-           (ASTExpression { node = const_expr; valuetype = None; loc = dst.loc })));
+let const_replace (dst : expression) const_expr =
+  dst.ty <-
+    (match const_expr with
+    | ConstInt _ -> Int
+    | ConstFloat _ -> Float
+    | ConstChar _ -> Int
+    | ConstString _ -> String
+    | _ ->
+        compiler_bug "const_replace: not a constant expression"
+          (Some
+             (ASTExpression { node = const_expr; ty = Untyped; loc = dst.loc })));
   dst.node <- const_expr
 
 let const_binary dst a b int_op float_op =

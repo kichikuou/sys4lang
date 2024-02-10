@@ -103,14 +103,11 @@ let do_compile sources output major minor decl_only compile_unit match_decls =
     Ain.write_file ain output
   with
   | CompileError.Type_error (expected, actual, parent) ->
-      let s_expected = Ain.Type.to_string expected in
+      let s_expected = jaf_type_to_string expected in
       let s_actual =
         match actual with
         | None -> "void"
-        | Some expr -> (
-            match expr.valuetype with
-            | None -> "untyped"
-            | Some t -> Ain.Type.to_string t)
+        | Some expr -> jaf_type_to_string expr.ty
       in
       printf "%s: Type error: expected %s; got %s\n"
         (format_node_location parent)

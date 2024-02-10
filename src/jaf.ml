@@ -68,6 +68,7 @@ type jaf_type =
   | Unresolved of string
   | Void
   | Int
+  | LongInt
   | Bool
   | Float
   | String
@@ -81,6 +82,9 @@ type jaf_type =
   | Delegate of string * int
   | FuncType of string * int
   | IMainSystem
+  | NullType
+  | TyFunction of int
+  | TyMethod of int
 
 type ident_type =
   | LocalVariable of int
@@ -108,7 +112,7 @@ type call_type =
   | DelegateCall of int
 
 type expression = {
-  mutable valuetype : Ain.Type.t option;
+  mutable ty : jaf_type;
   mutable node : ast_expression;
   loc : Lexing.position * Lexing.position;
 }
@@ -503,6 +507,7 @@ let rec jaf_type_to_string = function
   | Unresolved s -> "Unresolved<" ^ s ^ ">"
   | Void -> "void"
   | Int -> "int"
+  | LongInt -> "lint"
   | Bool -> "bool"
   | Float -> "float"
   | String -> "string"
@@ -513,6 +518,9 @@ let rec jaf_type_to_string = function
   | HLLParam -> "hll_param"
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
+  | NullType -> "null"
+  | TyFunction i -> "function<" ^ string_of_int i ^ ">"
+  | TyMethod i -> "method<" ^ string_of_int i ^ ">"
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
@@ -694,6 +702,7 @@ let rec jaf_to_ain_data_type = function
   | Ref _ -> failwith "tried to convert Ref to ain data type"
   | Void -> Ain.Type.Void
   | Int -> Ain.Type.Int
+  | LongInt -> Ain.Type.LongInt
   | Bool -> Ain.Type.Bool
   | Float -> Ain.Type.Float
   | String -> Ain.Type.String
@@ -705,10 +714,38 @@ let rec jaf_to_ain_data_type = function
   | Delegate (_, i) -> Ain.Type.Delegate i
   | FuncType (_, i) -> Ain.Type.FuncType i
   | IMainSystem -> Ain.Type.IMainSystem
+  | NullType -> Ain.Type.NullType
+  | TyFunction i -> Ain.Type.Function i
+  | TyMethod i -> Ain.Type.Method i
 
 and jaf_to_ain_type = function
   | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)
   | t -> Ain.Type.make (jaf_to_ain_data_type t)
+
+let rec data_type_to_jaf_type = function
+  | Ain.Type.Void -> Void
+  | Int -> Int
+  | Bool -> Bool
+  | Float -> Float
+  | String -> String
+  | Struct i -> Struct ("", i)
+  | Array t -> Array (ain_to_jaf_type t)
+  | Wrap t -> Wrap (ain_to_jaf_type t)
+  | HLLParam -> HLLParam
+  | HLLFunc -> HLLFunc
+  | Delegate i -> Delegate ("", i)
+  | FuncType i -> FuncType ("", i)
+  | IMainSystem -> IMainSystem
+  | Function i -> TyFunction i
+  | Method i -> TyMethod i
+  | t ->
+      Printf.failwithf "cannot convert %s to jaf type"
+        (Ain.Type.data_to_string t)
+        ()
+
+and ain_to_jaf_type t =
+  if t.is_ref then Ref (data_type_to_jaf_type t.data)
+  else data_type_to_jaf_type t.data
 
 let jaf_to_ain_variables j_p =
   let rec convert_params (params : variable list) (result : Ain.Variable.t list)

@@ -360,11 +360,11 @@ class jaf_compiler ain =
       | Member (obj, _, Some (ClassVariable (_, member_no))) ->
           self#compile_lvalue obj;
           self#write_instruction1 PUSH member_no;
-          compile_lvalue_after (Option.value_exn e.valuetype)
+          compile_lvalue_after (jaf_to_ain_type e.ty)
       | Subscript (obj, index) ->
           self#compile_lvalue obj;
           self#compile_expression index;
-          compile_lvalue_after (Option.value_exn e.valuetype)
+          compile_lvalue_after (jaf_to_ain_type e.ty)
       | New (Struct (_, s_no), args, Some var_no) ->
           let s = Ain.get_struct_by_index ain s_no in
           (* delete dummy variable *)
@@ -393,17 +393,17 @@ class jaf_compiler ain =
             (Some (ASTExpression e))
 
     (** Emit the code to pop a value off the stack. *)
-    method compile_pop (t : Ain.Type.t) =
-      match t.data with
+    method compile_pop (t : jaf_type) =
+      match t with
       | Void -> ()
       | Int | Float | Bool | LongInt -> self#write_instruction0 POP
       | String ->
           if Ain.version_gte ain (11, 0) then self#write_instruction0 DELETE
           else self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
-      | Struct _ | IMainSystem | FuncType _ | HLLFunc2 | HLLParam | Array _
-      | Wrap _ | Option _ | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc
-      | Unknown98 | IFaceWrap _ | Function _ | Method _ | NullType ->
+      | Ref _ | Struct _ | IMainSystem | FuncType _ | HLLParam | Array _
+      | Wrap _ | HLLFunc | TyFunction _ | TyMethod _ | NullType | Untyped
+      | Unresolved _ ->
           compiler_bug "compile_pop: unsupported value type" None
 
     method compile_argument (expr : expression) (t : Ain.Type.t) =
@@ -417,7 +417,7 @@ class jaf_compiler ain =
                   reference argument (string lvalue is a page+index, reference
                   argument is just the string page) *)
           if Ain.version_gte ain (14, 0) then
-            match (Option.value_exn expr.valuetype).data with
+            match expr.ty with
             | String -> self#write_instruction1 X_REF 1
             | _ -> ())
       | { data = Delegate _; _ } ->
@@ -494,9 +494,9 @@ class jaf_compiler ain =
           self#compile_expression e;
           self#write_instruction0 COMPL
       | Unary (AddrOf, e) -> (
-          match ((Option.value_exn e.valuetype).data, e.node) with
-          | Function no, _ -> self#write_instruction1 PUSH no
-          | Method no, Member (e, _, Some (ClassMethod (_, _))) ->
+          match (e.ty, e.node) with
+          | TyFunction no, _ -> self#write_instruction1 PUSH no
+          | TyMethod no, Member (e, _, Some (ClassMethod (_, _))) ->
               self#compile_lvalue e;
               self#write_instruction1 PUSH no
           | _ ->
@@ -565,7 +565,7 @@ class jaf_compiler ain =
       | Binary (op, a, b) -> (
           self#compile_expression a;
           self#compile_expression b;
-          match ((Option.value_exn a.valuetype).data, op) with
+          match (a.ty, op) with
           | Int, Plus -> self#write_instruction0 ADD
           | Int, Minus -> self#write_instruction0 SUB
           | Int, Times -> self#write_instruction0 MUL
@@ -618,7 +618,7 @@ class jaf_compiler ain =
                       (Some (ASTExpression expr))
               in
               self#write_instruction1 S_MOD
-                (int_of_t (Option.value_exn b.valuetype).data)
+                (int_of_t (jaf_to_ain_type b.ty).data)
           | ( String,
               ( Minus | Times | Divide | BitOr | BitXor | BitAnd | LShift
               | RShift | LogOr | LogAnd ) ) ->
@@ -629,7 +629,7 @@ class jaf_compiler ain =
       | Assign (op, lhs, rhs) -> (
           self#compile_lvalue lhs;
           self#compile_expression rhs;
-          match ((Option.value_exn lhs.valuetype).data, op) with
+          match (lhs.ty, op) with
           | (Int | Bool), EqAssign -> self#write_instruction0 ASSIGN
           | (Int | Bool), PlusAssign -> self#write_instruction0 PLUSA
           | (Int | Bool), MinusAssign -> self#write_instruction0 MINUSA
@@ -650,12 +650,13 @@ class jaf_compiler ain =
           | String, PlusAssign -> self#write_instruction0 S_PLUSA2
           | Delegate _, _ -> (
               (* XXX: DG_SET and DG_ADD seem to be misnamed... *)
-              match (op, (Option.value_exn rhs.valuetype).data) with
-              | EqAssign, Method _ -> self#write_instruction0 DG_ADD
+              match (op, rhs.ty) with
+              | EqAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ADD
               | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
-              | PlusAssign, Method _ -> self#write_instruction0 DG_SET
+              | PlusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_SET
               | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
-              | MinusAssign, Method _ -> self#write_instruction0 DG_ERASE
+              | MinusAssign, Ref (TyMethod _) ->
+                  self#write_instruction0 DG_ERASE
               | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
               | _, _ ->
                   compiler_bug "invalid delegate assignment"
@@ -664,7 +665,7 @@ class jaf_compiler ain =
               compiler_bug "invalid assignment" (Some (ASTExpression expr)))
       | Seq (a, b) ->
           self#compile_expression a;
-          self#compile_pop (Option.value_exn a.valuetype);
+          self#compile_pop a.ty;
           self#compile_expression b
       | Ternary (test, con, alt) ->
           self#compile_expression test;
@@ -677,8 +678,8 @@ class jaf_compiler ain =
           self#compile_expression alt;
           self#write_address_at jump_addr current_address
       | Cast (_, e) -> (
-          let dst_t = (Option.value_exn expr.valuetype).data in
-          let src_t = (Option.value_exn e.valuetype).data in
+          let dst_t = expr.ty in
+          let src_t = e.ty in
           self#compile_expression e;
           match (src_t, dst_t) with
           | Int, Int -> ()
@@ -695,9 +696,9 @@ class jaf_compiler ain =
       | Subscript (obj, index) -> (
           self#compile_lvalue obj;
           self#compile_expression index;
-          match (Option.value_exn obj.valuetype).data with
+          match obj.ty with
           | String -> self#write_instruction0 C_REF
-          | _ -> self#compile_dereference (Option.value_exn expr.valuetype))
+          | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
       | Member (e, _, Some (ClassVariable (struct_no, member_no))) ->
           let struct_type = Ain.get_struct_by_index ain struct_no in
           self#compile_lvalue e;
@@ -861,7 +862,7 @@ class jaf_compiler ain =
       | Declarations vars -> List.iter vars ~f:self#compile_variable_declaration
       | Expression e ->
           self#compile_expression e;
-          self#compile_pop (Option.value_exn e.valuetype)
+          self#compile_pop e.ty
       | Compound stmts -> self#compile_block stmts
       | Labeled (name, s) ->
           self#scope_add_label name;
@@ -933,7 +934,7 @@ class jaf_compiler ain =
           (match inc with
           | Some e ->
               self#compile_expression e;
-              self#compile_pop (Option.value_exn e.valuetype)
+              self#compile_pop e.ty
           | None -> ());
           self#write_instruction1 JUMP test_addr;
           (* loop body *)
@@ -994,7 +995,7 @@ class jaf_compiler ain =
           self#compile_variable_ref lhs;
           self#compile_delete_ref;
           self#compile_lvalue rhs;
-          (match (Option.value_exn lhs.valuetype).data with
+          (match lhs.ty with
           | Int | Bool | Float | LongInt | FuncType _ ->
               (* NOTE: SDK compiler emits [DUP_U2; SP_INC; R_ASSIGN; POP; POP] here *)
               self#write_instruction0 R_ASSIGN;
@@ -1013,8 +1014,7 @@ class jaf_compiler ain =
           self#compile_lvalue a;
           self#compile_lvalue b;
           let type_no =
-            Ain.Type.int_of_data_type (Ain.version ain)
-              (Option.value_exn a.valuetype)
+            Ain.Type.int_of_data_type (Ain.version ain) (jaf_to_ain_type a.ty)
           in
           self#write_instruction1 PUSH type_no;
           self#write_instruction0 OBJSWAP

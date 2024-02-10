@@ -17,7 +17,7 @@
 open Core
 open Jaf
 
-exception Type_error of Ain.Type.t * expression option * ast_node
+exception Type_error of jaf_type * expression option * ast_node
 exception Undefined_variable of string * ast_node
 exception Arity_error of Ain.Function.t * expression list * ast_node
 exception Not_lvalue_error of expression * ast_node
@@ -27,11 +27,7 @@ exception CompilerBug of string * ast_node option
 exception LinkError of string
 exception LinkerBug of string
 
-let data_type_error data expr parent =
-  raise (Type_error ({ data; is_ref = false }, expr, parent))
-
-let ref_type_error data expr parent =
-  raise (Type_error ({ data; is_ref = true }, expr, parent))
+let type_error ty expr parent = raise (Type_error (ty, expr, parent))
 
 let undefined_variable_error name parent =
   raise (Undefined_variable (name, parent))

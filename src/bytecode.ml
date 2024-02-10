@@ -1374,15 +1374,6 @@ let delegate_builtin_of_string = function
   | "Clear" -> Some DelegateClear
   | _ -> None
 
-let builtin_of_string (t : Ain.Type.data) name =
-  match t with
-  | Int -> int_builtin_of_string name
-  | Float -> float_builtin_of_string name
-  | String -> string_builtin_of_string name
-  | Array _ -> array_builtin_of_string name
-  | Delegate _ -> delegate_builtin_of_string name
-  | _ -> None
-
 let function_of_builtin builtin =
   let t_void = Ain.Type.make Void in
   let t_int = Ain.Type.make Int in

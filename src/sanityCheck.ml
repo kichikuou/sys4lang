@@ -23,16 +23,13 @@ class sanity_check_visitor ctx =
 
     method! visit_expression expr =
       super#visit_expression expr;
-      (match expr.valuetype with
-      | Some t -> (
-          if t.is_ref then
-            match t.data with
-            | Function _ | Method _ -> ()
-            | _ ->
-                compiler_bug "expression has ref type"
-                  (Some (ASTExpression expr)))
-      | None ->
-          compiler_bug "expression has no type" (Some (ASTExpression expr)));
+      (match expr.ty with
+      | Untyped ->
+          compiler_bug "expression has no type" (Some (ASTExpression expr))
+      | Ref (TyFunction _ | TyMethod _) -> ()
+      | Ref _ ->
+          compiler_bug "expression has ref type" (Some (ASTExpression expr))
+      | _ -> ());
       match expr.node with
       | Ident (_, None) ->
           compiler_bug "identifier expression has no ident_type"

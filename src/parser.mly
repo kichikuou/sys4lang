@@ -19,7 +19,7 @@
 open Jaf
 
 let expr loc ast =
-  { valuetype=None; node=ast; loc }
+  { ty=Untyped; node=ast; loc }
 
 let stmt loc ast =
   { node=ast; delete_vars=[]; loc }

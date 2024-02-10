@@ -19,9 +19,13 @@ open Jaf
 open CompileError
 
 let maybe_deref = function Ref t -> t | t -> t
+let ensure_ref = function Ref t -> Ref t | t -> Ref t
 
-let rec type_equal (expected : Ain.Type.data) (actual : Ain.Type.data) =
+let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   match (expected, actual) with
+  | Ref a, Ref b -> type_equal a b
+  | Ref a, b -> type_equal a b
+  | a, Ref b -> type_equal a b
   | Void, _ ->
       true (* XXX: used for type-generic built-ins (e.g. Array.PushBack) *)
   | Int, (Int | Bool | LongInt) -> true
@@ -29,26 +33,18 @@ let rec type_equal (expected : Ain.Type.data) (actual : Ain.Type.data) =
   | LongInt, (Int | Bool | LongInt) -> true
   | Float, Float -> true
   | String, String -> true
-  | Struct a, Struct b -> a = b
+  | Struct (_, a), Struct (_, b) -> a = b
   | IMainSystem, IMainSystem -> true
-  | FuncType a, FuncType b -> a = b
-  | Delegate a, Delegate b -> a = b
+  | FuncType (_, a), FuncType (_, b) -> a = b
+  | Delegate (_, a), Delegate (_, b) -> a = b
   | (FuncType _ | Delegate _ | IMainSystem), NullType -> true
   | NullType, (FuncType _ | Delegate _ | IMainSystem | NullType) -> true
-  | HLLFunc2, HLLFunc2 -> true
   | HLLParam, HLLParam -> true
-  | Array a, Array b -> type_equal a.data b.data
-  | Wrap a, Wrap b -> type_equal a.data b.data
-  | Option a, Option b -> type_equal a.data b.data
-  | Unknown87 a, Unknown87 b -> type_equal a.data b.data
-  | IFace a, IFace b -> a = b
-  | Enum2 a, Enum2 b -> a = b
-  | Enum a, Enum b -> a = b
+  | Array a, Array b -> type_equal a b
+  | Wrap a, Wrap b -> type_equal a b
   | HLLFunc, HLLFunc -> true
-  | Unknown98, Unknown98 -> true
-  | IFaceWrap a, IFaceWrap b -> a = b
-  | Function _, Function _ -> true
-  | Method _, Method _ -> true
+  | TyFunction _, TyFunction _ -> true
+  | TyMethod _, TyMethod _ -> true
   | Int, _
   | Bool, _
   | LongInt, _
@@ -58,48 +54,60 @@ let rec type_equal (expected : Ain.Type.data) (actual : Ain.Type.data) =
   | IMainSystem, _
   | FuncType _, _
   | Delegate _, _
-  | HLLFunc2, _
   | HLLParam, _
   | Array _, _
   | Wrap _, _
-  | Option _, _
-  | Unknown87 _, _
-  | IFace _, _
-  | Enum2 _, _
-  | Enum _, _
   | HLLFunc, _
-  | Unknown98, _
-  | IFaceWrap _, _
-  | Function _, _
-  | Method _, _
+  | TyFunction _, _
+  | TyMethod _, _
   | NullType, _ ->
       false
+  | Untyped, _ -> compiler_bug "expected type is untyped" None
+  | Unresolved _, _ -> compiler_bug "expected type is unresolved" None
 
-let type_castable (dst : jaf_type) (src : Ain.Type.data) =
+let type_castable (dst : jaf_type) (src : jaf_type) =
   match (dst, src) with
   (* FIXME: cast to void should be allowed *)
   | Void, _ -> compiler_bug "type checker cast to void type" None
   | (Int | Bool | Float), (Int | Bool | Float) -> true
   | _ -> false
 
-let type_check parent expected actual =
-  match actual.valuetype with
-  | None -> compiler_bug "tried to type check untyped expression" (Some parent)
-  | Some a_t ->
-      if not (type_equal expected a_t.data) then
-        data_type_error expected (Some actual) parent
+let type_check parent expected (actual : expression) =
+  match actual.ty with
+  | Untyped ->
+      compiler_bug "tried to type check untyped expression" (Some parent)
+  | a_t ->
+      if not (type_equal expected a_t) then
+        type_error expected (Some actual) parent
 
-let type_check_numeric parent actual =
-  match actual.valuetype with
-  | Some { data = Int | Bool | Float; _ } -> ()
-  | Some _ -> data_type_error Int (Some actual) parent
-  | None -> compiler_bug "tried to type check untyped expression" (Some parent)
+let type_check_numeric parent (actual : expression) =
+  match actual.ty with
+  | Int | Bool | Float -> ()
+  | Ref (Int | Bool | Float) -> ()
+  | Untyped ->
+      compiler_bug "tried to type check untyped expression" (Some parent)
+  | _ -> type_error Int (Some actual) parent
 
-let type_check_struct parent actual =
-  match actual.valuetype with
-  | Some { data = Struct i; _ } -> i
-  | Some _ -> data_type_error (Struct 0) (Some actual) parent
-  | None -> compiler_bug "tried to type check untyped expression" (Some parent)
+let type_check_struct parent (actual : expression) =
+  match actual.ty with
+  | Struct (_, i) -> i
+  | Ref (Struct (_, i)) -> i
+  | Untyped ->
+      compiler_bug "tried to type check untyped expression" (Some parent)
+  | _ -> type_error (Struct ("", 0)) (Some actual) parent
+
+let is_builtin = function
+  | Int | Float | String | Array _ | Delegate _ -> true
+  | _ -> false
+
+let builtin_of_string (t : Jaf.jaf_type) name =
+  match t with
+  | Int -> Bytecode.int_builtin_of_string name
+  | Float -> Bytecode.float_builtin_of_string name
+  | String -> Bytecode.string_builtin_of_string name
+  | Array _ -> Bytecode.array_builtin_of_string name
+  | Delegate _ -> Bytecode.delegate_builtin_of_string name
+  | _ -> None
 
 class type_analyze_visitor ctx =
   object (self)
@@ -108,30 +116,29 @@ class type_analyze_visitor ctx =
     (* an lvalue is an expression which denotes a location that can be assigned to/referenced *)
     method check_lvalue (e : expression) (parent : ast_node) =
       let check_lvalue_type = function
-        | Ain.Type.Function _ -> not_an_lvalue_error e parent
+        | TyFunction _ -> not_an_lvalue_error e parent
         | _ -> ()
       in
       match e.node with
-      | Ident (_, _) -> check_lvalue_type (Option.value_exn e.valuetype).data
-      | Member (_, _, _) ->
-          check_lvalue_type (Option.value_exn e.valuetype).data
+      | Ident (_, _) -> check_lvalue_type (maybe_deref e.ty)
+      | Member (_, _, _) -> check_lvalue_type (maybe_deref e.ty)
       | Subscript (_, _) -> ()
       | New (_, _, _) -> ()
       | _ -> not_an_lvalue_error e parent
 
-    method check_delegate_compatible parent dg_i expr =
-      match Option.value_exn expr.valuetype with
-      | { data = Ain.Type.Method f_i; is_ref = true } ->
+    method check_delegate_compatible parent dg_i (expr : expression) =
+      match expr.ty with
+      | Ref (TyMethod f_i) ->
           let dg = Ain.get_delegate_by_index ctx.ain dg_i in
           let f = Ain.get_function_by_index ctx.ain f_i in
           if not (Ain.FunctionType.function_compatible dg f) then
-            data_type_error (Ain.Type.Delegate dg_i) (Some expr) parent
-      | { data = Ain.Type.Delegate no; _ } ->
+            type_error (Delegate ("", dg_i)) (Some expr) parent
+      | Delegate (_, no) ->
           if not (phys_equal dg_i no) then
-            data_type_error (Ain.Type.Delegate dg_i) (Some expr) parent
-      | _ -> ref_type_error (Ain.Type.Method (-1)) (Some expr) parent
+            type_error (Delegate ("", dg_i)) (Some expr) parent
+      | _ -> type_error (Ref (TyMethod (-1))) (Some expr) parent
 
-    method check_assign parent t rhs =
+    method check_assign parent t (rhs : expression) =
       match t with
       (*
        * Assigning to a functype or delegate variable is special.
@@ -139,15 +146,15 @@ class type_analyze_visitor ctx =
        * 'ref function'. This is then converted into the declared
        * functype of the variable (if the prototypes match).
        *)
-      | Ain.Type.FuncType ft_i -> (
-          match Option.value_exn rhs.valuetype with
-          | { data = Ain.Type.Function f_i; is_ref = true } ->
+      | FuncType (_, ft_i) -> (
+          match rhs.ty with
+          | Ref (TyFunction f_i) ->
               let ft = Ain.get_functype_by_index ctx.ain ft_i in
               let f = Ain.get_function_by_index ctx.ain f_i in
               if not (Ain.FunctionType.function_compatible ft f) then
-                data_type_error (Ain.Type.FuncType ft_i) (Some rhs) parent
-          | _ -> ref_type_error (Ain.Type.Function (-1)) (Some rhs) parent)
-      | Ain.Type.Delegate dg_i -> self#check_delegate_compatible parent dg_i rhs
+                type_error (FuncType ("", ft_i)) (Some rhs) parent
+          | _ -> type_error (Ref (TyFunction (-1))) (Some rhs) parent)
+      | Delegate (_, dg_i) -> self#check_delegate_compatible parent dg_i rhs
       | _ -> type_check parent t rhs
 
     method! visit_expression expr =
@@ -156,7 +163,7 @@ class type_analyze_visitor ctx =
       let check = type_check (ASTExpression expr) in
       let check_numeric = type_check_numeric (ASTExpression expr) in
       let check_struct = type_check_struct (ASTExpression expr) in
-      let check_expr a b = check (Option.value_exn a.valuetype).data b in
+      let check_expr (a : expression) b = check (maybe_deref a.ty) b in
       (* check function call arguments *)
       let check_call (f : Ain.Function.t) args =
         let params = Ain.Function.logical_parameters f in
@@ -164,115 +171,109 @@ class type_analyze_visitor ctx =
         if not (nr_params = List.length args) then
           arity_error f args (ASTExpression expr)
         else if nr_params > 0 then
-          let check_arg a (v : Ain.Variable.t) = check v.value_type.data a in
+          let check_arg a (v : Ain.Variable.t) =
+            check (data_type_to_jaf_type v.value_type.data) a
+          in
           List.iter2_exn args params ~f:check_arg
       in
-      let set_valuetype spec = expr.valuetype <- Some (jaf_to_ain_type spec) in
       match expr.node with
-      | ConstInt _ -> expr.valuetype <- Some (Ain.Type.make Int)
-      | ConstFloat _ -> expr.valuetype <- Some (Ain.Type.make Float)
-      | ConstChar _ -> expr.valuetype <- Some (Ain.Type.make Int)
-      | ConstString _ -> expr.valuetype <- Some (Ain.Type.make String)
+      | ConstInt _ -> expr.ty <- Int
+      | ConstFloat _ -> expr.ty <- Float
+      | ConstChar _ -> expr.ty <- Int
+      | ConstString _ -> expr.ty <- String
       | Ident (name, _) -> (
           match environment#resolve name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, Some (LocalVariable (-1)));
-              set_valuetype (maybe_deref v.ty)
+              expr.ty <- maybe_deref v.ty
           | ResolvedConstant v ->
               expr.node <- Ident (name, Some GlobalConstant);
-              set_valuetype (maybe_deref v.ty)
+              expr.ty <- maybe_deref v.ty
           | ResolvedGlobal g ->
               expr.node <- Ident (name, Some (GlobalVariable g.index));
-              expr.valuetype <- Some g.value_type
+              expr.ty <- ain_to_jaf_type g.value_type
           | ResolvedFunction i ->
               expr.node <- Ident (name, Some (FunctionName i));
-              expr.valuetype <- Some (Ain.Type.make (Function i))
+              expr.ty <- TyFunction i
           | ResolvedLibrary i ->
               expr.node <- Ident (name, Some (HLLName i));
-              expr.valuetype <- Some (Ain.Type.make Void)
+              expr.ty <- Void
           | ResolvedSystem ->
               expr.node <- Ident ("system", Some System);
-              expr.valuetype <- Some (Ain.Type.make Void)
+              expr.ty <- Void
           | ResolvedBuiltin builtin ->
               expr.node <- Ident (name, Some (BuiltinFunction builtin));
-              expr.valuetype <- Some (Ain.Type.make Void)
+              expr.ty <- Void
           | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
           )
       | Unary (op, e) -> (
           match op with
           | UPlus | UMinus | PreInc | PreDec | PostInc | PostDec ->
               check_numeric e;
-              expr.valuetype <- Some (Option.value_exn e.valuetype)
+              expr.ty <- e.ty
           | LogNot | BitNot ->
               check Int e;
-              expr.valuetype <- Some (Option.value_exn e.valuetype)
+              expr.ty <- e.ty
           | AddrOf -> (
-              match (Option.value_exn e.valuetype).data with
-              | Function i ->
-                  expr.valuetype <-
-                    Some (Ain.Type.make ~is_ref:true (Function i))
-              | Method i ->
-                  expr.valuetype <- Some (Ain.Type.make ~is_ref:true (Method i))
-              | _ ->
-                  data_type_error (Function (-1)) (Some e) (ASTExpression expr))
+              match e.ty with
+              | TyFunction i -> expr.ty <- Ref (TyFunction i)
+              | TyMethod i -> expr.ty <- Ref (TyMethod i)
+              | _ -> type_error (TyFunction (-1)) (Some e) (ASTExpression expr))
           )
       | Binary (op, a, b) -> (
           match op with
           | Plus ->
-              (match (Option.value_exn a.valuetype).data with
+              (match maybe_deref a.ty with
               | String -> check String b
               | _ ->
                   check_numeric a;
                   check_numeric b;
                   (* TODO: allow coercion *)
                   check_expr a b);
-              expr.valuetype <- a.valuetype
+              expr.ty <- a.ty
           | Minus | Times | Divide ->
               check_numeric a;
               check_numeric b;
               (* TODO: allow coercion *)
               check_expr a b;
-              expr.valuetype <- a.valuetype
+              expr.ty <- a.ty
           | LogOr | LogAnd | BitOr | BitXor | BitAnd | LShift | RShift ->
               check Int a;
               check Int b;
-              expr.valuetype <- a.valuetype
+              expr.ty <- a.ty
           | Modulo ->
-              (match (Option.value_exn a.valuetype).data with
+              (match maybe_deref a.ty with
               | String -> (
                   (* TODO: check type matches format specifier if format string is a literal *)
-                  match (Option.value_exn b.valuetype).data with
+                  match maybe_deref b.ty with
                   | Int | Float | Bool | LongInt | String -> ()
-                  | _ -> data_type_error Int (Some b) (ASTExpression expr))
+                  | _ -> type_error Int (Some b) (ASTExpression expr))
               | Int | Bool | LongInt -> check Int b
-              | _ -> data_type_error Int (Some a) (ASTExpression expr));
-              expr.valuetype <- a.valuetype
+              | _ -> type_error Int (Some a) (ASTExpression expr));
+              expr.ty <- a.ty
           | Equal | NEqual | LT | GT | LTE | GTE ->
-              (match (Option.value_exn a.valuetype).data with
+              (match maybe_deref a.ty with
               | String -> check String b
               | _ ->
                   check_numeric a;
                   check_numeric b;
                   (* TODO: allow coercion *)
                   check_expr a b);
-              expr.valuetype <- Some (Ain.Type.make Int)
+              expr.ty <- Int
           | RefEqual | RefNEqual ->
-              (match
-                 ( (Option.value_exn a.valuetype).is_ref,
-                   (Option.value_exn b.valuetype).is_ref )
-               with
-              | true, true -> check_expr a b
-              | false, _ -> ref_type_error Void (Some a) (ASTExpression expr)
-              | _, false -> ref_type_error Void (Some b) (ASTExpression expr));
-              expr.valuetype <- Some (Ain.Type.make Int))
+              (match (a.ty, b.ty) with
+              | Ref _, Ref _ -> check_expr a b
+              | Ref _, _ -> type_error (Ref Void) (Some b) (ASTExpression expr)
+              | _, _ -> type_error (Ref Void) (Some a) (ASTExpression expr));
+              expr.ty <- Int)
       | Assign (op, lhs, rhs) -> (
           self#check_lvalue lhs (ASTExpression expr);
-          let lhs_type = (Option.value_exn lhs.valuetype).data in
-          let rhs_type = (Option.value_exn rhs.valuetype).data in
+          let lhs_type = maybe_deref lhs.ty in
+          let rhs_type = maybe_deref rhs.ty in
           (match (lhs_type, op) with
           | _, EqAssign -> self#check_assign (ASTExpression expr) lhs_type rhs
           | String, PlusAssign -> check String rhs
-          | Delegate dg_i, (PlusAssign | MinusAssign) ->
+          | Delegate (_, dg_i), (PlusAssign | MinusAssign) ->
               self#check_delegate_compatible (ASTExpression expr) dg_i rhs
           | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
               check_numeric lhs;
@@ -286,36 +287,33 @@ class type_analyze_visitor ctx =
               check Int rhs);
           (* XXX: Nothing is left on stack after assigning method to delegate *)
           match (lhs_type, rhs_type) with
-          | Delegate _, Method _ -> expr.valuetype <- Some (Ain.Type.make Void)
-          | _ -> expr.valuetype <- lhs.valuetype)
-      | Seq (_, e) -> expr.valuetype <- e.valuetype
+          | Delegate _, TyMethod _ -> expr.ty <- Void
+          | _ -> expr.ty <- lhs.ty)
+      | Seq (_, e) -> expr.ty <- e.ty
       | Ternary (test, con, alt) ->
           check Int test;
           check_expr con alt;
-          expr.valuetype <- con.valuetype
+          expr.ty <- con.ty
       | Cast (t, e) ->
-          if not (type_castable t (Option.value_exn e.valuetype).data) then
-            data_type_error (jaf_to_ain_data_type t) (Some e)
-              (ASTExpression expr);
-          set_valuetype (maybe_deref t)
+          if not (type_castable t (maybe_deref e.ty)) then
+            type_error t (Some e) (ASTExpression expr);
+          expr.ty <- maybe_deref t
       | Subscript (obj, i) -> (
           check Int i;
-          match (Option.value_exn obj.valuetype).data with
-          | Array t -> expr.valuetype <- Some t
-          | String -> expr.valuetype <- Some (Ain.Type.make Int)
+          match maybe_deref obj.ty with
+          | Array t -> expr.ty <- t
+          | String -> expr.ty <- Int
           | _ ->
               (* FIXME: Expected type here is array<?>|string *)
               let expected = Array Void in
-              data_type_error
-                (jaf_to_ain_data_type expected)
-                (Some obj) (ASTExpression expr))
+              type_error expected (Some obj) (ASTExpression expr))
       (* system function *)
       | Member (({ node = Ident (_, Some System); _ } as e), syscall_name, _)
         -> (
           match Bytecode.syscall_of_string syscall_name with
           | Some sys ->
               expr.node <- Member (e, syscall_name, Some (SystemFunction sys));
-              expr.valuetype <- Some (Ain.Type.make (Function 0))
+              expr.ty <- TyFunction 0
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error ("system." ^ syscall_name)
@@ -329,34 +327,21 @@ class type_analyze_visitor ctx =
           | Some fun_no ->
               expr.node <-
                 Member (e, fun_name, Some (HLLFunction (lib_no, fun_no)));
-              expr.valuetype <- Some (Ain.Type.make (Function 0))
+              expr.ty <- TyFunction 0
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error
                 (lib_name ^ "." ^ fun_name)
                 (ASTExpression expr))
       (* built-in methods *)
-      | Member
-          ( ({
-               valuetype =
-                 Some
-                   {
-                     data = (Int | Float | String | Array _ | Delegate _) as t;
-                     _;
-                   };
-               _;
-             } as e),
-            name,
-            _ ) -> (
-          match Bytecode.builtin_of_string t name with
+      | Member (e, name, _) when is_builtin e.ty -> (
+          match builtin_of_string (maybe_deref e.ty) name with
           | Some builtin ->
               expr.node <- Member (e, name, Some (BuiltinMethod builtin));
-              expr.valuetype <- Some (Ain.Type.make (Function 0))
+              expr.ty <- TyFunction 0
           | None ->
               (* TODO: separate error type for this? *)
-              undefined_variable_error
-                (Ain.Type.data_to_string t ^ name)
-                (ASTExpression expr))
+              undefined_variable_error name (ASTExpression expr))
       (* member variable OR method *)
       | Member (obj, member_name, _) -> (
           let struc = Ain.get_struct_by_index ctx.ain (check_struct obj) in
@@ -370,7 +355,7 @@ class type_analyze_visitor ctx =
                   ( obj,
                     member_name,
                     Some (ClassVariable (struc.index, member.index)) );
-              expr.valuetype <- Some member.value_type
+              expr.ty <- ain_to_jaf_type member.value_type
           | None -> (
               let fun_name = struc.name ^ "@" ^ member_name in
               match Ain.get_function ctx.ain fun_name with
@@ -380,7 +365,7 @@ class type_analyze_visitor ctx =
                       ( obj,
                         member_name,
                         Some (ClassMethod (struc.index, f.index)) );
-                  expr.valuetype <- Some (Ain.Type.make (Method f.index))
+                  expr.ty <- TyMethod f.index
               | None ->
                   (* TODO: separate error type for this? *)
                   undefined_variable_error
@@ -392,7 +377,7 @@ class type_analyze_visitor ctx =
           let f = Ain.get_function_by_index ctx.ain fno in
           check_call f args;
           expr.node <- Call (e, args, Some (FunctionCall fno));
-          expr.valuetype <- Some f.return_type
+          expr.ty <- ain_to_jaf_type f.return_type
       (* built-in function call *)
       | Call
           ( ({ node = Ident (_, Some (BuiltinFunction builtin)); _ } as e),
@@ -401,7 +386,7 @@ class type_analyze_visitor ctx =
           let f = Bytecode.function_of_builtin builtin in
           check_call f args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
-          expr.valuetype <- Some f.return_type
+          expr.ty <- ain_to_jaf_type f.return_type
       (* method call *)
       | Call
           ( ({ node = Member (_, _, Some (ClassMethod (sno, mno))); _ } as e),
@@ -410,7 +395,7 @@ class type_analyze_visitor ctx =
           let f = Ain.get_function_by_index ctx.ain mno in
           check_call f args;
           expr.node <- Call (e, args, Some (MethodCall (sno, mno)));
-          expr.valuetype <- Some f.return_type
+          expr.ty <- ain_to_jaf_type f.return_type
       (* HLL call *)
       | Call
           ( ({ node = Member (_, _, Some (HLLFunction (lib_no, fun_no))); _ } as
@@ -420,7 +405,7 @@ class type_analyze_visitor ctx =
           let f = Ain.function_of_hll_function_index ctx.ain lib_no fun_no in
           check_call f args;
           expr.node <- Call (e, args, Some (HLLCall (lib_no, fun_no, -1)));
-          expr.valuetype <- Some f.return_type
+          expr.ty <- ain_to_jaf_type f.return_type
       (* system call *)
       | Call
           ( ({ node = Member (_, _, Some (SystemFunction sys)); _ } as e),
@@ -429,7 +414,7 @@ class type_analyze_visitor ctx =
           let f = Bytecode.function_of_syscall sys in
           check_call f args;
           expr.node <- Call (e, args, Some (SystemCall sys));
-          expr.valuetype <- Some f.return_type
+          expr.ty <- ain_to_jaf_type f.return_type
       (* built-in method call *)
       | Call
           ( ({ node = Member (_, _, Some (BuiltinMethod builtin)); _ } as e),
@@ -443,23 +428,21 @@ class type_analyze_visitor ctx =
           (* TODO: properly check type-generic arguments based on object type *)
           check_call f args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
-          expr.valuetype <- Some f.return_type
+          expr.ty <- ain_to_jaf_type f.return_type
       (* functype/delegate call *)
       | Call (e, args, _) -> (
-          match (Option.value_exn e.valuetype).data with
-          | FuncType no ->
+          match maybe_deref e.ty with
+          | FuncType (_, no) ->
               let f = Ain.function_of_functype_index ctx.ain no in
               check_call f args;
               expr.node <- Call (e, args, Some (FuncTypeCall no));
-              expr.valuetype <- Some f.return_type
-          | Delegate no ->
+              expr.ty <- ain_to_jaf_type f.return_type
+          | Delegate (_, no) ->
               let f = Ain.function_of_delegate_index ctx.ain no in
               check_call f args;
               expr.node <- Call (e, args, Some (DelegateCall no));
-              expr.valuetype <- Some f.return_type
-          | _ ->
-              data_type_error (Ain.Type.FuncType (-1)) (Some e)
-                (ASTExpression expr))
+              expr.ty <- ain_to_jaf_type f.return_type
+          | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
       | New (t, args, _) -> (
           match t with
           | Struct (_, i) ->
@@ -473,15 +456,15 @@ class type_analyze_visitor ctx =
               | no ->
                   let ctor = Ain.get_function_by_index ctx.ain no in
                   check_call ctor args);
-              set_valuetype (maybe_deref t)
-          | _ -> data_type_error (Struct (-1)) None (ASTExpression expr))
+              expr.ty <- maybe_deref t
+          | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with
-          | Some i -> expr.valuetype <- Some (Ain.Type.make (Struct i))
+          | Some i -> expr.ty <- Struct ("", i)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error "this" (ASTExpression expr))
-      | Null -> expr.valuetype <- Some (Ain.Type.make NullType)
+      | Null -> expr.ty <- NullType
 
     method! visit_statement stmt =
       (* rewrite character constants at statement-level as messages *)
@@ -515,10 +498,7 @@ class type_analyze_visitor ctx =
           | None ->
               compiler_bug "return statement outside of function"
                 (Some (ASTStatement stmt))
-          | Some f ->
-              type_check (ASTStatement stmt)
-                (jaf_to_ain_data_type f.return_ty)
-                e)
+          | Some f -> type_check (ASTStatement stmt) f.return_ty e)
       | Return None -> (
           match environment#current_function with
           | None ->
@@ -527,10 +507,7 @@ class type_analyze_visitor ctx =
           | Some f -> (
               match f.return_ty with
               | Void -> ()
-              | _ ->
-                  data_type_error
-                    (jaf_to_ain_data_type f.return_ty)
-                    None (ASTStatement stmt)))
+              | _ -> type_error f.return_ty None (ASTStatement stmt)))
       | MessageCall (msg, f_name, _) -> (
           match f_name with
           | Some name -> (
@@ -550,22 +527,19 @@ class type_analyze_visitor ctx =
               | Some v -> (
                   match v.ty with
                   | Ref _ ->
-                      type_check (ASTStatement stmt)
-                        (Option.value_exn lhs.valuetype).data rhs
+                      type_check (ASTStatement stmt) (maybe_deref lhs.ty) rhs
                   | _ ->
-                      ref_type_error (Option.value_exn rhs.valuetype).data
-                        (Some lhs) (ASTStatement stmt))
+                      type_error (ensure_ref rhs.ty) (Some lhs)
+                        (ASTStatement stmt))
               | None -> undefined_variable_error name (ASTStatement stmt))
           | _ ->
               (* FIXME? this isn't really a _type_ error *)
-              ref_type_error (Option.value_exn rhs.valuetype).data (Some lhs)
-                (ASTStatement stmt))
+              type_error (ensure_ref rhs.ty) (Some lhs) (ASTStatement stmt))
       | ObjSwap (lhs, rhs) ->
           self#check_lvalue lhs (ASTStatement stmt);
           self#check_lvalue rhs (ASTStatement stmt);
           (* FIXME: error if the type is ref or unsupported type *)
-          type_check (ASTStatement stmt) (Option.value_exn lhs.valuetype).data
-            rhs
+          type_check (ASTStatement stmt) (maybe_deref lhs.ty) rhs
 
     method visit_variable var =
       let rec calculate_array_rank (t : jaf_type) =
@@ -594,8 +568,7 @@ class type_analyze_visitor ctx =
           | Ref _ ->
               compile_error "Initial value for ref type not implemented"
                 (ASTVariable var)
-          | t ->
-              self#check_assign (ASTVariable var) (jaf_to_ain_data_type t) expr)
+          | t -> self#check_assign (ASTVariable var) t expr)
       | None -> ()
 
     method! visit_local_variable var =
