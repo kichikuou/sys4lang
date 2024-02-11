@@ -504,6 +504,8 @@ let assign_op_to_string op =
   | LShiftAssign -> "<<="
   | RShiftAssign -> ">>="
 
+let is_numeric = function Int | Bool | LongInt | Float -> true | _ -> false
+
 let rec jaf_type_to_string = function
   | Untyped -> "untyped"
   | Unresolved s -> "Unresolved<" ^ s ^ ">"

@@ -404,7 +404,9 @@ class jaf_compiler ain =
       | Ref _ | Struct _ | IMainSystem | FuncType _ | HLLParam | Array _
       | Wrap _ | HLLFunc | TyFunction _ | TyMethod _ | NullType | Untyped
       | Unresolved _ ->
-          compiler_bug "compile_pop: unsupported value type" None
+          compiler_bug
+            ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
+            None
 
     method compile_argument (expr : expression) (t : Ain.Type.t) =
       match t with
@@ -563,8 +565,13 @@ class jaf_compiler ain =
           self#write_instruction1 PUSH 0;
           self#write_address_at true_addr current_address
       | Binary (op, a, b) -> (
-          self#compile_expression a;
-          self#compile_expression b;
+          (match op with
+          | RefEqual | RefNEqual ->
+              self#compile_lvalue a;
+              self#compile_lvalue b
+          | _ ->
+              self#compile_expression a;
+              self#compile_expression b);
           match (a.ty, op) with
           | Int, Plus -> self#write_instruction0 ADD
           | Int, Minus -> self#write_instruction0 SUB
@@ -630,55 +637,55 @@ class jaf_compiler ain =
               ( Minus | Times | Divide | BitOr | BitXor | BitAnd | LShift
               | RShift | LogOr | LogAnd ) ) ->
               compiler_bug "invalid string operator" (Some (ASTExpression expr))
+          | Ref t, RefEqual ->
+              self#write_instruction0
+                (if is_numeric t then R_EQUALE else EQUALE)
+          | Ref t, RefNEqual ->
+              self#write_instruction0 (if is_numeric t then R_NOTE else NOTE)
           | _ ->
               compiler_bug "invalid binary expression"
                 (Some (ASTExpression expr)))
       | Assign (op, lhs, rhs) -> (
           self#compile_lvalue lhs;
           self#compile_expression rhs;
-          match (lhs.ty, op) with
-          | (Int | Bool), EqAssign -> self#write_instruction0 ASSIGN
-          | (Int | Bool), PlusAssign -> self#write_instruction0 PLUSA
-          | (Int | Bool), MinusAssign -> self#write_instruction0 MINUSA
-          | (Int | Bool), TimesAssign -> self#write_instruction0 MULA
-          | (Int | Bool), DivideAssign -> self#write_instruction0 DIVA
-          | (Int | Bool), ModuloAssign -> self#write_instruction0 MODA
-          | (Int | Bool), OrAssign -> self#write_instruction0 ORA
-          | (Int | Bool), XorAssign -> self#write_instruction0 XORA
-          | (Int | Bool), AndAssign -> self#write_instruction0 ANDA
-          | (Int | Bool), LShiftAssign -> self#write_instruction0 LSHIFTA
-          | (Int | Bool), RShiftAssign -> self#write_instruction0 RSHIFTA
-          | LongInt, EqAssign -> self#write_instruction0 LI_ASSIGN
-          | LongInt, PlusAssign -> self#write_instruction0 LI_PLUSA
-          | LongInt, MinusAssign -> self#write_instruction0 LI_MINUSA
-          | LongInt, TimesAssign -> self#write_instruction0 LI_MULA
-          | LongInt, DivideAssign -> self#write_instruction0 LI_DIVA
-          | LongInt, ModuloAssign -> self#write_instruction0 LI_MODA
-          | LongInt, AndAssign -> self#write_instruction0 LI_ANDA
-          | LongInt, OrAssign -> self#write_instruction0 LI_ORA
-          | LongInt, XorAssign -> self#write_instruction0 LI_XORA
-          | LongInt, LShiftAssign -> self#write_instruction0 LI_LSHIFTA
-          | LongInt, RShiftAssign -> self#write_instruction0 LI_RSHIFTA
-          | Float, EqAssign -> self#write_instruction0 F_ASSIGN
-          | Float, PlusAssign -> self#write_instruction0 F_PLUSA
-          | Float, MinusAssign -> self#write_instruction0 F_MINUSA
-          | Float, TimesAssign -> self#write_instruction0 F_MULA
-          | Float, DivideAssign -> self#write_instruction0 F_DIVA
-          | String, EqAssign -> self#write_instruction0 S_ASSIGN
-          | String, PlusAssign -> self#write_instruction0 S_PLUSA2
-          | Delegate _, _ -> (
+          match (op, rhs.ty) with
+          | EqAssign, (Int | Bool) -> self#write_instruction0 ASSIGN
+          | PlusAssign, (Int | Bool) -> self#write_instruction0 PLUSA
+          | MinusAssign, (Int | Bool) -> self#write_instruction0 MINUSA
+          | TimesAssign, (Int | Bool) -> self#write_instruction0 MULA
+          | DivideAssign, (Int | Bool) -> self#write_instruction0 DIVA
+          | ModuloAssign, (Int | Bool) -> self#write_instruction0 MODA
+          | OrAssign, (Int | Bool) -> self#write_instruction0 ORA
+          | XorAssign, (Int | Bool) -> self#write_instruction0 XORA
+          | AndAssign, (Int | Bool) -> self#write_instruction0 ANDA
+          | LShiftAssign, (Int | Bool) -> self#write_instruction0 LSHIFTA
+          | RShiftAssign, (Int | Bool) -> self#write_instruction0 RSHIFTA
+          | EqAssign, LongInt -> self#write_instruction0 LI_ASSIGN
+          | PlusAssign, LongInt -> self#write_instruction0 LI_PLUSA
+          | MinusAssign, LongInt -> self#write_instruction0 LI_MINUSA
+          | TimesAssign, LongInt -> self#write_instruction0 LI_MULA
+          | DivideAssign, LongInt -> self#write_instruction0 LI_DIVA
+          | ModuloAssign, LongInt -> self#write_instruction0 LI_MODA
+          | AndAssign, LongInt -> self#write_instruction0 LI_ANDA
+          | OrAssign, LongInt -> self#write_instruction0 LI_ORA
+          | XorAssign, LongInt -> self#write_instruction0 LI_XORA
+          | LShiftAssign, LongInt -> self#write_instruction0 LI_LSHIFTA
+          | RShiftAssign, LongInt -> self#write_instruction0 LI_RSHIFTA
+          | EqAssign, Float -> self#write_instruction0 F_ASSIGN
+          | PlusAssign, Float -> self#write_instruction0 F_PLUSA
+          | MinusAssign, Float -> self#write_instruction0 F_MINUSA
+          | TimesAssign, Float -> self#write_instruction0 F_MULA
+          | DivideAssign, Float -> self#write_instruction0 F_DIVA
+          | EqAssign, String -> self#write_instruction0 S_ASSIGN
+          | PlusAssign, String -> self#write_instruction0 S_PLUSA2
+          | EqAssign, Ref (TyMethod _) ->
               (* XXX: DG_SET and DG_ADD seem to be misnamed... *)
-              match (op, rhs.ty) with
-              | EqAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ADD
-              | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
-              | PlusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_SET
-              | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
-              | MinusAssign, Ref (TyMethod _) ->
-                  self#write_instruction0 DG_ERASE
-              | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
-              | _, _ ->
-                  compiler_bug "invalid delegate assignment"
-                    (Some (ASTExpression expr)))
+              self#write_instruction0 DG_ADD
+          | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
+          | PlusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_SET
+          | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
+          | MinusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ERASE
+          | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
           | _, _ ->
               compiler_bug "invalid assignment" (Some (ASTExpression expr)))
       | Seq (a, b) ->
@@ -1015,12 +1022,12 @@ class jaf_compiler ain =
           self#compile_delete_ref;
           self#compile_lvalue rhs;
           (match lhs.ty with
-          | Int | Bool | Float | LongInt | FuncType _ ->
+          | Ref (Int | Bool | Float | LongInt | FuncType _) ->
               (* NOTE: SDK compiler emits [DUP_U2; SP_INC; R_ASSIGN; POP; POP] here *)
               self#write_instruction0 R_ASSIGN;
               self#write_instruction0 POP;
               self#write_instruction0 SP_INC
-          | String | Struct _ | Array _ ->
+          | Ref (String | Struct _ | Array _) ->
               (* NOTE: SDK compiler emits [DUP; SP_INC; ASSIGN; POP] here *)
               self#write_instruction0 ASSIGN;
               self#write_instruction0 SP_INC

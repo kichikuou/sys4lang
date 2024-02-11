@@ -24,9 +24,10 @@ int main()
 	ref int rb;
 	ra <- a;
 	rb <- ra;
-	// assert(ra === rb);  FIXME: thid doesn't pass typecheck
+	assert(ra === rb);
 	rb = 1;
 	assert(a == 1);
+	assert(ra == 1);
 
 	float f;
 	floatref(f);
@@ -36,11 +37,16 @@ int main()
 	stringref(s);
 	assert(s == "13");
 
-	string s;
+	string ss;
 	ref string rs;
 	ref string rt;
-	rs <- s;
+	rs <- ss;
 	rt <- rs;
+	assert(rs === rt);
 	rt = "1";
-	assert(s == "1");
+	assert(ss == "1");
+	assert(rs == "1");
+	assert(rs.Length() == 1);
+
+	return 0;
 }

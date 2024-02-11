@@ -18,8 +18,11 @@ open Core
 open Jaf
 open CompileError
 
-let maybe_deref = function Ref t -> t | t -> t
-let ensure_ref = function Ref t -> Ref t | t -> Ref t
+(* Implicit dereference of variables and members. *)
+let maybe_deref (e : expression) =
+  match e with
+  | { ty = Ref t; node = Ident _ | Member _; _ } -> e.ty <- t
+  | _ -> ()
 
 let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   match (expected, actual) with
@@ -82,23 +85,24 @@ let type_check parent expected (actual : expression) =
         type_error expected (Some actual) parent
 
 let type_check_numeric parent (actual : expression) =
+  maybe_deref actual;
   match actual.ty with
   | Int | Bool | LongInt | Float -> ()
-  | Ref (Int | Bool | LongInt | Float) -> ()
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
   | _ -> type_error Int (Some actual) parent
 
 let type_check_struct parent (actual : expression) =
+  maybe_deref actual;
   match actual.ty with
   | Struct (_, i) -> i
-  | Ref (Struct (_, i)) -> i
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
   | _ -> type_error (Struct ("", 0)) (Some actual) parent
 
 let is_builtin = function
   | Int | Float | String | Array _ | Delegate _ -> true
+  | Ref (Int | Float | String | Array _ | Delegate _) -> true
   | _ -> false
 
 let builtin_of_string (t : Jaf.jaf_type) name =
@@ -121,7 +125,7 @@ let type_coerce_numerics parent a b =
     insert_cast t e;
     t
   in
-  match (maybe_deref a.ty, maybe_deref b.ty) with
+  match (a.ty, b.ty) with
   | Float, Float -> Float
   | Float, _ -> coerce Float b
   | _, Float -> coerce Float a
@@ -144,8 +148,8 @@ class type_analyze_visitor ctx =
         | _ -> ()
       in
       match e.node with
-      | Ident (_, _) -> check_lvalue_type (maybe_deref e.ty)
-      | Member (_, _, _) -> check_lvalue_type (maybe_deref e.ty)
+      | Ident (_, _) -> check_lvalue_type e.ty
+      | Member (_, _, _) -> check_lvalue_type e.ty
       | Subscript (_, _) -> ()
       | New (_, _, _) -> ()
       | _ -> not_an_lvalue_error e parent
@@ -191,7 +195,7 @@ class type_analyze_visitor ctx =
       let check_numeric = type_check_numeric (ASTExpression expr) in
       let coerce_numerics = type_coerce_numerics (ASTExpression expr) in
       let check_struct = type_check_struct (ASTExpression expr) in
-      let check_expr (a : expression) b = check (maybe_deref a.ty) b in
+      let check_expr (a : expression) b = check a.ty b in
       (* check function call arguments *)
       let check_call (f : Ain.Function.t) args =
         let params = Ain.Function.logical_parameters f in
@@ -213,10 +217,10 @@ class type_analyze_visitor ctx =
           match environment#resolve name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, Some (LocalVariable (-1)));
-              expr.ty <- maybe_deref v.ty
+              expr.ty <- v.ty
           | ResolvedConstant v ->
               expr.node <- Ident (name, Some GlobalConstant);
-              expr.ty <- maybe_deref v.ty
+              expr.ty <- v.ty
           | ResolvedGlobal g ->
               expr.node <- Ident (name, Some (GlobalVariable g.index));
               expr.ty <- ain_to_jaf_type g.value_type
@@ -251,28 +255,36 @@ class type_analyze_visitor ctx =
       | Binary (op, a, b) -> (
           match op with
           | Plus -> (
-              match maybe_deref a.ty with
+              maybe_deref a;
+              maybe_deref b;
+              match a.ty with
               | String ->
                   check String b;
                   expr.ty <- a.ty
               | _ -> expr.ty <- coerce_numerics a b)
           | Minus | Times | Divide -> expr.ty <- coerce_numerics a b
           | LogOr | LogAnd | BitOr | BitXor | BitAnd | LShift | RShift ->
+              maybe_deref a;
+              maybe_deref b;
               check Int a;
               check Int b;
               expr.ty <- a.ty
           | Modulo ->
-              (match maybe_deref a.ty with
+              maybe_deref a;
+              maybe_deref b;
+              (match a.ty with
               | String -> (
                   (* TODO: check type matches format specifier if format string is a literal *)
-                  match maybe_deref b.ty with
+                  match b.ty with
                   | Int | Float | Bool | LongInt | String -> ()
                   | _ -> type_error Int (Some b) (ASTExpression expr))
               | Int | Bool | LongInt -> check Int b
               | _ -> type_error Int (Some a) (ASTExpression expr));
               expr.ty <- a.ty
           | Equal | NEqual | LT | GT | LTE | GTE ->
-              (match maybe_deref a.ty with
+              maybe_deref a;
+              maybe_deref b;
+              (match a.ty with
               | String -> check String b
               | _ -> coerce_numerics a b |> ignore);
               expr.ty <- Int
@@ -284,17 +296,17 @@ class type_analyze_visitor ctx =
               expr.ty <- Int)
       | Assign (op, lhs, rhs) -> (
           self#check_lvalue lhs (ASTExpression expr);
-          let lhs_type = maybe_deref lhs.ty in
-          let rhs_type = maybe_deref rhs.ty in
-          (match (lhs_type, op) with
-          | _, EqAssign -> self#check_assign (ASTExpression expr) lhs_type rhs
+          maybe_deref lhs;
+          maybe_deref rhs;
+          (match (lhs.ty, op) with
+          | _, EqAssign -> self#check_assign (ASTExpression expr) lhs.ty rhs
           | String, PlusAssign -> check String rhs
           | Delegate (_, dg_i), (PlusAssign | MinusAssign) ->
               self#check_delegate_compatible (ASTExpression expr) dg_i rhs
           | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
               check_numeric lhs;
               check_numeric rhs;
-              insert_cast lhs_type rhs;
+              insert_cast lhs.ty rhs;
               check_expr lhs rhs
           | ( _,
               ( ModuloAssign | OrAssign | XorAssign | AndAssign | LShiftAssign
@@ -302,21 +314,24 @@ class type_analyze_visitor ctx =
               check Int lhs;
               check Int rhs);
           (* XXX: Nothing is left on stack after assigning method to delegate *)
-          match (lhs_type, rhs_type) with
-          | Delegate _, TyMethod _ -> expr.ty <- Void
-          | _ -> expr.ty <- lhs.ty)
+          match (lhs.ty, rhs.ty) with
+          | Delegate _, Ref (TyMethod _) -> expr.ty <- Void
+          | _ -> expr.ty <- rhs.ty)
       | Seq (_, e) -> expr.ty <- e.ty
       | Ternary (test, con, alt) ->
           check Int test;
           check_expr con alt;
           expr.ty <- con.ty
       | Cast (t, e) ->
-          if not (type_castable t (maybe_deref e.ty)) then
+          maybe_deref e;
+          if not (type_castable t e.ty) then
             type_error t (Some e) (ASTExpression expr);
-          expr.ty <- maybe_deref t
+          expr.ty <- t
       | Subscript (obj, i) -> (
+          maybe_deref obj;
+          maybe_deref i;
           check Int i;
-          match maybe_deref obj.ty with
+          match obj.ty with
           | Array t -> expr.ty <- t
           | String -> expr.ty <- Int
           | _ ->
@@ -351,7 +366,8 @@ class type_analyze_visitor ctx =
                 (ASTExpression expr))
       (* built-in methods *)
       | Member (e, name, _) when is_builtin e.ty -> (
-          match builtin_of_string (maybe_deref e.ty) name with
+          maybe_deref e;
+          match builtin_of_string e.ty name with
           | Some builtin ->
               expr.node <- Member (e, name, Some (BuiltinMethod builtin));
               expr.ty <- TyFunction 0
@@ -447,7 +463,7 @@ class type_analyze_visitor ctx =
           expr.ty <- ain_to_jaf_type f.return_type
       (* functype/delegate call *)
       | Call (e, args, _) -> (
-          match maybe_deref e.ty with
+          match e.ty with
           | FuncType (_, no) ->
               let f = Ain.function_of_functype_index ctx.ain no in
               check_call f args;
@@ -472,7 +488,7 @@ class type_analyze_visitor ctx =
               | no ->
                   let ctor = Ain.get_function_by_index ctx.ain no in
                   check_call ctor args);
-              expr.ty <- maybe_deref t
+              expr.ty <- t
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with
@@ -536,26 +552,24 @@ class type_analyze_visitor ctx =
       | RefAssign (lhs, rhs) -> (
           (* rhs must be an lvalue in order to create a reference to it *)
           self#check_lvalue rhs (ASTStatement stmt);
+          maybe_deref rhs;
           (* check that lhs is a reference variable of the appropriate type *)
           match lhs.node with
           | Ident (name, _) -> (
               match environment#get_local name with
               | Some v -> (
                   match v.ty with
-                  | Ref _ ->
-                      type_check (ASTStatement stmt) (maybe_deref lhs.ty) rhs
-                  | _ ->
-                      type_error (ensure_ref rhs.ty) (Some lhs)
-                        (ASTStatement stmt))
+                  | Ref ty -> type_check (ASTStatement stmt) ty rhs
+                  | _ -> type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
               | None -> undefined_variable_error name (ASTStatement stmt))
           | _ ->
               (* FIXME? this isn't really a _type_ error *)
-              type_error (ensure_ref rhs.ty) (Some lhs) (ASTStatement stmt))
+              type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
       | ObjSwap (lhs, rhs) ->
           self#check_lvalue lhs (ASTStatement stmt);
           self#check_lvalue rhs (ASTStatement stmt);
           (* FIXME: error if the type is ref or unsupported type *)
-          type_check (ASTStatement stmt) (maybe_deref lhs.ty) rhs
+          type_check (ASTStatement stmt) lhs.ty rhs
 
     method visit_variable var =
       let rec calculate_array_rank (t : jaf_type) =
