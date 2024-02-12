@@ -387,6 +387,12 @@ class jaf_compiler ain =
           self#write_instruction0 ASSIGN;
           self#compile_unlock_peek
       | This -> self#compile_expression e
+      | Null -> (
+          match e.ty with
+          | Ref t ->
+              self#write_instruction1 PUSH (-1);
+              if is_numeric t then self#write_instruction1 PUSH 0
+          | _ -> compiler_bug "untyped NULL" (Some (ASTExpression e)))
       | _ ->
           compiler_bug
             ("invalid lvalue: " ^ expr_to_string e)

@@ -22,9 +22,11 @@ int main()
 	int a;
 	ref int ra;
 	ref int rb;
+	assert(ra === NULL);
 	ra <- a;
 	rb <- ra;
 	assert(ra === rb);
+	assert(NULL !== rb);
 	rb = 1;
 	assert(a == 1);
 	assert(ra == 1);
@@ -40,10 +42,13 @@ int main()
 	string ss;
 	ref string rs;
 	ref string rt;
+	assert(rs === NULL);
 	rs <- ss;
 	rt <- rs;
 	assert(rs === rt);
 	rt = "1";
+	assert(rs === rt);
+	assert(NULL !== rt);
 	assert(ss == "1");
 	assert(rs == "1");
 	assert(rs.Length() == 1);

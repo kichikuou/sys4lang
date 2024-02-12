@@ -291,6 +291,8 @@ class type_analyze_visitor ctx =
           | RefEqual | RefNEqual ->
               (match (a.ty, b.ty) with
               | Ref _, Ref _ -> check_expr a b
+              | Ref _, NullType -> b.ty <- a.ty
+              | NullType, Ref _ -> a.ty <- b.ty
               | Ref _, _ -> type_error (Ref Void) (Some b) (ASTExpression expr)
               | _, _ -> type_error (Ref Void) (Some a) (ASTExpression expr));
               expr.ty <- Int)
