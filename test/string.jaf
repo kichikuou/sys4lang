@@ -15,6 +15,9 @@ int main()
 	string concatenated = "asdf\n" "\nfdsa";
 	assert(concatenated == "asdf\n\nfdsa");
 
+	assert(string(42) == "42");
+	assert(string(42.5) == "42.500000");
+
 	// s-length
 	// s-lengthbyte
 	// s-empty
