@@ -17,6 +17,7 @@
 open Core
 open Jaf
 
+exception Syntax_error of Lexing.position * Lexing.position
 exception Type_error of jaf_type * expression option * ast_node
 exception Undefined_variable of string * ast_node
 exception Arity_error of Ain.Function.t * expression list * ast_node
@@ -26,6 +27,10 @@ exception CompileError of string * ast_node
 exception CompilerBug of string * ast_node option
 exception LinkError of string
 exception LinkerBug of string
+
+let syntax_error lexbuf =
+  raise
+    (Syntax_error (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf))
 
 let type_error ty expr parent = raise (Type_error (ty, expr, parent))
 

@@ -18,6 +18,8 @@
 open Core
 open Parser
 
+exception Error
+
 (* Unquote & splice string literal *)
 let process_string s =
   let rec loop s i in_text result =
@@ -210,9 +212,11 @@ rule token = parse
                               | Some kw -> kw
                               | None -> IDENTIFIER(s)
                             }
+  | _                       { raise Error }
   | eof                     { EOF }
 
 and block_comment = parse
-    "*/"  { token lexbuf }
-  | _     { block_comment lexbuf }
-  | eof   { failwith "unterminated block comment" }
+    "*/"      { token lexbuf }
+  | [^ '\n']  { block_comment lexbuf }
+  | ['\n']    { Lexing.new_line lexbuf; block_comment lexbuf }
+  | eof       { raise Error }

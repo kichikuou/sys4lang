@@ -22,7 +22,9 @@ let parse_jaf jaf_file =
   let do_parse file =
     let lexbuf = Lexing.from_channel file in
     Lexing.set_filename lexbuf jaf_file;
-    Parser.jaf Lexer.token lexbuf
+    try Parser.jaf Lexer.token lexbuf with
+    | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
+    | e -> raise e
   in
   match jaf_file with
   | "-" -> do_parse In_channel.stdin
@@ -45,7 +47,9 @@ let compile_hll ctx hll_file =
   let do_parse file =
     let lexbuf = Lexing.from_channel file in
     Lexing.set_filename lexbuf hll_file;
-    Parser.hll Lexer.token lexbuf
+    try Parser.hll Lexer.token lexbuf with
+    | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
+    | e -> raise e
   in
   let get_lib_name filename =
     Filename.chop_extension (Filename.basename filename)
@@ -102,6 +106,9 @@ let do_compile sources output major minor decl_only compile_unit match_decls =
     (* write output .ain file to disk *)
     Ain.write_file ain output
   with
+  | CompileError.Syntax_error (s, e) ->
+      printf "%s: Syntax error\n" (format_location (s, e));
+      exit 1
   | CompileError.Type_error (expected, actual, parent) ->
       let s_expected = jaf_type_to_string expected in
       let s_actual =
