@@ -21,11 +21,15 @@ int main()
 {
 	arithmetic fa = &add;
 	assert(fa(1, 2) == 3);
+	fa = NULL;
 
 	int a = 1;
-	ref_arithmetic fr = &ref_add;
+	ref_arithmetic fr = NULL;
+	fr = &ref_add;
 	assert(fr(a, 2) == 3);
 
 	thunk ft = &one;
 	assert(ft() == 1);
+
+	return 0;
 }

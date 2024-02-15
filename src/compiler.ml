@@ -402,14 +402,14 @@ class jaf_compiler ain =
     method compile_pop (t : jaf_type) =
       match t with
       | Void -> ()
-      | Int | Float | Bool | LongInt -> self#write_instruction0 POP
+      | Int | Float | Bool | LongInt | FuncType _ | Ref (TyFunction _) ->
+          self#write_instruction0 POP
       | String ->
           if Ain.version_gte ain (11, 0) then self#write_instruction0 DELETE
           else self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
-      | Ref _ | Struct _ | IMainSystem | FuncType _ | HLLParam | Array _
-      | Wrap _ | HLLFunc | TyFunction _ | TyMethod _ | NullType | Untyped
-      | Unresolved _ ->
+      | Ref _ | Struct _ | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc
+      | TyFunction _ | TyMethod _ | NullType | Untyped | Unresolved _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             None
@@ -655,7 +655,8 @@ class jaf_compiler ain =
           self#compile_lvalue lhs;
           self#compile_expression rhs;
           match (op, rhs.ty) with
-          | EqAssign, (Int | Bool) -> self#write_instruction0 ASSIGN
+          | EqAssign, (Int | Bool | Ref (TyFunction _) | FuncType _) ->
+              self#write_instruction0 ASSIGN
           | PlusAssign, (Int | Bool) -> self#write_instruction0 PLUSA
           | MinusAssign, (Int | Bool) -> self#write_instruction0 MINUSA
           | TimesAssign, (Int | Bool) -> self#write_instruction0 MULA
@@ -881,7 +882,10 @@ class jaf_compiler ain =
           self#compile_lvalue expr;
           self#write_instruction0 A_REF
       | This -> self#write_instruction0 PUSHSTRUCTPAGE
-      | Null -> compiler_bug "not implemented" (Some (ASTExpression expr))
+      | Null -> (
+          match expr.ty with
+          | FuncType _ -> self#write_instruction1 PUSH 0
+          | _ -> compiler_bug "untyped NULL" (Some (ASTExpression expr)))
 
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
       state of the stack is unchanged after executing a statement. *)
