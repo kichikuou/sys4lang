@@ -1128,13 +1128,13 @@ type syscall =
   | MsgBox
   | ResumeSave
   | ResumeLoad
-  | ExistsFile
+  | ExistFile
   | OpenWeb
   | GetSaveFolderName
   | GetTime
   | GetGameName
   | Error
-  | ExistsSaveFile
+  | ExistSaveFile
   | IsDebugMode
   | MsgBoxOkCancel
   | GetFuncStackName
@@ -1159,13 +1159,13 @@ let int_of_syscall = function
   | MsgBox -> 0x07
   | ResumeSave -> 0x08
   | ResumeLoad -> 0x09
-  | ExistsFile -> 0x0A
+  | ExistFile -> 0x0A
   | OpenWeb -> 0x0B
   | GetSaveFolderName -> 0x0C
   | GetTime -> 0x0D
   | GetGameName -> 0x0E
   | Error -> 0x0F
-  | ExistsSaveFile -> 0x10
+  | ExistSaveFile -> 0x10
   | IsDebugMode -> 0x11
   | MsgBoxOkCancel -> 0x12
   | GetFuncStackName -> 0x13
@@ -1190,13 +1190,13 @@ let syscall_of_string = function
   | "MsgBox" -> Some MsgBox
   | "ResumeSave" -> Some ResumeSave
   | "ResumeLoad" -> Some ResumeLoad
-  | "ExistsFile" -> Some ExistsFile
+  | "ExistFile" -> Some ExistFile
   | "OpenWeb" -> Some OpenWeb
   | "GetSaveFolderName" -> Some GetSaveFolderName
   | "GetTime" -> Some GetTime
   | "GetGameName" -> Some GetGameName
   | "Error" -> Some Error
-  | "ExistsSaveFile" -> Some ExistsSaveFile
+  | "ExistSaveFile" -> Some ExistSaveFile
   | "IsDebugMode" -> Some IsDebugMode
   | "MsgBoxOkCancel" -> Some MsgBoxOkCancel
   | "GetFuncStackName" -> Some GetFuncStackName
@@ -1270,13 +1270,13 @@ let function_of_syscall sys =
   | ResumeSave ->
       make_function 0x08 t_int "ResumeSave" [ t_string; t_string; t_ref_int ]
   | ResumeLoad -> make_function 0x09 t_void "ResumeLoad" [ t_string; t_string ]
-  | ExistsFile -> make_function 0x0A t_int "ExistsFile" [ t_string ]
+  | ExistFile -> make_function 0x0A t_int "ExistFile" [ t_string ]
   | OpenWeb -> make_function 0x0B t_void "OpenWeb" [ t_string ]
   | GetSaveFolderName -> make_function 0x0C t_string "GetSaveFolderName" []
   | GetTime -> make_function 0x0D t_int "GetTime" []
   | GetGameName -> make_function 0x0E t_string "GetGameName" []
   | Error -> make_function 0x0F t_string "Error" [ t_string ]
-  | ExistsSaveFile -> make_function 0x10 t_int "ExistsSaveFile" [ t_string ]
+  | ExistSaveFile -> make_function 0x10 t_int "ExistSaveFile" [ t_string ]
   | IsDebugMode -> make_function 0x11 t_int "IsDebugMode" []
   | MsgBoxOkCancel -> make_function 0x12 t_int "MsgBoxOkCancel" [ t_string ]
   | GetFuncStackName -> make_function 0x13 t_string "GetFuncStackName" [ t_int ]
