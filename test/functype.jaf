@@ -17,6 +17,11 @@ int one(void)
 	return 1;
 }
 
+int two(void)
+{
+	return 2;
+}
+
 int main()
 {
 	arithmetic fa = &add;
@@ -28,8 +33,11 @@ int main()
 	fr = &ref_add;
 	assert(fr(a, 2) == 3);
 
-	thunk ft = &one;
+	thunk ft = "one";
 	assert(ft() == 1);
+
+	ft = "two";
+	assert(ft() == 2);
 
 	return 0;
 }

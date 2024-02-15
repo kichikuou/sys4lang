@@ -181,6 +181,7 @@ class type_analyze_visitor ctx =
               let f = Ain.get_function_by_index ctx.ain f_i in
               if not (Ain.FunctionType.function_compatible ft f) then
                 type_error (FuncType ("", ft_i)) (Some rhs) parent
+          | String -> ()
           | NullType -> rhs.ty <- t
           | _ -> type_error (Ref (TyFunction (-1))) (Some rhs) parent)
       | Delegate (_, dg_i) -> self#check_delegate_compatible parent dg_i rhs

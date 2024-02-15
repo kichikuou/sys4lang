@@ -683,7 +683,15 @@ class jaf_compiler ain =
           | MinusAssign, Float -> self#write_instruction0 F_MINUSA
           | TimesAssign, Float -> self#write_instruction0 F_MULA
           | DivideAssign, Float -> self#write_instruction0 F_DIVA
-          | EqAssign, String -> self#write_instruction0 S_ASSIGN
+          | EqAssign, String -> (
+              match lhs.ty with
+              | FuncType (_, ft_i) ->
+                  self#write_instruction1 PUSH ft_i;
+                  self#write_instruction0 FT_ASSIGNS
+              | String -> self#write_instruction0 S_ASSIGN
+              | _ ->
+                  compiler_bug "invalid string assignment"
+                    (Some (ASTExpression expr)))
           | PlusAssign, String -> self#write_instruction0 S_PLUSA2
           | EqAssign, Ref (TyMethod _) ->
               (* XXX: DG_SET and DG_ADD seem to be misnamed... *)
@@ -1086,13 +1094,29 @@ class jaf_compiler ain =
                 (ASTVariable decl)
         else
           match v.value_type.data with
-          | Int | Bool | FuncType _ ->
+          | Int | Bool ->
               self#compile_local_ref v.index;
               (match decl.initval with
               | Some e -> self#compile_expression e
               | None -> self#write_instruction1 PUSH 0);
               self#write_instruction0 ASSIGN;
               self#write_instruction0 POP
+          | FuncType fi -> (
+              self#compile_local_ref v.index;
+              match decl.initval with
+              | Some ({ ty = String; _ } as e) ->
+                  self#compile_expression e;
+                  self#write_instruction1 PUSH fi;
+                  self#write_instruction0 FT_ASSIGNS;
+                  self#write_instruction0 S_POP
+              | Some e ->
+                  self#compile_expression e;
+                  self#write_instruction0 ASSIGN;
+                  self#write_instruction0 POP
+              | None ->
+                  self#write_instruction1 PUSH 0;
+                  self#write_instruction0 ASSIGN;
+                  self#write_instruction0 POP)
           | LongInt ->
               self#compile_local_ref v.index;
               (match decl.initval with
