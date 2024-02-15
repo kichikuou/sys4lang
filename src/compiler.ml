@@ -648,6 +648,8 @@ class jaf_compiler ain =
                 (if is_numeric t then R_EQUALE else EQUALE)
           | Ref t, RefNEqual ->
               self#write_instruction0 (if is_numeric t then R_NOTE else NOTE)
+          | FuncType _, Equal -> self#write_instruction0 EQUALE
+          | FuncType _, NEqual -> self#write_instruction0 NOTE
           | _ ->
               compiler_bug "invalid binary expression"
                 (Some (ASTExpression expr)))

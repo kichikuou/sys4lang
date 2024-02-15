@@ -283,7 +283,24 @@ class type_analyze_visitor ctx =
               | Int | Bool | LongInt -> check Int b
               | _ -> type_error Int (Some a) (ASTExpression expr));
               expr.ty <- a.ty
-          | Equal | NEqual | LT | GT | LTE | GTE ->
+          | Equal | NEqual ->
+              maybe_deref a;
+              maybe_deref b;
+              (* NOTE: NULL is not allowed on lhs *)
+              (match (a.ty, b.ty) with
+              | String, _ -> check String b
+              | FuncType (_, ft_i), FuncType (_, ft_j) ->
+                  if ft_i <> ft_j then
+                    type_error a.ty (Some b) (ASTExpression expr)
+              | FuncType (_, ft_i), Ref (TyFunction f_i) ->
+                  let ft = Ain.get_functype_by_index ctx.ain ft_i in
+                  let f = Ain.get_function_by_index ctx.ain f_i in
+                  if not (Ain.FunctionType.function_compatible ft f) then
+                    type_error a.ty (Some b) (ASTExpression expr)
+              | FuncType _, NullType -> b.ty <- a.ty
+              | _ -> coerce_numerics a b |> ignore);
+              expr.ty <- Int
+          | LT | GT | LTE | GTE ->
               maybe_deref a;
               maybe_deref b;
               (match a.ty with
