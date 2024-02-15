@@ -797,6 +797,7 @@ class jaf_compiler ain =
           if Ain.version_gte ain (11, 0) then
             compiler_bug "tried to compile old-style built-in call in ain v11+"
               (Some (ASTExpression expr));
+          let t_param = ref (Ain.Type.make Void) in
           (match lhs with
           | { node = Member (e, _, _); _ } -> (
               match builtin with
@@ -810,12 +811,13 @@ class jaf_compiler ain =
               | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
               | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty
               | ArrayErase | ArrayInsert | ArraySort ->
+                  t_param := jaf_to_ain_type e.ty;
                   self#compile_variable_ref e
               | Assert ->
                   compiler_bug "invalid assert expression"
                     (Some (ASTExpression expr)))
           | _ -> ());
-          let f = function_of_builtin builtin in
+          let f = function_of_builtin builtin !t_param in
           self#compile_function_arguments args f;
           match builtin with
           | Assert -> self#write_instruction0 ASSERT

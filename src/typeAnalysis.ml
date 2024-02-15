@@ -29,8 +29,7 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | Ref a, Ref b -> type_equal a b
   | Ref a, b -> type_equal a b
   | a, Ref b -> type_equal a b
-  | Void, _ ->
-      true (* XXX: used for type-generic built-ins (e.g. Array.PushBack) *)
+  | Void, Void -> true
   | Int, (Int | Bool | LongInt) -> true
   | Bool, (Int | Bool | LongInt) -> true
   | LongInt, (Int | Bool | LongInt) -> true
@@ -48,6 +47,7 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | HLLFunc, HLLFunc -> true
   | TyFunction _, TyFunction _ -> true
   | TyMethod _, TyMethod _ -> true
+  | Void, _
   | Int, _
   | Bool, _
   | LongInt, _
@@ -436,7 +436,7 @@ class type_analyze_visitor ctx =
           ( ({ node = Ident (_, Some (BuiltinFunction builtin)); _ } as e),
             args,
             _ ) ->
-          let f = Bytecode.function_of_builtin builtin in
+          let f = Bytecode.function_of_builtin builtin (Ain.Type.make Void) in
           check_call f args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
           expr.ty <- ain_to_jaf_type f.return_type
@@ -470,14 +470,19 @@ class type_analyze_visitor ctx =
           expr.ty <- ain_to_jaf_type f.return_type
       (* built-in method call *)
       | Call
-          ( ({ node = Member (_, _, Some (BuiltinMethod builtin)); _ } as e),
+          ( ({ node = Member (obj, _, Some (BuiltinMethod builtin)); _ } as e),
             args,
             _ ) ->
           (* TODO: rewrite to HLL call for 11+ (?) *)
           if Ain.version_gte ctx.ain (11, 0) then
             compile_error "ain v11+ built-ins not implemented"
               (ASTExpression expr);
-          let f = Bytecode.function_of_builtin builtin in
+          let elem_t =
+            match obj.ty with
+            | Array t -> jaf_to_ain_type t
+            | _ -> Ain.Type.make Void
+          in
+          let f = Bytecode.function_of_builtin builtin elem_t in
           (* TODO: properly check type-generic arguments based on object type *)
           check_call f args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));

@@ -37,6 +37,9 @@ int main()
 
 	array@int a4[10];
 	assert(a4.Numof() == 10);
+	a4.PushBack(1);
+	assert(a4.Numof() == 11);
+	// a4.PushBack("s");  // type error
 
 	// array@int@2 a[1][2];
 	// a[0][1] = 1;

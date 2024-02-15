@@ -1374,11 +1374,11 @@ let delegate_builtin_of_string = function
   | "Clear" -> Some DelegateClear
   | _ -> None
 
-let function_of_builtin builtin =
+let function_of_builtin builtin t_param =
   let t_void = Ain.Type.make Void in
   let t_int = Ain.Type.make Int in
   let t_string = Ain.Type.make String in
-  let t_ref_array = Ain.Type.make ~is_ref:true (Array t_void) in
+  let t_ref_array = Ain.Type.make ~is_ref:true (Array t_param) in
   let t_func = Ain.Type.make ~is_ref:true (Function 0) in
   let t_method = Ain.Type.make ~is_ref:true (Method 0) in
   let (default : Ain.Function.t) =
@@ -1438,12 +1438,12 @@ let function_of_builtin builtin =
   | ArrayFree -> make_function t_void "Free" []
   | ArrayNumof -> make_function t_int "Numof" []
   | ArrayCopy -> make_function t_int "Copy" [ t_int; t_ref_array; t_int; t_int ]
-  | ArrayFill -> make_function t_int "Fill" [ t_int; t_int; t_void ]
-  | ArrayPushBack -> make_function t_void "PushBack" [ t_void ]
+  | ArrayFill -> make_function t_int "Fill" [ t_int; t_int; t_param ]
+  | ArrayPushBack -> make_function t_void "PushBack" [ t_param ]
   | ArrayPopBack -> make_function t_void "PopBack" []
   | ArrayEmpty -> make_function t_int "Empty" []
   | ArrayErase -> make_function t_int "Erase" [ t_int ]
-  | ArrayInsert -> make_function t_void "Insert" [ t_int; t_void ]
+  | ArrayInsert -> make_function t_void "Insert" [ t_int; t_param ]
   | ArraySort -> make_function t_void "Sort" [ t_func ]
   | DelegateSet -> make_function t_void "Set" [ t_method ]
   | DelegateAdd -> make_function t_void "Add" [ t_method ]
