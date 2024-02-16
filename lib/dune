@@ -1,7 +1,5 @@
-(executable
- (name sys4c)
- (public_name sys4c)
- (package sys4c)
+(library
+ (name Sys4cLib)
  (libraries core core_unix.filename_unix core_unix.command_unix camlzip)
  (preprocess
   (pps ppx_jane)))

@@ -15,7 +15,7 @@
  *)
 
 open Core
-open Printf
+open Sys4cLib
 open Jaf
 
 let parse_jaf jaf_file =
