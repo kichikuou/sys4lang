@@ -41,9 +41,9 @@ int main()
 	assert(a4.Numof() == 11);
 	// a4.PushBack("s");  // type error
 
-	// array@int@2 a[1][2];
-	// a[0][1] = 1;
-	// assert(a[0][1] == 1);
+	array@int@2 a[1][2];
+	a[0][1] = 1;
+	assert(a[0][1] == 1);
 
 	return 0;
 }

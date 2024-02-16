@@ -35,7 +35,7 @@ let decl is_const ty vi =
   {
     name = vi.name;
     location = vi.loc;
-    array_dim = vi.dims;
+    array_dim = List.rev vi.dims;
     is_const;
     ty;
     initval = vi.initval;
@@ -68,6 +68,9 @@ let member_func loc ty_opt struct_name is_dtor name params body =
   let name = if is_dtor then "~" ^ name else name in
   let fundecl = func loc (Option.value ty_opt ~default:Void) name params body in
   { fundecl with struct_name=Some struct_name }
+
+let rec multidim_array dims t =
+  if dims <= 0 then t else multidim_array (dims - 1) (Array t)
 
 %}
 
@@ -148,7 +151,7 @@ string
 postfix_expression
   : primary_expression { $1 }
   | postfix_expression LBRACKET expression RBRACKET { expr $sloc (Subscript ($1, $3)) }
-  | atomic_type_specifier LPAREN expression RPAREN { expr $sloc (Cast ($1, $3)) }
+  | primitive_type_specifier LPAREN expression RPAREN { expr $sloc (Cast ($1, $3)) }
   | postfix_expression arglist { expr $sloc (Call ($1, $2, None)) }
   | NEW IDENTIFIER arglist { expr $sloc (New (Unresolved ($2), $3, None)) }
   | postfix_expression DOT IDENTIFIER { expr $sloc (Member ($1, $3, None)) }
@@ -175,7 +178,7 @@ unary_operator
 
 cast_expression
   : unary_expression { $1 }
-  | LPAREN atomic_type_specifier RPAREN cast_expression { expr $sloc (Cast ($2, $4)) }
+  | LPAREN primitive_type_specifier RPAREN cast_expression { expr $sloc (Cast ($2, $4)) }
   ;
 
 mul_expression
@@ -271,7 +274,7 @@ constant_expression
   : cond_expression { $1 }
   ;
 
-atomic_type_specifier
+primitive_type_specifier
   : VOID         { Void }
   | CHAR         { Int }
   | INT          { Int }
@@ -286,12 +289,16 @@ atomic_type_specifier
   | IMAINSYSTEM  { IMainSystem }
   ;
 
+atomic_type_specifier
+  : primitive_type_specifier { $1 }
+  | IDENTIFIER { Unresolved $1 }
+
 type_specifier
   : atomic_type_specifier { $1 }
   (* FIXME: this disallows arrays/wraps of ref-qualified types *)
-  | ARRAY AT type_specifier { Array $3 }
+  | ARRAY AT atomic_type_specifier AT I_CONSTANT { multidim_array $5 $3 }
+  | ARRAY AT atomic_type_specifier { Array $3 }
   | WRAP AT type_specifier { Wrap $3 }
-  | IDENTIFIER { Unresolved ($1) }
 
 statement
   : declaration_statement { stmt $sloc $1 }
