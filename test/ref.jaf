@@ -13,6 +13,10 @@ void stringref(ref string a)
 	a = "13";
 }
 
+struct S {
+	ref int a;
+};
+
 int main()
 {
 	int i;
@@ -30,6 +34,8 @@ int main()
 	rb = 1;
 	assert(a == 1);
 	assert(ra == 1);
+	rb <- NULL;
+	assert(rb === NULL);
 
 	float f;
 	floatref(f);
@@ -52,6 +58,12 @@ int main()
 	assert(ss == "1");
 	assert(rs == "1");
 	assert(rs.Length() == 1);
+
+	S obj;
+	obj.a <- a;
+	assert(obj.a === ra);
+	obj.a <- NULL;
+	assert(obj.a === NULL);
 
 	return 0;
 }

@@ -154,6 +154,12 @@ class type_analyze_visitor ctx =
       | New (_, _, _) -> ()
       | _ -> not_an_lvalue_error e parent
 
+    method check_referenceable (e : expression) (parent : ast_node) =
+      match e.ty with
+      | NullType -> ()
+      | Ref _ -> ()
+      | _ -> self#check_lvalue e parent
+
     method check_delegate_compatible parent dg_i (expr : expression) =
       match expr.ty with
       | Ref (TyMethod f_i) ->
@@ -576,8 +582,8 @@ class type_analyze_visitor ctx =
               | None -> undefined_variable_error name (ASTStatement stmt))
           | None -> ())
       | RefAssign (lhs, rhs) -> (
-          (* rhs must be an lvalue in order to create a reference to it *)
-          self#check_lvalue rhs (ASTStatement stmt);
+          (* rhs must be a ref, or an lvalue in order to create a reference to it *)
+          self#check_referenceable rhs (ASTStatement stmt);
           maybe_deref rhs;
           (* check that lhs is a reference variable of the appropriate type *)
           match lhs.node with
@@ -585,9 +591,19 @@ class type_analyze_visitor ctx =
               match environment#get_local name with
               | Some v -> (
                   match v.ty with
-                  | Ref ty -> type_check (ASTStatement stmt) ty rhs
+                  | Ref ty -> (
+                      match rhs.ty with
+                      | NullType -> rhs.ty <- v.ty
+                      | _ -> type_check (ASTStatement stmt) ty rhs)
                   | _ -> type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
               | None -> undefined_variable_error name (ASTStatement stmt))
+          | Member (_, _, Some (ClassVariable _)) -> (
+              match lhs.ty with
+              | Ref t -> (
+                  match rhs.ty with
+                  | NullType -> rhs.ty <- lhs.ty
+                  | _ -> type_check (ASTStatement stmt) t rhs)
+              | _ -> type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
           | _ ->
               (* FIXME? this isn't really a _type_ error *)
               type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
