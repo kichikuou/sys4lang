@@ -637,9 +637,12 @@ class type_analyze_visitor ctx =
       match var.initval with
       | Some expr -> (
           match var.ty with
-          | Ref _ ->
-              compile_error "Initial value for ref type not implemented"
-                (ASTVariable var)
+          | Ref ty -> (
+              self#check_referenceable expr (ASTVariable var);
+              maybe_deref expr;
+              match expr.ty with
+              | NullType -> expr.ty <- var.ty
+              | _ -> type_check (ASTVariable var) ty expr)
           | t -> self#check_assign (ASTVariable var) t expr)
       | None -> ()
 

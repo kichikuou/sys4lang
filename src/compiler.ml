@@ -1078,24 +1078,41 @@ class jaf_compiler ain =
              (Option.value_exn decl.index));
         let v = self#get_local (Option.value_exn decl.index) in
         if v.value_type.is_ref then
-          match v.value_type.data with
-          | Int | Bool | Float | LongInt | FuncType _ ->
-              self#compile_lock_peek;
-              self#compile_local_ref v.index;
-              self#compile_delete_ref;
-              self#write_instruction1 PUSH (-1);
-              self#write_instruction1 PUSH 0;
-              self#write_instruction0 R_ASSIGN;
-              self#write_instruction0 POP;
-              self#write_instruction0 POP;
-              self#compile_unlock_peek
-          | String | Struct _ ->
-              self#compile_lock_peek;
-              self#compile_local_delete v.index;
-              self#compile_unlock_peek
-          | _ ->
-              compile_error "This type of reference variable not implemented"
-                (ASTVariable decl)
+          match decl.initval with
+          | None -> (
+              match v.value_type.data with
+              | Int | Bool | Float | LongInt | FuncType _ ->
+                  self#compile_lock_peek;
+                  self#compile_local_ref v.index;
+                  self#compile_delete_ref;
+                  self#write_instruction1 PUSH (-1);
+                  self#write_instruction1 PUSH 0;
+                  self#write_instruction0 R_ASSIGN;
+                  self#write_instruction0 POP;
+                  self#write_instruction0 POP;
+                  self#compile_unlock_peek
+              | String | Struct _ ->
+                  self#compile_lock_peek;
+                  self#compile_local_delete v.index;
+                  self#compile_unlock_peek
+              | _ ->
+                  compile_error
+                    "This type of reference variable not implemented"
+                    (ASTVariable decl))
+          | Some e ->
+              let lhs =
+                {
+                  node = Ident (decl.name, Some (LocalVariable v.index));
+                  ty = decl.ty;
+                  loc = decl.location;
+                }
+              in
+              self#compile_statement
+                {
+                  node = RefAssign (lhs, e);
+                  delete_vars = [];
+                  loc = decl.location;
+                }
         else
           match v.value_type.data with
           | Int | Bool ->

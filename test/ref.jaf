@@ -46,10 +46,9 @@ int main()
 	assert(s == "13");
 
 	string ss;
-	ref string rs;
+	ref string rs = ss;
 	ref string rt;
-	assert(rs === NULL);
-	rs <- ss;
+	assert(rt === NULL);
 	rt <- rs;
 	assert(rs === rt);
 	rt = "1";
