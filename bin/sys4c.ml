@@ -80,16 +80,6 @@ let compile_sources sources major minor decl_only =
   List.iter sources ~f:compile_file;
   ctx.ain
 
-let format_location (s, e) =
-  Lexing.(
-    let scol = s.pos_cnum - s.pos_bol + 1 in
-    let ecol = e.pos_cnum - e.pos_bol + 1 in
-    if s.pos_lnum = e.pos_lnum then
-      sprintf "%s:%d:%d-%d" s.pos_fname s.pos_lnum scol ecol
-    else sprintf "%s:%d:%d-%d:%d" s.pos_fname s.pos_lnum scol e.pos_lnum ecol)
-
-let format_node_location node = format_location (ast_node_pos node)
-
 let do_compile sources output major minor decl_only compile_unit match_decls =
   try
     (* create output .ain file by compiling/linking inputs *)
@@ -105,66 +95,9 @@ let do_compile sources output major minor decl_only compile_unit match_decls =
     if (not compile_unit) && not decl_only then Link.check_undefined ain;
     (* write output .ain file to disk *)
     Ain.write_file ain output
-  with
-  | CompileError.Syntax_error (s, e) ->
-      printf "%s: Syntax error\n" (format_location (s, e));
-      exit 1
-  | CompileError.Type_error (expected, actual, parent) ->
-      let s_expected = jaf_type_to_string expected in
-      let s_actual =
-        match actual with
-        | None -> "void"
-        | Some expr -> jaf_type_to_string expr.ty
-      in
-      printf "%s: Type error: expected %s; got %s\n"
-        (format_node_location parent)
-        s_expected s_actual;
-      Option.iter actual ~f:(fun e -> printf "\tat: %s\n" (expr_to_string e));
-      printf "\tin: %s\n" (ast_to_string parent);
-      exit 1
-  | CompileError.Undefined_variable (name, node) ->
-      printf "%s: Undefined variable: %s\n" (format_node_location node) name;
-      exit 1
-  | CompileError.Arity_error (f, args, parent) ->
-      printf
-        "%s: wrong number of arguments to function %s (expected %d; got %d)\n"
-        (format_node_location parent)
-        f.name f.nr_args (List.length args);
-      printf "\tin: %s\n" (ast_to_string parent);
-      exit 1
-  | CompileError.Not_lvalue_error (expr, parent) ->
-      printf "%s: not an lvalue: %s\n"
-        (format_node_location parent)
-        (expr_to_string expr);
-      printf "\tin: %s\n" (ast_to_string parent);
-      exit 1
-  | CompileError.Const_error var ->
-      printf "%s: %s\n"
-        (format_location var.location)
-        (match var.initval with
-        | Some _ -> "value of const variable is not constant"
-        | None -> "const variable lacks initializer");
-      printf "\tin: %s\n" (var_to_string var);
-      exit 1
-  | CompileError.CompileError (msg, node) ->
-      printf "%s: %s\n" (format_node_location node) msg;
-      printf "\tin: %s\n" (ast_to_string node);
-      exit 1
-  | CompileError.LinkError msg ->
-      printf "Error: %s\n" msg;
-      exit 1
-  | CompileError.CompilerBug (msg, node) ->
-      (match node with
-      | Some n ->
-          printf "%s: %s\n\tin: %s\n" (format_node_location n) msg
-            (ast_to_string n)
-      | None -> printf "Error: %s\n" msg);
-      printf "(This is a compiler bug!)";
-      exit 1
-  | CompileError.LinkerBug msg ->
-      printf "Error: %s\n" msg;
-      printf "(This is a linker bug!)";
-      exit 1
+  with e ->
+    CompileError.print_error e;
+    exit 1
 
 let cmd_compile_jaf =
   Command.basic ~summary:"Compile a .jaf file"

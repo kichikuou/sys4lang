@@ -16,6 +16,7 @@
 
 open Core
 open Jaf
+open Printf
 
 exception Syntax_error of Lexing.position * Lexing.position
 exception Type_error of jaf_type * expression option * ast_node
@@ -44,3 +45,63 @@ let compile_error str node = raise (CompileError (str, node))
 let compiler_bug str node = raise (CompilerBug (str, node))
 let link_error str = raise (LinkError str)
 let linker_bug str = raise (LinkerBug str)
+
+let format_location (s, e) =
+  Lexing.(
+    let scol = s.pos_cnum - s.pos_bol + 1 in
+    let ecol = e.pos_cnum - e.pos_bol + 1 in
+    if s.pos_lnum = e.pos_lnum then
+      sprintf "%s:%d:%d-%d" s.pos_fname s.pos_lnum scol ecol
+    else sprintf "%s:%d:%d-%d:%d" s.pos_fname s.pos_lnum scol e.pos_lnum ecol)
+
+let format_node_location node = format_location (ast_node_pos node)
+
+let print_error = function
+  | Syntax_error (s, e) -> printf "%s: Syntax error\n" (format_location (s, e))
+  | Type_error (expected, actual, parent) ->
+      let s_expected = jaf_type_to_string expected in
+      let s_actual =
+        match actual with
+        | None -> "void"
+        | Some expr -> jaf_type_to_string expr.ty
+      in
+      printf "%s: Type error: expected %s; got %s\n"
+        (format_node_location parent)
+        s_expected s_actual;
+      Option.iter actual ~f:(fun e -> printf "\tat: %s\n" (expr_to_string e));
+      printf "\tin: %s\n" (ast_to_string parent)
+  | Undefined_variable (name, node) ->
+      printf "%s: Undefined variable: %s\n" (format_node_location node) name
+  | Arity_error (f, args, parent) ->
+      printf
+        "%s: wrong number of arguments to function %s (expected %d; got %d)\n"
+        (format_node_location parent)
+        f.name f.nr_args (List.length args);
+      printf "\tin: %s\n" (ast_to_string parent)
+  | Not_lvalue_error (expr, parent) ->
+      printf "%s: not an lvalue: %s\n"
+        (format_node_location parent)
+        (expr_to_string expr);
+      printf "\tin: %s\n" (ast_to_string parent)
+  | Const_error var ->
+      printf "%s: %s\n"
+        (format_location var.location)
+        (match var.initval with
+        | Some _ -> "value of const variable is not constant"
+        | None -> "const variable lacks initializer");
+      printf "\tin: %s\n" (var_to_string var)
+  | CompileError (msg, node) ->
+      printf "%s: %s\n" (format_node_location node) msg;
+      printf "\tin: %s\n" (ast_to_string node)
+  | LinkError msg -> printf "Error: %s\n" msg
+  | CompilerBug (msg, node) ->
+      (match node with
+      | Some n ->
+          printf "%s: %s\n\tin: %s\n" (format_node_location n) msg
+            (ast_to_string n)
+      | None -> printf "Error: %s\n" msg);
+      printf "(This is a compiler bug!)"
+  | LinkerBug msg ->
+      printf "Error: %s\n" msg;
+      printf "(This is a linker bug!)"
+  | e -> raise e
