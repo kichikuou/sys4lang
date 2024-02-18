@@ -33,10 +33,16 @@ let%expect_test "syntax error" =
 
 let%expect_test "type error" =
   compile_jaf {|
-    void f() { int x = "s"; }
+    void f() {
+      int x = "s";
+      return 1;
+    }
   |};
   [%expect
     {|
-      :2:20-27: Type error: expected int; got string
+      :3:11-18: Type error: expected int; got string
       	at: "s"
-      	in: int x = "s"; |}]
+      	in: int x = "s";
+      :4:7-16: Type error: expected void; got int
+      	at: 1
+      	in: return 1; |}]

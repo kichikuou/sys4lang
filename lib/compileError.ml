@@ -28,6 +28,7 @@ exception CompileError of string * ast_node
 exception CompilerBug of string * ast_node option
 exception LinkError of string
 exception LinkerBug of string
+exception ErrorList of exn list
 
 let syntax_error lexbuf =
   raise
@@ -56,7 +57,8 @@ let format_location (s, e) =
 
 let format_node_location node = format_location (ast_node_pos node)
 
-let print_error = function
+let rec print_error = function
+  | ErrorList es -> List.iter es ~f:print_error
   | Syntax_error (s, e) -> printf "%s: Syntax error\n" (format_location (s, e))
   | Type_error (expected, actual, parent) ->
       let s_expected = jaf_type_to_string expected in

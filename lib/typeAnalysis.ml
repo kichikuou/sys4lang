@@ -140,6 +140,9 @@ let type_coerce_numerics parent a b =
 class type_analyze_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
+    val mutable errors : exn list = []
+    method errors = List.rev errors
+    method catch_errors f = try f () with exn -> errors <- exn :: errors
 
     (* an lvalue is an expression which denotes a location that can be assigned to/referenced *)
     method check_lvalue (e : expression) (parent : ast_node) =
@@ -536,82 +539,85 @@ class type_analyze_visitor ctx =
       | Expression { node = ConstChar msg; _ } ->
           stmt.node <- MessageCall (msg, None, None)
       | _ -> ());
-      super#visit_statement stmt;
-      match stmt.node with
-      | EmptyStatement -> ()
-      | Declarations _ -> ()
-      | Expression _ -> ()
-      | Compound _ -> ()
-      | Labeled (_, _) -> ()
-      | If (test, _, _) | While (test, _) | DoWhile (test, _) ->
-          type_check (ASTStatement stmt) Int test
-      | For (_, Some test, _, _) -> type_check (ASTStatement stmt) Int test
-      | For (_, None, _, _) -> ()
-      | Goto _ -> ()
-      | Continue -> ()
-      | Break -> ()
-      | Switch (expr, _) ->
-          (* TODO: string switch *)
-          type_check (ASTStatement stmt) Int expr
-      | Case (expr, _) ->
-          (* TODO: string switch *)
-          type_check (ASTStatement stmt) Int expr
-      | Default _ -> ()
-      | Return (Some e) -> (
-          match environment#current_function with
-          | None ->
-              compiler_bug "return statement outside of function"
-                (Some (ASTStatement stmt))
-          | Some f -> type_check (ASTStatement stmt) f.return_ty e)
-      | Return None -> (
-          match environment#current_function with
-          | None ->
-              compiler_bug "return statement outside of function"
-                (Some (ASTStatement stmt))
-          | Some f -> (
-              match f.return_ty with
-              | Void -> ()
-              | _ -> type_error f.return_ty None (ASTStatement stmt)))
-      | MessageCall (msg, f_name, _) -> (
-          match f_name with
-          | Some name -> (
-              match Ain.get_function ctx.ain name with
-              | Some f ->
-                  if f.nr_args > 0 then arity_error f [] (ASTStatement stmt);
-                  stmt.node <- MessageCall (msg, f_name, Some f.index)
-              | None -> undefined_variable_error name (ASTStatement stmt))
-          | None -> ())
-      | RefAssign (lhs, rhs) -> (
-          (* rhs must be a ref, or an lvalue in order to create a reference to it *)
-          self#check_referenceable rhs (ASTStatement stmt);
-          maybe_deref rhs;
-          (* check that lhs is a reference variable of the appropriate type *)
-          match lhs.node with
-          | Ident (name, _) -> (
-              match environment#get_local name with
-              | Some v -> (
-                  match v.ty with
-                  | Ref ty -> (
+      self#catch_errors (fun () ->
+          super#visit_statement stmt;
+          match stmt.node with
+          | EmptyStatement -> ()
+          | Declarations _ -> ()
+          | Expression _ -> ()
+          | Compound _ -> ()
+          | Labeled (_, _) -> ()
+          | If (test, _, _) | While (test, _) | DoWhile (test, _) ->
+              type_check (ASTStatement stmt) Int test
+          | For (_, Some test, _, _) -> type_check (ASTStatement stmt) Int test
+          | For (_, None, _, _) -> ()
+          | Goto _ -> ()
+          | Continue -> ()
+          | Break -> ()
+          | Switch (expr, _) ->
+              (* TODO: string switch *)
+              type_check (ASTStatement stmt) Int expr
+          | Case (expr, _) ->
+              (* TODO: string switch *)
+              type_check (ASTStatement stmt) Int expr
+          | Default _ -> ()
+          | Return (Some e) -> (
+              match environment#current_function with
+              | None ->
+                  compiler_bug "return statement outside of function"
+                    (Some (ASTStatement stmt))
+              | Some f -> type_check (ASTStatement stmt) f.return_ty e)
+          | Return None -> (
+              match environment#current_function with
+              | None ->
+                  compiler_bug "return statement outside of function"
+                    (Some (ASTStatement stmt))
+              | Some f -> (
+                  match f.return_ty with
+                  | Void -> ()
+                  | _ -> type_error f.return_ty None (ASTStatement stmt)))
+          | MessageCall (msg, f_name, _) -> (
+              match f_name with
+              | Some name -> (
+                  match Ain.get_function ctx.ain name with
+                  | Some f ->
+                      if f.nr_args > 0 then arity_error f [] (ASTStatement stmt);
+                      stmt.node <- MessageCall (msg, f_name, Some f.index)
+                  | None -> undefined_variable_error name (ASTStatement stmt))
+              | None -> ())
+          | RefAssign (lhs, rhs) -> (
+              (* rhs must be a ref, or an lvalue in order to create a reference to it *)
+              self#check_referenceable rhs (ASTStatement stmt);
+              maybe_deref rhs;
+              (* check that lhs is a reference variable of the appropriate type *)
+              match lhs.node with
+              | Ident (name, _) -> (
+                  match environment#get_local name with
+                  | Some v -> (
+                      match v.ty with
+                      | Ref ty -> (
+                          match rhs.ty with
+                          | NullType -> rhs.ty <- v.ty
+                          | _ -> type_check (ASTStatement stmt) ty rhs)
+                      | _ ->
+                          type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt)
+                      )
+                  | None -> undefined_variable_error name (ASTStatement stmt))
+              | Member (_, _, Some (ClassVariable _)) -> (
+                  match lhs.ty with
+                  | Ref t -> (
                       match rhs.ty with
-                      | NullType -> rhs.ty <- v.ty
-                      | _ -> type_check (ASTStatement stmt) ty rhs)
+                      | NullType -> rhs.ty <- lhs.ty
+                      | _ -> type_check (ASTStatement stmt) t rhs)
                   | _ -> type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
-              | None -> undefined_variable_error name (ASTStatement stmt))
-          | Member (_, _, Some (ClassVariable _)) -> (
-              match lhs.ty with
-              | Ref t -> (
-                  match rhs.ty with
-                  | NullType -> rhs.ty <- lhs.ty
-                  | _ -> type_check (ASTStatement stmt) t rhs)
-              | _ -> type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
-          | _ ->
-              (* FIXME? this isn't really a _type_ error *)
-              type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
-      | ObjSwap (lhs, rhs) ->
-          self#check_lvalue lhs (ASTStatement stmt);
-          self#check_lvalue rhs (ASTStatement stmt);
-          (* FIXME: error if the type is ref or unsupported type *)
-          type_check (ASTStatement stmt) lhs.ty rhs
+              | _ ->
+                  (* FIXME? this isn't really a _type_ error *)
+                  type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
+          | ObjSwap (lhs, rhs) ->
+              self#check_lvalue lhs (ASTStatement stmt);
+              self#check_lvalue rhs (ASTStatement stmt);
+              (* FIXME: error if the type is ref or unsupported type *)
+              type_check (ASTStatement stmt) lhs.ty rhs)
 
     method visit_variable var =
       let rec calculate_array_rank (t : jaf_type) =
@@ -651,8 +657,9 @@ class type_analyze_visitor ctx =
       self#visit_variable var
 
     method! visit_declaration decl =
-      super#visit_declaration decl;
-      match decl with Global g -> self#visit_variable g | _ -> ()
+      self#catch_errors (fun () ->
+          super#visit_declaration decl;
+          match decl with Global g -> self#visit_variable g | _ -> ())
 
     method! visit_fundecl f =
       super#visit_fundecl f;
@@ -676,4 +683,8 @@ class type_analyze_visitor ctx =
               (ASTDeclaration (Function f))
   end
 
-let check_types ctx decls = (new type_analyze_visitor ctx)#visit_toplevel decls
+let check_types ctx decls =
+  let visitor = new type_analyze_visitor ctx in
+  visitor#visit_toplevel decls;
+  let errors = visitor#errors in
+  if not (List.is_empty errors) then raise (CompileError.ErrorList errors)
