@@ -21,6 +21,10 @@ let compile_jaf input =
     Stdio.print_endline "ok"
   with e -> CompileError.print_error e
 
+let%expect_test "empty jaf" =
+  compile_jaf {||};
+  [%expect {| ok |}]
+
 let%expect_test "empty function" =
   compile_jaf {|
     void f() {}

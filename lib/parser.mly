@@ -116,7 +116,7 @@ let rec multidim_array dims t =
 %%
 
 jaf
-  : external_declaration+ EOF { List.concat $1 }
+  : external_declaration* EOF { List.concat $1 }
   ;
 
 hll
