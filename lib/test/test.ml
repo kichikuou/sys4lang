@@ -108,9 +108,6 @@ let%expect_test "RefAssign operator" =
     |};
   [%expect
     {|
-      :3:27-39: Type error: expected ref int; got null
-      	at: NULL
-      	in: return NULL;
       :10:9-17: Type error: expected ref int; got int
       	at: a
       	in: a <- ra;
@@ -149,9 +146,6 @@ let%expect_test "RefEqual operator" =
     |};
   [%expect
     {|
-      :3:27-39: Type error: expected ref int; got null
-      	at: NULL
-      	in: return NULL;
       :10:9-17: Type error: expected ref int; got int
       	at: a
       	in: a === ra

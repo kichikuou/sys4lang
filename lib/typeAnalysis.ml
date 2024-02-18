@@ -593,7 +593,10 @@ class type_analyze_visitor ctx =
               | None ->
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
-              | Some f -> type_check (ASTStatement stmt) f.return_ty e)
+              | Some f -> (
+                  match (f.return_ty, e.ty) with
+                  | Ref _, NullType -> e.ty <- f.return_ty
+                  | _, _ -> type_check (ASTStatement stmt) f.return_ty e))
           | Return None -> (
               match environment#current_function with
               | None ->

@@ -17,6 +17,11 @@ struct S {
 	ref int a;
 };
 
+ref int ref_int()
+{
+	return NULL;
+}
+
 int main()
 {
 	int i;
