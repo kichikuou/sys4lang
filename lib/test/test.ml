@@ -84,3 +84,82 @@ let%expect_test "type error" =
       :4:7-16: Type error: expected void; got int
       	at: 1
       	in: return 1; |}]
+
+let%expect_test "RefAssign operator" =
+  compile_jaf
+    {|
+      struct S { int f; ref int rf; };
+      ref int ref_val() { return NULL; }
+      void f() {
+        int a = 1, b = 2;
+        ref int ra = a, rb = b;
+        S s;
+        ra <- rb;         // ok
+        ra <- a;          // ok
+        a <- ra;          // error: lhs is not a reference
+        NULL <- ra;       // error: lhs can't be the NULL keyword
+        ra <- NULL;       // ok
+        ra <- ref_val();  // ok
+        ra <- 3;          // error: rhs is not a lvalue
+        ref_val() <- ra;  // error: lhs is not a variable
+        s.rf <- ra;       // ok
+        s.f <- ra;        // error: lhs is not a reference
+      }
+    |};
+  [%expect
+    {|
+      :3:27-39: Type error: expected ref int; got null
+      	at: NULL
+      	in: return NULL;
+      :10:9-17: Type error: expected ref int; got int
+      	at: a
+      	in: a <- ra;
+      :11:9-20: Type error: expected ref int; got null
+      	at: NULL
+      	in: NULL <- ra;
+      :14:9-17: not an lvalue: 3
+      	in: ra <- 3;
+      :15:9-25: Type error: expected ref int; got ref int
+      	at: ref_val()
+      	in: ref_val() <- ra;
+      :17:9-19: Type error: expected ref int; got int
+      	at: s.f
+      	in: s.f <- ra; |}]
+
+let%expect_test "RefEqual operator" =
+  compile_jaf
+    {|
+      struct S { int f; ref int rf; };
+      ref int ref_val() { return NULL; }
+      void f() {
+        int a = 1, b = 2;
+        ref int ra = a, rb = b;
+        S s;
+        ra === rb;         // ok
+        ra === a;          // ok
+        a === ra;          // error: lhs is not a reference
+        NULL === ra;       // error: lhs can't be the NULL keyword
+        ra === NULL;       // ok
+        ra === ref_val();  // ok
+        ra === 3;          // error: rhs is not a lvalue
+        ref_val() === ra;  // ok
+        s.rf === ra;       // ok
+        s.f === ra;        // error: lhs is not a reference
+      }
+    |};
+  [%expect
+    {|
+      :3:27-39: Type error: expected ref int; got null
+      	at: NULL
+      	in: return NULL;
+      :10:9-17: Type error: expected ref int; got int
+      	at: a
+      	in: a === ra
+      :11:9-20: Type error: expected null; got ref int
+      	at: ra
+      	in: NULL === ra
+      :14:9-17: not an lvalue: 3
+      	in: ra === 3
+      :17:9-19: Type error: expected ref int; got int
+      	at: s.f
+      	in: s.f === ra |}]

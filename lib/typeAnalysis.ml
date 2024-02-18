@@ -199,6 +199,33 @@ class type_analyze_visitor ctx =
           insert_cast t rhs
       | _ -> type_check parent t rhs
 
+    method check_ref_assign parent (lhs : expression) (rhs : expression) =
+      (* rhs must be a ref, or an lvalue in order to create a reference to it *)
+      self#check_referenceable rhs parent;
+      maybe_deref rhs;
+      (* check that lhs is a reference variable of the appropriate type *)
+      match lhs.node with
+      | Ident (name, _) -> (
+          match environment#get_local name with
+          | Some v -> (
+              match v.ty with
+              | Ref ty -> (
+                  match rhs.ty with
+                  | NullType -> rhs.ty <- v.ty
+                  | _ -> type_check parent ty rhs)
+              | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
+          | None -> undefined_variable_error name parent)
+      | Member (_, _, Some (ClassVariable _)) -> (
+          match lhs.ty with
+          | Ref t -> (
+              match rhs.ty with
+              | NullType -> rhs.ty <- lhs.ty
+              | _ -> type_check parent t rhs)
+          | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
+      | _ ->
+          (* FIXME? this isn't really a _type_ error *)
+          type_error (Ref rhs.ty) (Some lhs) parent
+
     method! visit_expression expr =
       super#visit_expression expr;
       (* convenience functions which always pass parent expression *)
@@ -317,12 +344,12 @@ class type_analyze_visitor ctx =
               | _ -> coerce_numerics a b |> ignore);
               expr.ty <- Int
           | RefEqual | RefNEqual ->
-              (match (a.ty, b.ty) with
-              | Ref _, Ref _ -> check_expr a b
-              | Ref _, NullType -> b.ty <- a.ty
-              | NullType, Ref _ -> a.ty <- b.ty
-              | Ref _, _ -> type_error (Ref Void) (Some b) (ASTExpression expr)
-              | _, _ -> type_error (Ref Void) (Some a) (ASTExpression expr));
+              (match a.node with
+              | Ident _ | Member (_, _, Some (ClassVariable _)) ->
+                  self#check_ref_assign (ASTExpression expr) a b
+              | _ ->
+                  self#check_referenceable b (ASTExpression expr);
+                  check_expr a b);
               expr.ty <- Int)
       | Assign (op, lhs, rhs) -> (
           self#check_lvalue lhs (ASTExpression expr);
@@ -585,34 +612,8 @@ class type_analyze_visitor ctx =
                       stmt.node <- MessageCall (msg, f_name, Some f.index)
                   | None -> undefined_variable_error name (ASTStatement stmt))
               | None -> ())
-          | RefAssign (lhs, rhs) -> (
-              (* rhs must be a ref, or an lvalue in order to create a reference to it *)
-              self#check_referenceable rhs (ASTStatement stmt);
-              maybe_deref rhs;
-              (* check that lhs is a reference variable of the appropriate type *)
-              match lhs.node with
-              | Ident (name, _) -> (
-                  match environment#get_local name with
-                  | Some v -> (
-                      match v.ty with
-                      | Ref ty -> (
-                          match rhs.ty with
-                          | NullType -> rhs.ty <- v.ty
-                          | _ -> type_check (ASTStatement stmt) ty rhs)
-                      | _ ->
-                          type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt)
-                      )
-                  | None -> undefined_variable_error name (ASTStatement stmt))
-              | Member (_, _, Some (ClassVariable _)) -> (
-                  match lhs.ty with
-                  | Ref t -> (
-                      match rhs.ty with
-                      | NullType -> rhs.ty <- lhs.ty
-                      | _ -> type_check (ASTStatement stmt) t rhs)
-                  | _ -> type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
-              | _ ->
-                  (* FIXME? this isn't really a _type_ error *)
-                  type_error (Ref rhs.ty) (Some lhs) (ASTStatement stmt))
+          | RefAssign (lhs, rhs) ->
+              self#check_ref_assign (ASTStatement stmt) lhs rhs
           | ObjSwap (lhs, rhs) ->
               self#check_lvalue lhs (ASTStatement stmt);
               self#check_lvalue rhs (ASTStatement stmt);

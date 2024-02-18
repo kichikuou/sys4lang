@@ -30,7 +30,7 @@ int main()
 	ra <- a;
 	rb <- ra;
 	assert(ra === rb);
-	assert(NULL !== rb);
+	assert(rb !== NULL);
 	rb = 1;
 	assert(a == 1);
 	assert(ra == 1);
@@ -53,7 +53,7 @@ int main()
 	assert(rs === rt);
 	rt = "1";
 	assert(rs === rt);
-	assert(NULL !== rt);
+	assert(rt !== NULL);
 	assert(ss == "1");
 	assert(rs == "1");
 	assert(rs.Length() == 1);
