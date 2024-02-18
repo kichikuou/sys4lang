@@ -32,8 +32,42 @@ let%expect_test "empty function" =
   [%expect {| ok |}]
 
 let%expect_test "syntax error" =
-  compile_jaf {|int c = ;|};
-  [%expect {| :1:9-10: Syntax error |}]
+  compile_jaf {|
+    int c = ;
+  |};
+  [%expect {| :2:13-14: Syntax error |}]
+
+let%expect_test "undefined variable" =
+  compile_jaf {|
+    int c = foo;
+  |};
+  [%expect {| :2:13-16: Undefined variable: foo |}]
+
+let%expect_test "arity error" =
+  compile_jaf {|
+    int c = system.Exit();
+  |};
+  [%expect
+    {|
+      :2:13-26: wrong number of arguments to function Exit (expected 1; got 0)
+      	in: system.Exit() |}]
+
+let%expect_test "not lvalue error" =
+  compile_jaf {|
+    ref int c = 3;
+  |};
+  [%expect {|
+    :2:13-18: not an lvalue: 3
+    	in: ref int c = 3; |}]
+
+let%expect_test "undefined type error" =
+  compile_jaf {|
+    undef_t c;
+  |};
+  [%expect
+    {|
+    :2:13-14: Undefined type: undef_t
+    	in: Unresolved<undef_t> c; |}]
 
 let%expect_test "type error" =
   compile_jaf {|
