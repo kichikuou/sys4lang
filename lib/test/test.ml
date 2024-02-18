@@ -118,7 +118,7 @@ let%expect_test "RefAssign operator" =
       :12:9-20: Type error: expected ref int; got null
       	at: NULL
       	in: NULL <- ra;
-      :15:9-23: Type error: expected int; got ref
+      :15:9-23: Type error: expected ref int; got ref
       	at: ref_S()
       	in: ra <- ref_S();
       :16:9-17: not an lvalue: 3
@@ -158,6 +158,7 @@ let%expect_test "RefEqual operator" =
         other === this;    // ok
         this === other;    // error: lhs is not a reference
         ref_S() === this;  // ok
+        ref_S() === NULL;  // ok
       }
     |};
   [%expect
@@ -165,10 +166,9 @@ let%expect_test "RefEqual operator" =
       :11:9-17: Type error: expected ref int; got int
       	at: a
       	in: a === ra
-      :12:9-20: Type error: expected null; got ref int
-      	at: ra
+      :12:9-20: not an lvalue: NULL
       	in: NULL === ra
-      :15:9-23: Type error: expected int; got ref
+      :15:9-23: Type error: expected ref int; got ref
       	at: ref_S()
       	in: ra === ref_S()
       :16:9-23: Type error: expected ref ; got ref int

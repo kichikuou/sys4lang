@@ -27,8 +27,6 @@ let maybe_deref (e : expression) =
 let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   match (expected, actual) with
   | Ref a, Ref b -> type_equal a b
-  | Ref a, b -> type_equal a b
-  | a, Ref b -> type_equal a b
   | Void, Void -> true
   | Int, (Int | Bool | LongInt) -> true
   | Bool, (Int | Bool | LongInt) -> true
@@ -48,6 +46,7 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | TyFunction _, TyFunction _ -> true
   | TyMethod _, TyMethod _ -> true
   | Void, _
+  | Ref _, _
   | Int, _
   | Bool, _
   | LongInt, _
@@ -83,6 +82,18 @@ let type_check parent expected (actual : expression) =
   | a_t ->
       if not (type_equal expected a_t) then
         type_error expected (Some actual) parent
+
+let ref_type_check parent expected (actual : expression) =
+  match actual.ty with
+  | NullType -> actual.ty <- Ref expected
+  | Untyped ->
+      compiler_bug "tried to type check untyped expression" (Some parent)
+  | Ref t ->
+      if not (type_equal expected t) then
+        type_error (Ref expected) (Some actual) parent
+  | _ ->
+      if not (type_equal expected actual.ty) then
+        type_error (Ref expected) (Some actual) parent
 
 let type_check_numeric parent (actual : expression) =
   maybe_deref actual;
@@ -210,18 +221,12 @@ class type_analyze_visitor ctx =
           match environment#get_local name with
           | Some v -> (
               match v.ty with
-              | Ref ty -> (
-                  match rhs.ty with
-                  | NullType -> rhs.ty <- v.ty
-                  | _ -> type_check parent ty rhs)
+              | Ref ty -> ref_type_check parent ty rhs
               | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
           | None -> undefined_variable_error name parent)
       | Member (_, _, Some (ClassVariable _)) -> (
           match lhs.ty with
-          | Ref t -> (
-              match rhs.ty with
-              | NullType -> rhs.ty <- lhs.ty
-              | _ -> type_check parent t rhs)
+          | Ref t -> ref_type_check parent t rhs
           | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
       | _ ->
           (* FIXME? this isn't really a _type_ error *)
@@ -349,9 +354,11 @@ class type_analyze_visitor ctx =
               | Ident _ | Member (_, _, Some (ClassVariable _)) ->
                   self#check_ref_assign (ASTExpression expr) a b
               | This -> not_an_lvalue_error a (ASTExpression expr)
-              | _ ->
+              | _ -> (
                   self#check_referenceable b (ASTExpression expr);
-                  check_expr a b);
+                  match a.ty with
+                  | Ref t -> ref_type_check (ASTExpression expr) t b
+                  | _ -> not_an_lvalue_error a (ASTExpression expr)));
               expr.ty <- Int)
       | Assign (op, lhs, rhs) -> (
           self#check_lvalue lhs (ASTExpression expr);
