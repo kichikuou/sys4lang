@@ -90,7 +90,8 @@ let%expect_test "RefAssign operator" =
     {|
       struct S { int f; ref int rf; };
       ref int ref_val() { return NULL; }
-      void f() {
+      ref S ref_S() { return NULL; }
+      void S::f(ref S other) {
         int a = 1, b = 2;
         ref int ra = a, rb = b;
         S s;
@@ -100,35 +101,45 @@ let%expect_test "RefAssign operator" =
         NULL <- ra;       // error: lhs can't be the NULL keyword
         ra <- NULL;       // ok
         ra <- ref_val();  // ok
+        ra <- ref_S();    // error: referenced type mismatch
         ra <- 3;          // error: rhs is not a lvalue
         ref_val() <- ra;  // error: lhs is not a variable
         s.rf <- ra;       // ok
         s.f <- ra;        // error: lhs is not a reference
+        other <- this;    // ok
+        this <- other;    // error: lhs is not a reference
       }
     |};
   [%expect
     {|
-      :10:9-17: Type error: expected ref int; got int
+      :11:9-17: Type error: expected ref int; got int
       	at: a
       	in: a <- ra;
-      :11:9-20: Type error: expected ref int; got null
+      :12:9-20: Type error: expected ref int; got null
       	at: NULL
       	in: NULL <- ra;
-      :14:9-17: not an lvalue: 3
+      :15:9-23: Type error: expected int; got ref
+      	at: ref_S()
+      	in: ra <- ref_S();
+      :16:9-17: not an lvalue: 3
       	in: ra <- 3;
-      :15:9-25: Type error: expected ref int; got ref int
+      :17:9-25: Type error: expected ref int; got ref int
       	at: ref_val()
       	in: ref_val() <- ra;
-      :17:9-19: Type error: expected ref int; got int
+      :19:9-19: Type error: expected ref int; got int
       	at: s.f
-      	in: s.f <- ra; |}]
+      	in: s.f <- ra;
+      :21:9-23: Type error: expected ref S; got
+      	at: this
+      	in: this <- other; |}]
 
 let%expect_test "RefEqual operator" =
   compile_jaf
     {|
       struct S { int f; ref int rf; };
-      ref int ref_val() { return NULL; }
-      void f() {
+      ref int ref_int() { return NULL; }
+      ref S ref_S() { return NULL; }
+      void S::f(ref S other) {
         int a = 1, b = 2;
         ref int ra = a, rb = b;
         S s;
@@ -137,23 +148,36 @@ let%expect_test "RefEqual operator" =
         a === ra;          // error: lhs is not a reference
         NULL === ra;       // error: lhs can't be the NULL keyword
         ra === NULL;       // ok
-        ra === ref_val();  // ok
+        ra === ref_int();  // ok
+        ra === ref_S();    // error: referenced type mismatch
+        ref_S() === ra;    // error: referenced type mismatch
         ra === 3;          // error: rhs is not a lvalue
-        ref_val() === ra;  // ok
+        ref_int() === ra;  // ok
         s.rf === ra;       // ok
         s.f === ra;        // error: lhs is not a reference
+        other === this;    // ok
+        this === other;    // error: lhs is not a reference
+        ref_S() === this;  // ok
       }
     |};
   [%expect
     {|
-      :10:9-17: Type error: expected ref int; got int
+      :11:9-17: Type error: expected ref int; got int
       	at: a
       	in: a === ra
-      :11:9-20: Type error: expected null; got ref int
+      :12:9-20: Type error: expected null; got ref int
       	at: ra
       	in: NULL === ra
-      :14:9-17: not an lvalue: 3
+      :15:9-23: Type error: expected int; got ref
+      	at: ref_S()
+      	in: ra === ref_S()
+      :16:9-23: Type error: expected ref ; got ref int
+      	at: ra
+      	in: ref_S() === ra
+      :17:9-17: not an lvalue: 3
       	in: ra === 3
-      :17:9-19: Type error: expected ref int; got int
+      :20:9-19: Type error: expected ref int; got int
       	at: s.f
-      	in: s.f === ra |}]
+      	in: s.f === ra
+      :22:9-23: not an lvalue: this
+      	in: this === other |}]

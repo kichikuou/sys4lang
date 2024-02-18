@@ -144,7 +144,7 @@ class type_analyze_visitor ctx =
     method errors = List.rev errors
     method catch_errors f = try f () with exn -> errors <- exn :: errors
 
-    (* an lvalue is an expression which denotes a location that can be assigned to/referenced *)
+    (* an lvalue is an expression which denotes a location that can be assigned to *)
     method check_lvalue (e : expression) (parent : ast_node) =
       let check_lvalue_type = function
         | TyFunction _ -> not_an_lvalue_error e parent
@@ -157,11 +157,12 @@ class type_analyze_visitor ctx =
       | New (_, _, _) -> ()
       | _ -> not_an_lvalue_error e parent
 
+    (* A value from which a reference can be made. NULL, reference, this, and lvalue are referenceable. *)
     method check_referenceable (e : expression) (parent : ast_node) =
       match e.ty with
       | NullType -> ()
       | Ref _ -> ()
-      | _ -> self#check_lvalue e parent
+      | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
     method check_delegate_compatible parent dg_i (expr : expression) =
       match expr.ty with
@@ -347,6 +348,7 @@ class type_analyze_visitor ctx =
               (match a.node with
               | Ident _ | Member (_, _, Some (ClassVariable _)) ->
                   self#check_ref_assign (ASTExpression expr) a b
+              | This -> not_an_lvalue_error a (ASTExpression expr)
               | _ ->
                   self#check_referenceable b (ASTExpression expr);
                   check_expr a b);
