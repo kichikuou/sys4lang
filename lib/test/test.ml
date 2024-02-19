@@ -190,14 +190,17 @@ let%expect_test "variable declarations" =
 let%expect_test "RefAssign operator" =
   compile_jaf
     {|
+      const int false = 0;
       struct S { int f; ref int rf; };
       ref int ref_val() { return NULL; }
       ref S ref_S() { return NULL; }
+      int g_i;
+      ref int g_ri;
       void S::f(ref S other) {
         int a = 1, b = 2;
-        ref int ra = a, rb = b;
+        ref int ra = a;
         S s;
-        ra <- rb;         // ok
+        ra <- ra;         // ok
         ra <- a;          // ok
         a <- ra;          // error: lhs is not a reference
         NULL <- ra;       // error: lhs can't be the NULL keyword
@@ -210,42 +213,56 @@ let%expect_test "RefAssign operator" =
         s.f <- ra;        // error: lhs is not a reference
         other <- this;    // ok
         this <- other;    // error: lhs is not a reference
+        g_ri <- ra;       // ok
+        g_i <- ra;        // error: lhs is not a reference
+        false <- NULL;    // error: lhs is not a reference
+        undefined <- ra;  // error: undefined is not defined
       }
     |};
   [%expect
     {|
-      :11:9-17: Type error: expected ref int; got int
+      :14:9-17: Type error: expected ref int; got int
       	at: a
       	in: a <- ra;
-      :12:9-20: Type error: expected ref int; got null
+      :15:9-20: Type error: expected ref int; got null
       	at: NULL
       	in: NULL <- ra;
-      :15:9-23: Type error: expected ref int; got ref
+      :18:9-23: Type error: expected ref int; got ref
       	at: ref_S()
       	in: ra <- ref_S();
-      :16:9-17: not an lvalue: 3
+      :19:9-17: not an lvalue: 3
       	in: ra <- 3;
-      :17:9-25: Type error: expected ref int; got ref int
+      :20:9-25: Type error: expected ref int; got ref int
       	at: ref_val()
       	in: ref_val() <- ra;
-      :19:9-19: Type error: expected ref int; got int
+      :22:9-19: Type error: expected ref int; got int
       	at: s.f
       	in: s.f <- ra;
-      :21:9-23: Type error: expected ref S; got
+      :24:9-23: Type error: expected ref S; got
       	at: this
-      	in: this <- other; |}]
+      	in: this <- other;
+      :26:9-19: Type error: expected ref int; got int
+      	at: g_i
+      	in: g_i <- ra;
+      :27:9-23: Type error: expected ref null; got int
+      	at: false
+      	in: false <- NULL;
+      :28:9-18: Undefined variable: undefined |}]
 
 let%expect_test "RefEqual operator" =
   compile_jaf
     {|
+      const int false = 0;
       struct S { int f; ref int rf; };
       ref int ref_int() { return NULL; }
       ref S ref_S() { return NULL; }
+      int g_i;
+      ref int g_ri;
       void S::f(ref S other) {
         int a = 1, b = 2;
-        ref int ra = a, rb = b;
+        ref int ra = a;
         S s;
-        ra === rb;         // ok
+        ra === ra;         // ok
         ra === a;          // ok
         a === ra;          // error: lhs is not a reference
         NULL === ra;       // error: lhs can't be the NULL keyword
@@ -261,25 +278,36 @@ let%expect_test "RefEqual operator" =
         this === other;    // error: lhs is not a reference
         ref_S() === this;  // ok
         ref_S() === NULL;  // ok
+        g_ri === ra;       // ok
+        g_i === ra;        // error: lhs is not a reference
+        false === NULL;    // error: lhs is not a reference
+        undefined === ra;  // error: undefined is not defined
       }
     |};
   [%expect
     {|
-      :11:9-17: Type error: expected ref int; got int
+      :14:9-17: Type error: expected ref int; got int
       	at: a
       	in: a === ra
-      :12:9-20: not an lvalue: NULL
+      :15:9-20: not an lvalue: NULL
       	in: NULL === ra
-      :15:9-23: Type error: expected ref int; got ref
+      :18:9-23: Type error: expected ref int; got ref
       	at: ref_S()
       	in: ra === ref_S()
-      :16:9-23: Type error: expected ref ; got ref int
+      :19:9-23: Type error: expected ref ; got ref int
       	at: ra
       	in: ref_S() === ra
-      :17:9-17: not an lvalue: 3
+      :20:9-17: not an lvalue: 3
       	in: ra === 3
-      :20:9-19: Type error: expected ref int; got int
+      :23:9-19: Type error: expected ref int; got int
       	at: s.f
       	in: s.f === ra
-      :22:9-23: not an lvalue: this
-      	in: this === other |}]
+      :25:9-23: not an lvalue: this
+      	in: this === other
+      :29:9-19: Type error: expected ref int; got int
+      	at: g_i
+      	in: g_i === ra
+      :30:9-23: Type error: expected ref null; got int
+      	at: false
+      	in: false === NULL
+      :31:9-18: Undefined variable: undefined |}]

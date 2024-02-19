@@ -218,12 +218,22 @@ class type_analyze_visitor ctx =
       (* check that lhs is a reference variable of the appropriate type *)
       match lhs.node with
       | Ident (name, _) -> (
-          match environment#get_local name with
-          | Some v -> (
+          match environment#resolve name with
+          | ResolvedLocal v -> (
               match v.ty with
               | Ref ty -> ref_type_check parent ty rhs
               | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
-          | None -> undefined_variable_error name parent)
+          | ResolvedGlobal g ->
+              if g.value_type.is_ref then
+                ref_type_check parent
+                  (data_type_to_jaf_type g.value_type.data)
+                  rhs
+              else
+                type_error
+                  (Ref (data_type_to_jaf_type g.value_type.data))
+                  (Some lhs) parent
+          | UnresolvedName -> undefined_variable_error name parent
+          | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
       | Member (_, _, Some (ClassVariable _)) -> (
           match lhs.ty with
           | Ref t -> ref_type_check parent t rhs

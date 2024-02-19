@@ -1,3 +1,5 @@
+ref int g_ri;
+
 void intref(ref int a)
 {
 	a = 13;
@@ -41,6 +43,8 @@ int main()
 	assert(ra == 1);
 	rb <- NULL;
 	assert(rb === NULL);
+	g_ri <- a;
+	assert(g_ri === ra);
 
 	float f;
 	floatref(f);
