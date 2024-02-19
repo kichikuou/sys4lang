@@ -85,6 +85,53 @@ let%expect_test "type error" =
       	at: 1
       	in: return 1; |}]
 
+let%expect_test "function call" =
+  compile_jaf
+    {|
+      functype void func(int x);
+      void f_int(int x) {}
+      void f_float(float x) {}
+      void f_ref_int(ref int x) {}
+      void f_ref_float(ref float x) {}
+      void f_func(func x) {}
+
+      void test() {
+        int i;
+        ref int ri;
+        f_int(3);         // ok
+        f_int(3.0);       // ok
+        f_int(ri);        // ok
+        f_float(3);       // ok
+        f_float(3.0);     // ok
+        f_float(ri);      // ok
+        f_ref_int(NULL);  // ok
+        f_ref_int(3);     // error
+        f_ref_int(i);     // ok;
+        f_ref_int(ri);    // ok
+        f_ref_float(3);   // error
+        f_ref_float(i);   // error
+        f_ref_float(ri);  // error
+        f_func(&f_int);   // ok
+        f_func(&f_float); // error
+        f_func(NULL);     // ok
+      }
+    |};
+  [%expect
+    {|
+      :19:19-20: not an lvalue: 3
+      	in: 3
+      :22:21-22: not an lvalue: 3
+      	in: 3
+      :23:21-22: Type error: expected ref float; got int
+      	at: i
+      	in: i
+      :24:21-23: Type error: expected ref float; got ref int
+      	at: ri
+      	in: ri
+      :26:16-24: Type error: expected ; got ref function<2>
+      	at: &f_float
+      	in: &f_float |}]
+
 let%expect_test "RefAssign operator" =
   compile_jaf
     {|

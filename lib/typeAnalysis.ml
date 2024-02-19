@@ -248,7 +248,15 @@ class type_analyze_visitor ctx =
           arity_error f args (ASTExpression expr)
         else if nr_params > 0 then
           let check_arg a (v : Ain.Variable.t) =
-            check (data_type_to_jaf_type v.value_type.data) a
+            if v.value_type.is_ref then (
+              self#check_referenceable a (ASTExpression a);
+              ref_type_check (ASTExpression a)
+                (data_type_to_jaf_type v.value_type.data)
+                a)
+            else
+              self#check_assign (ASTExpression a)
+                (ain_to_jaf_type v.value_type)
+                a
           in
           List.iter2_exn args params ~f:check_arg
       in
