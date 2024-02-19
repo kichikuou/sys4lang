@@ -178,6 +178,15 @@ let%expect_test "return statement" =
       	at: &f_int
       	in: return &f_int; |}]
 
+let%expect_test "variable declarations" =
+  compile_jaf
+    {|
+      void f() {
+        ref int ri = NULL;       // ok
+      }
+    |};
+  [%expect {| ok |}]
+
 let%expect_test "RefAssign operator" =
   compile_jaf
     {|
