@@ -187,6 +187,16 @@ let%expect_test "variable declarations" =
     |};
   [%expect {| ok |}]
 
+let%expect_test "class declarations" =
+  compile_jaf
+    {|
+      class C {
+        C(void) {}
+        ~C() {}
+      };
+    |};
+  [%expect {| ok |}]
+
 let%expect_test "RefAssign operator" =
   compile_jaf
     {|

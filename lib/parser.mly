@@ -489,8 +489,8 @@ struct_declaration
     { decls false $1 $2 |> List.map (fun d -> MemberDecl d) }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Method (func $sloc $1 $2 $3 $4)] }
-  | IDENTIFIER LPAREN RPAREN block
-    { [Constructor (func $sloc Void $1 [] $4)] }
+  | IDENTIFIER LPAREN VOID? RPAREN block
+    { [Constructor (func $sloc Void $1 [] $5)] }
   | BITNOT IDENTIFIER LPAREN RPAREN block
     { [Destructor (func $sloc Void $2 [] $5)] }
   ;
