@@ -14,7 +14,7 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Jaf
 open Bytecode
 open CompileError
@@ -462,7 +462,7 @@ class jaf_compiler ain =
           (* FIXME: need to decode UTF-8 char and convert to JIS code-point *)
           if not (String.length s = 1) then
             compile_error "Invalid character constant" (ASTExpression expr)
-          else self#write_instruction1 PUSH (int_of_char (String.get s 0))
+          else self#write_instruction1 PUSH (Char.to_int (String.get s 0))
       | ConstString s ->
           let no = Ain.add_string ain s in
           self#write_instruction1 S_PUSH no

@@ -1,4 +1,9 @@
-open Core
+open Base
+
+let sprintf = Printf.sprintf
+
+module In_channel = Stdio.In_channel
+module Out_channel = Stdio.Out_channel
 
 module Type = struct
   type data =

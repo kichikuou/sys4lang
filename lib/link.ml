@@ -14,7 +14,7 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Ain
 open CompileError
 
@@ -43,7 +43,7 @@ let check_hll_defs a b =
     if not (Library.equal (get_library_by_index a i) (get_library_by_index b i))
     then link_error "HLL declaration mismatch: Library not equal"
   in
-  List.iter (List.init n ~f:( ~+ )) ~f:check_lib
+  List.iter (List.init n ~f:Stdlib.( ~+ )) ~f:check_lib
 
 let link_global reloc ain (g : Global.t) =
   let no =

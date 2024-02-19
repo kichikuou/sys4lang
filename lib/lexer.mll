@@ -15,7 +15,7 @@
  *)
 
 {
-open Core
+open Base
 open Parser
 
 exception Error
@@ -143,16 +143,16 @@ rule token = parse
   | "//" [^ '\n']*          { token lexbuf }
   | "/*"                    { block_comment lexbuf }
   | ['\n' ]                 { Lexing.new_line lexbuf; token lexbuf }
-  | d+ as n                 { I_CONSTANT(int_of_string n) }
-  | (bp b+) as n            { I_CONSTANT(int_of_string n) }
-  | (op o+) as n            { I_CONSTANT(int_of_string n) }
-  | (hp h+) as n            { I_CONSTANT(int_of_string n) }
-  | (d+ e) as n             { F_CONSTANT(float_of_string n) }
-  | (d* '.' d+ e?) as n     { F_CONSTANT(float_of_string n) }
-  | (d+ '.' e?) as n        { F_CONSTANT(float_of_string n) }
-  | (hp h+ p) as n          { F_CONSTANT(float_of_string n) }
-  | (hp h* '.' h+ p) as n   { F_CONSTANT(float_of_string n) }
-  | (hp h+ '.' p) as n      { F_CONSTANT(float_of_string n) }
+  | d+ as n                 { I_CONSTANT(Int.of_string n) }
+  | (bp b+) as n            { I_CONSTANT(Int.of_string n) }
+  | (op o+) as n            { I_CONSTANT(Int.of_string n) }
+  | (hp h+) as n            { I_CONSTANT(Int.of_string n) }
+  | (d+ e) as n             { F_CONSTANT(Float.of_string n) }
+  | (d* '.' d+ e?) as n     { F_CONSTANT(Float.of_string n) }
+  | (d+ '.' e?) as n        { F_CONSTANT(Float.of_string n) }
+  | (hp h+ p) as n          { F_CONSTANT(Float.of_string n) }
+  | (hp h* '.' h+ p) as n   { F_CONSTANT(Float.of_string n) }
+  | (hp h+ '.' p) as n      { F_CONSTANT(Float.of_string n) }
   | ("'" sc* "'") as s      { C_CONSTANT(process_message s) }
   | ('"' sc* '"' ws*)+ as s { S_CONSTANT(process_string s) }
   | '+'                     { PLUS }

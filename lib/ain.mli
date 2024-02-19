@@ -154,7 +154,7 @@ end
 
 val create : int -> int -> t
 val load : string -> t
-val write : ?raw:bool -> t -> Out_channel.t -> unit
+val write : ?raw:bool -> t -> Stdio.Out_channel.t -> unit
 val write_file : t -> string -> unit
 val get_global : t -> string -> Variable.t option
 val get_global_by_index : t -> int -> Variable.t

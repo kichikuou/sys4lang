@@ -14,9 +14,11 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Jaf
 open Printf
+
+let printf = Stdio.printf
 
 exception Syntax_error of Lexing.position * Lexing.position
 exception Type_error of jaf_type * expression option * ast_node

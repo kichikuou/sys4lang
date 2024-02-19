@@ -1,6 +1,6 @@
 (library
  (name Sys4cLib)
- (libraries core core_unix.filename_unix core_unix.command_unix camlzip)
+ (libraries base camlzip)
  (preprocess
   (pps ppx_jane)))
 

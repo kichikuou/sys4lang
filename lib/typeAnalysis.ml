@@ -14,7 +14,7 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Jaf
 open CompileError
 

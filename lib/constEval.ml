@@ -14,7 +14,7 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Jaf
 open CompileError
 
@@ -98,7 +98,8 @@ class const_eval_visitor ctx =
       | Unary (op, e) -> (
           let const_not i = if i = 0 then 1 else 0 in
           match op with
-          | UPlus -> const_unary expr e.node (Some ( ~+ )) (Some ( ~+. ))
+          | UPlus ->
+              const_unary expr e.node (Some Stdlib.( ~+ )) (Some Stdlib.( ~+. ))
           | UMinus -> const_unary expr e.node (Some ( ~- )) (Some ( ~-. ))
           | LogNot -> const_unary expr e.node (Some const_not) None
           | BitNot -> const_unary expr e.node (Some lnot) None
@@ -132,7 +133,7 @@ class const_eval_visitor ctx =
           | Minus -> const_binary expr a.node b.node (Some ( - )) (Some ( -. ))
           | Times -> const_binary expr a.node b.node (Some ( * )) (Some ( *. ))
           | Divide -> const_binary expr a.node b.node (Some ( / )) (Some ( /. ))
-          | Modulo -> const_binary expr a.node b.node (Some ( mod )) None
+          | Modulo -> const_binary expr a.node b.node (Some Stdlib.( mod )) None
           | Equal -> const_compare expr a.node b.node const_eq const_feq
           | NEqual -> const_compare expr a.node b.node const_neq const_fneq
           | LT -> const_compare expr a.node b.node const_lt const_flt
@@ -159,7 +160,7 @@ class const_eval_visitor ctx =
           | Int -> (
               match e.node with
               | ConstInt _ -> const_replace expr e.node
-              | ConstFloat f -> const_replace expr (ConstInt (int_of_float f))
+              | ConstFloat f -> const_replace expr (ConstInt (Int.of_float f))
               | ConstChar _ -> () (* TODO? *)
               | _ -> ())
           | Bool -> (
@@ -169,7 +170,7 @@ class const_eval_visitor ctx =
               | _ -> ())
           | Float -> (
               match e.node with
-              | ConstInt i -> const_replace expr (ConstFloat (float_of_int i))
+              | ConstInt i -> const_replace expr (ConstFloat (Float.of_int i))
               | ConstFloat _ -> const_replace expr e.node
               | ConstChar _ -> () (* TODO? *)
               | _ -> ())

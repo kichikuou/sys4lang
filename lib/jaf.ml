@@ -14,7 +14,7 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Printf
 
 type unary_op =
@@ -523,8 +523,8 @@ let rec jaf_type_to_string = function
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
   | NullType -> "null"
-  | TyFunction i -> "function<" ^ string_of_int i ^ ">"
-  | TyMethod i -> "method<" ^ string_of_int i ^ ">"
+  | TyFunction i -> "function<" ^ Int.to_string i ^ ">"
+  | TyMethod i -> "method<" ^ Int.to_string i ^ ">"
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
@@ -538,8 +538,8 @@ let rec expr_to_string (e : expression) =
         sprintf "(%s)" (loop (expr_to_string arg) args)
   in
   match e.node with
-  | ConstInt i -> string_of_int i
-  | ConstFloat f -> string_of_float f
+  | ConstInt i -> Int.to_string i
+  | ConstFloat f -> Float.to_string f
   | ConstChar s -> sprintf "'%s'" s
   | ConstString s -> sprintf "\"%s\"" s
   | Ident (s, _) -> s

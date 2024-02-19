@@ -1,4 +1,4 @@
-open Core
+open Base
 
 type instruction = {
   op_i : int;
@@ -53,5 +53,7 @@ let arg_type dasm i = List.nth_exn (get_instruction dasm).args i
 let arg dasm i =
   Stdlib.Bytes.get_int32_le (Ain.get_code dasm.ain) (dasm.addr + (2 + (i * 4)))
 
-let arguments dasm = List.map (List.init (nr_args dasm) ~f:( ~+ )) ~f:(arg dasm)
+let arguments dasm =
+  List.map (List.init (nr_args dasm) ~f:Stdlib.( ~+ )) ~f:(arg dasm)
+
 let argument_types dasm = (get_instruction dasm).args
