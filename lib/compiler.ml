@@ -1103,7 +1103,7 @@ class jaf_compiler ain =
               let lhs =
                 {
                   node = Ident (decl.name, Some (LocalVariable v.index));
-                  ty = decl.ty;
+                  ty = decl.type_spec.ty;
                   loc = decl.location;
                 }
               in

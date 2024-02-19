@@ -220,7 +220,7 @@ class type_analyze_visitor ctx =
       | Ident (name, _) -> (
           match environment#resolve name with
           | ResolvedLocal v -> (
-              match v.ty with
+              match v.type_spec.ty with
               | Ref ty -> ref_type_check parent ty rhs
               | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
           | ResolvedGlobal g ->
@@ -279,10 +279,10 @@ class type_analyze_visitor ctx =
           match environment#resolve name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, Some (LocalVariable (-1)));
-              expr.ty <- v.ty
+              expr.ty <- v.type_spec.ty
           | ResolvedConstant v ->
               expr.node <- Ident (name, Some GlobalConstant);
-              expr.ty <- v.ty
+              expr.ty <- v.type_spec.ty
           | ResolvedGlobal g ->
               expr.node <- Ident (name, Some (GlobalVariable g.index));
               expr.ty <- ain_to_jaf_type g.value_type
@@ -621,20 +621,20 @@ class type_analyze_visitor ctx =
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
               | Some f -> (
-                  match f.return_ty with
+                  match f.return.ty with
                   | Ref ty ->
                       self#check_referenceable e (ASTExpression e);
                       ref_type_check (ASTStatement stmt) ty e
-                  | _ -> self#check_assign (ASTStatement stmt) f.return_ty e))
+                  | _ -> self#check_assign (ASTStatement stmt) f.return.ty e))
           | Return None -> (
               match environment#current_function with
               | None ->
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
               | Some f -> (
-                  match f.return_ty with
+                  match f.return.ty with
                   | Void -> ()
-                  | _ -> type_error f.return_ty None (ASTStatement stmt)))
+                  | _ -> type_error f.return.ty None (ASTStatement stmt)))
           | MessageCall (msg, f_name, _) -> (
               match f_name with
               | Some name -> (
@@ -656,7 +656,7 @@ class type_analyze_visitor ctx =
       let rec calculate_array_rank (t : jaf_type) =
         match t with Array sub_t -> 1 + calculate_array_rank sub_t | _ -> 0
       in
-      let rank = calculate_array_rank var.ty in
+      let rank = calculate_array_rank var.type_spec.ty in
       let nr_dims = List.length var.array_dim in
       (* Only one array dimension may be specified in ain v11+ *)
       if nr_dims > 1 && Ain.version_gte ctx.ain (11, 0) then
@@ -675,7 +675,7 @@ class type_analyze_visitor ctx =
       (* Check initval matches declared type *)
       match var.initval with
       | Some expr -> (
-          match var.ty with
+          match var.type_spec.ty with
           | Ref ty ->
               self#check_referenceable expr (ASTVariable var);
               maybe_deref expr;
@@ -695,15 +695,15 @@ class type_analyze_visitor ctx =
     method! visit_fundecl f =
       super#visit_fundecl f;
       if String.equal f.name "main" then
-        match (f.return_ty, f.params) with
+        match (f.return.ty, f.params) with
         | Int, [] -> Ain.set_main_function ctx.ain (Option.value_exn f.index)
         | _ ->
             compile_error "Invalid declaration of 'main' function"
               (ASTDeclaration (Function f))
       else if String.equal f.name "message" then
-        match f.return_ty with
+        match f.return.ty with
         | Void -> (
-            match List.map f.params ~f:(fun v -> v.ty) with
+            match List.map f.params ~f:(fun v -> v.type_spec.ty) with
             | [ Int; Int; String ] ->
                 Ain.set_message_function ctx.ain (Option.value_exn f.index)
             | _ ->

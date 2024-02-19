@@ -86,6 +86,11 @@ type jaf_type =
   | TyFunction of int
   | TyMethod of int
 
+type type_specifier = {
+  mutable ty : jaf_type;
+  location : Lexing.position * Lexing.position;
+}
+
 type ident_type =
   | LocalVariable of int
   | GlobalVariable of int
@@ -170,7 +175,7 @@ and variable = {
   location : Lexing.position * Lexing.position;
   array_dim : expression list;
   is_const : bool;
-  mutable ty : jaf_type;
+  type_spec : type_specifier;
   initval : expression option;
   mutable index : int option;
 }
@@ -179,7 +184,7 @@ type fundecl = {
   mutable name : string;
   loc : Lexing.position * Lexing.position;
   struct_name : string option;
-  mutable return_ty : jaf_type;
+  return : type_specifier;
   params : variable list;
   body : statement list;
   is_label : bool;
@@ -227,6 +232,7 @@ type ast_node =
   | ASTStatement of statement
   | ASTVariable of variable
   | ASTDeclaration of declaration
+  | ASTType of type_specifier
 
 let ast_node_pos = function
   | ASTExpression e -> e.loc
@@ -240,6 +246,7 @@ let ast_node_pos = function
       | DelegateDef f -> f.loc
       | StructDef s -> s.loc
       | Enum e -> e.loc)
+  | ASTType t -> t.location
 
 type context = { ain : Ain.t; mutable const_vars : variable list }
 
@@ -418,17 +425,21 @@ class ivisitor ctx =
           self#visit_expression b
 
     method visit_local_variable v =
+      self#visit_type_specifier v.type_spec;
       List.iter v.array_dim ~f:self#visit_expression;
       Option.iter v.initval ~f:self#visit_expression;
       environment#push_var v
 
     method visit_fundecl f =
+      self#visit_type_specifier f.return;
+      List.iter f.params ~f:(fun p -> self#visit_type_specifier p.type_spec);
       environment#enter_function f;
       List.iter f.body ~f:self#visit_statement;
       environment#leave_function
 
     method visit_declaration d =
       let visit_vardecl d =
+        self#visit_type_specifier d.type_spec;
         List.iter d.array_dim ~f:self#visit_expression;
         Option.iter d.initval ~f:self#visit_expression
       in
@@ -452,6 +463,7 @@ class ivisitor ctx =
           in
           List.iter enum.values ~f:visit_enumval
 
+    method visit_type_specifier (_t : type_specifier) = ()
     method visit_toplevel decls = List.iter decls ~f:self#visit_declaration
   end
 
@@ -615,7 +627,7 @@ let rec stmt_to_string (stmt : statement) =
   | ObjSwap (a, b) -> sprintf "%s <=> %s;" (expr_to_string a) (expr_to_string b)
 
 and var_to_string' d =
-  let t = jaf_type_to_string d.ty in
+  let t = jaf_type_to_string d.type_spec.ty in
   let dim_iter l r = l ^ sprintf "[%s]" (expr_to_string r) in
   let dims = List.fold d.array_dim ~init:"" ~f:dim_iter in
   let init =
@@ -643,16 +655,16 @@ let decl_to_string d =
   match d with
   | Global d -> var_to_string d
   | Function d ->
-      let return = jaf_type_to_string d.return_ty in
+      let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
       let body = block_to_string d.body in
       sprintf "%s %s%s { %s }" return d.name params body
   | FuncTypeDef d ->
-      let return = jaf_type_to_string d.return_ty in
+      let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
       sprintf "functype %s %s%s;" return d.name params
   | DelegateDef d ->
-      let return = jaf_type_to_string d.return_ty in
+      let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
       sprintf "delegate %s %s%s;" return d.name params
   | StructDef d ->
@@ -669,7 +681,7 @@ let decl_to_string d =
             let body = block_to_string d.body in
             sprintf "~%s%s { %s }" d.name params body
         | Method d ->
-            let return = jaf_type_to_string d.return_ty in
+            let return = jaf_type_to_string d.return.ty in
             let params = params_to_string d.params in
             let body = block_to_string d.body in
             sprintf "%s %s%s { %s }" return d.name params body
@@ -699,6 +711,7 @@ let ast_to_string = function
   | ASTStatement s -> stmt_to_string s
   | ASTVariable v -> var_to_string v
   | ASTDeclaration d -> decl_to_string d
+  | ASTType t -> jaf_type_to_string t.ty
 
 let rec jaf_to_ain_data_type = function
   | Untyped -> failwith "tried to convert Untyped to ain data type"
@@ -758,8 +771,10 @@ let jaf_to_ain_variables j_p =
     match params with
     | [] -> List.rev result
     | x :: xs -> (
-        let var = Ain.Variable.make ~index x.name (jaf_to_ain_type x.ty) in
-        match x.ty with
+        let var =
+          Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec.ty)
+        in
+        match x.type_spec.ty with
         | Ref (Int | Bool | Float | FuncType (_, _)) ->
             let void =
               Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
@@ -775,7 +790,7 @@ let jaf_to_ain_function j_f (a_f : Ain.Function.t) =
     a_f with
     vars;
     nr_args = List.length vars;
-    return_type = jaf_to_ain_type j_f.return_ty;
+    return_type = jaf_to_ain_type j_f.return.ty;
     is_label = j_f.is_label;
   }
 
@@ -811,13 +826,13 @@ let jaf_to_ain_functype j_f (a_f : Ain.FunctionType.t) =
     a_f with
     variables;
     nr_arguments = List.length variables;
-    return_type = jaf_to_ain_type j_f.return_ty;
+    return_type = jaf_to_ain_type j_f.return.ty;
   }
 
 let jaf_to_ain_hll_function j_f =
   let jaf_to_ain_hll_argument (param : variable) =
-    Ain.Library.Argument.create param.name (jaf_to_ain_type param.ty)
+    Ain.Library.Argument.create param.name (jaf_to_ain_type param.type_spec.ty)
   in
-  let return_type = jaf_to_ain_type j_f.return_ty in
+  let return_type = jaf_to_ain_type j_f.return.ty in
   let arguments = List.map j_f.params ~f:jaf_to_ain_hll_argument in
   Ain.Library.Function.create j_f.name return_type arguments

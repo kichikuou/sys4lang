@@ -18,6 +18,8 @@
 
 open Jaf
 
+let implicit_void pos = { ty = Void; location = (pos, pos) }
+
 let expr loc ast =
   { ty=Untyped; node=ast; loc }
 
@@ -31,13 +33,13 @@ type varinit = {
   initval: expression option;
 }
 
-let decl is_const ty vi =
+let decl is_const type_spec vi =
   {
     name = vi.name;
     location = vi.loc;
     array_dim = List.rev vi.dims;
     is_const;
-    ty;
+    type_spec;
     initval = vi.initval;
     index = None;
   }
@@ -45,18 +47,18 @@ let decl is_const ty vi =
 let decls is_const ty var_list =
   List.map (decl is_const ty) var_list
 
-let func loc ty name params body =
+let func loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)
   let plist =
     match params with
-    | [{ ty=Void; _}] -> []
+    | [{ type_spec = { ty = Void; _ }; _ }] -> []
     | _ -> params
   in
   {
     name;
     loc;
     struct_name = None;
-    return_ty = ty;
+    return = typespec;
     params = plist;
     body;
     is_label = false;
@@ -64,9 +66,13 @@ let func loc ty name params body =
     class_index = None;
   }
 
-let member_func loc ty_opt struct_name is_dtor name params body =
+let member_func loc typespec_opt struct_name is_dtor name params body =
   let name = if is_dtor then "~" ^ name else name in
-  let fundecl = func loc (Option.value ty_opt ~default:Void) name params body in
+  let type_spec = match typespec_opt with
+    | Some ts -> ts
+    | None -> implicit_void (fst loc)
+  in
+  let fundecl = func loc type_spec name params body in
   { fundecl with struct_name=Some struct_name }
 
 let rec multidim_array dims t =
@@ -402,8 +408,8 @@ declaration
   ;
 
 declaration_specifiers
-  : REF type_specifier { Ref $2 }
-  | type_specifier { $1 }
+  : REF type_specifier { { location = $sloc; ty = Ref $2 } }
+  | type_specifier { { location = $sloc; ty = $1 } }
   ;
 
 init_declarator
@@ -430,7 +436,7 @@ external_declaration
   | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
     { [Function (member_func $sloc $1 $2 $4 $5 $6 $7)] }
   | HASH IDENTIFIER parameter_list block
-    { [Function { (func $sloc Void $2 $3 $4) with is_label=true }] }
+    { [Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 $4) with is_label=true }] }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { [FuncTypeDef (func $sloc $2 $3 $4 [])] }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
@@ -490,9 +496,9 @@ struct_declaration
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Method (func $sloc $1 $2 $3 $4)] }
   | IDENTIFIER LPAREN VOID? RPAREN block
-    { [Constructor (func $sloc Void $1 [] $5)] }
+    { [Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5)] }
   | BITNOT IDENTIFIER LPAREN RPAREN block
-    { [Destructor (func $sloc Void $2 [] $5)] }
+    { [Destructor (func $sloc (implicit_void $symbolstartpos) $2 [] $5)] }
   ;
 
 access_specifier
