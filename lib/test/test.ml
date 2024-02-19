@@ -132,6 +132,52 @@ let%expect_test "function call" =
       	at: &f_float
       	in: &f_float |}]
 
+let%expect_test "return statement" =
+  compile_jaf
+    {|
+      functype void func();
+      void f_void() {
+        return;    // ok
+        return 3;  // error
+      }
+      int f_int() {
+        return;      // error
+        return 3;    // ok
+        return 3.0;  // ok
+        return "s";  // error
+      }
+      ref int f_ref_int() {
+        int i;
+        ref int ri;
+        ref float rf;
+        return NULL;  // ok
+        return i;     // ok
+        return ri;    // ok
+        return rf;    // error
+      }
+      func f_func() {
+        return NULL;     // ok
+        return &f_void;  // ok
+        return &f_int;   // error
+      }
+    |};
+  [%expect
+    {|
+      :5:9-18: Type error: expected void; got int
+      	at: 3
+      	in: return 3;
+      :8:9-16: Type error: expected int; got void
+      	in: return;
+      :11:9-20: Type error: expected int; got string
+      	at: "s"
+      	in: return "s";
+      :20:9-19: Type error: expected ref int; got ref float
+      	at: rf
+      	in: return rf;
+      :25:9-23: Type error: expected ; got ref function<2>
+      	at: &f_int
+      	in: return &f_int; |}]
+
 let%expect_test "RefAssign operator" =
   compile_jaf
     {|
