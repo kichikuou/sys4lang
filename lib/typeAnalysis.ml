@@ -652,7 +652,8 @@ class type_analyze_visitor ctx =
               (* FIXME: error if the type is ref or unsupported type *)
               type_check (ASTStatement stmt) lhs.ty rhs)
 
-    method visit_variable var =
+    method! visit_variable var =
+      super#visit_variable var;
       let rec calculate_array_rank (t : jaf_type) =
         match t with Array sub_t -> 1 + calculate_array_rank sub_t | _ -> 0
       in
@@ -683,14 +684,8 @@ class type_analyze_visitor ctx =
           | t -> self#check_assign (ASTVariable var) t expr)
       | None -> ()
 
-    method! visit_local_variable var =
-      super#visit_local_variable var;
-      self#visit_variable var
-
     method! visit_declaration decl =
-      self#catch_errors (fun () ->
-          super#visit_declaration decl;
-          match decl with Global g -> self#visit_variable g | _ -> ())
+      self#catch_errors (fun () -> super#visit_declaration decl)
 
     method! visit_fundecl f =
       super#visit_fundecl f;

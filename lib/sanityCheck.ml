@@ -42,12 +42,13 @@ class sanity_check_visitor ctx =
             (Some (ASTExpression expr))
       | _ -> ()
 
-    method! visit_local_variable v =
-      super#visit_local_variable v;
-      match v.index with
-      | Some _ -> ()
-      | None ->
-          compiler_bug "local variable index not set" (Some (ASTVariable v))
+    method! visit_variable v =
+      super#visit_variable v;
+      match v.kind with
+      | LocalVar | GlobalVar ->
+          if Option.is_none v.index && not v.is_const then
+            compiler_bug "variable index not set" (Some (ASTVariable v))
+      | _ -> ()
 
     method! visit_fundecl f =
       super#visit_fundecl f;
@@ -56,15 +57,6 @@ class sanity_check_visitor ctx =
       | None ->
           compiler_bug "function index not set"
             (Some (ASTDeclaration (Function f)))
-
-    method! visit_declaration d =
-      super#visit_declaration d;
-      match d with
-      | Global g ->
-          if Option.is_none g.index && not g.is_const then
-            compiler_bug "global variable index not set"
-              (Some (ASTDeclaration (Global g)))
-      | _ -> ()
   end
 
 let check_invariants ctx decls =

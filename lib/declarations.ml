@@ -122,10 +122,10 @@ class type_resolve_visitor ctx decl_only =
       | _ -> ());
       super#visit_expression expr
 
-    method! visit_local_variable decl =
+    method! visit_variable decl =
       decl.type_spec.ty <-
         self#resolve_typespec decl.type_spec.ty (ASTVariable decl);
-      super#visit_local_variable decl
+      super#visit_variable decl
 
     method! visit_declaration decl =
       let function_class (f : fundecl) =
@@ -145,15 +145,10 @@ class type_resolve_visitor ctx decl_only =
           resolve_function f;
           f.class_index <- function_class f
       | FuncTypeDef f | DelegateDef f -> resolve_function f
-      | Global g ->
-          g.type_spec.ty <-
-            self#resolve_typespec g.type_spec.ty (ASTDeclaration decl)
+      | Global _ -> ()
       | StructDef s ->
           let resolve_structdecl = function
-            | AccessSpecifier _ -> ()
-            | MemberDecl d ->
-                d.type_spec.ty <-
-                  self#resolve_typespec d.type_spec.ty (ASTDeclaration decl)
+            | AccessSpecifier _ | MemberDecl _ -> ()
             | Constructor f | Destructor f | Method f -> resolve_function f
           in
           List.iter s.decls ~f:resolve_structdecl

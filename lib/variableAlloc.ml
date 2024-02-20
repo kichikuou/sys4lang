@@ -148,6 +148,7 @@ class variable_alloc_visitor ctx =
               location = v.location;
               array_dim = [];
               is_const = false;
+              kind = LocalVar;
               type_spec = { ty = Void; location = v.type_spec.location };
               initval = None;
               index = Some (i + 1);
@@ -181,6 +182,7 @@ class variable_alloc_visitor ctx =
               location = expr.loc;
               array_dim = [];
               is_const = false;
+              kind = LocalVar;
               type_spec = { ty = Ref t; location = expr.loc };
               initval = None;
               index = Some (List.length vars);
@@ -209,9 +211,9 @@ class variable_alloc_visitor ctx =
       | Switch (_, _) -> self#end_scope ScopeSwitch
       | _ -> ()
 
-    method! visit_local_variable v =
-      self#add_var v;
-      super#visit_local_variable v
+    method! visit_variable v =
+      (match v.kind with LocalVar -> self#add_var v | _ -> ());
+      super#visit_variable v
 
     method! visit_fundecl f =
       let conv_var index (v : variable) =

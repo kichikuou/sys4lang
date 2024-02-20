@@ -196,7 +196,8 @@ class const_eval_visitor ctx =
       super#visit_expression expr;
       self#eval_expression expr
 
-    method check_vardecl v =
+    method! visit_variable v =
+      super#visit_variable v;
       if v.is_const then
         match v.initval with
         | Some e -> (
@@ -207,14 +208,6 @@ class const_eval_visitor ctx =
             | ConstString _ -> ()
             | _ -> const_error v)
         | None -> const_error v
-
-    method! visit_local_variable v =
-      super#visit_local_variable v;
-      self#check_vardecl v
-
-    method! visit_declaration d =
-      super#visit_declaration d;
-      match d with Global v -> self#check_vardecl v | _ -> ()
   end
 
 let evaluate_constant_expressions ctx decls =

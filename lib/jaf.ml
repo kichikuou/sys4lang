@@ -107,6 +107,8 @@ type member_type =
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
 
+type variable_type = LocalVar | GlobalVar | ClassVar
+
 type call_type =
   | FunctionCall of int
   | MethodCall of int * int
@@ -175,6 +177,7 @@ and variable = {
   location : Lexing.position * Lexing.position;
   array_dim : expression list;
   is_const : bool;
+  kind : variable_type;
   type_spec : type_specifier;
   initval : expression option;
   mutable index : int option;
@@ -389,7 +392,10 @@ class ivisitor ctx =
     method visit_statement (s : statement) =
       match s.node with
       | EmptyStatement -> ()
-      | Declarations ds -> List.iter ds ~f:self#visit_local_variable
+      | Declarations ds ->
+          List.iter ds ~f:(fun v ->
+              self#visit_variable v;
+              environment#push_var v)
       | Expression e -> self#visit_expression e
       | Compound stmts ->
           environment#push;
@@ -432,11 +438,10 @@ class ivisitor ctx =
           self#visit_expression a;
           self#visit_expression b
 
-    method visit_local_variable v =
+    method visit_variable v =
       self#visit_type_specifier v.type_spec;
       List.iter v.array_dim ~f:self#visit_expression;
-      Option.iter v.initval ~f:self#visit_expression;
-      environment#push_var v
+      Option.iter v.initval ~f:self#visit_expression
 
     method visit_fundecl f =
       self#visit_type_specifier f.return;
@@ -446,13 +451,8 @@ class ivisitor ctx =
       environment#leave_function
 
     method visit_declaration d =
-      let visit_vardecl d =
-        self#visit_type_specifier d.type_spec;
-        List.iter d.array_dim ~f:self#visit_expression;
-        Option.iter d.initval ~f:self#visit_expression
-      in
       match d with
-      | Global g -> visit_vardecl g
+      | Global g -> self#visit_variable g
       | Function f -> self#visit_fundecl f
       | FuncTypeDef _ -> ()
       | DelegateDef _ -> ()
@@ -464,14 +464,9 @@ class ivisitor ctx =
           List.iter enum.values ~f:visit_enumval
 
     method visit_struct_declaration d =
-      let visit_vardecl d =
-        self#visit_type_specifier d.type_spec;
-        List.iter d.array_dim ~f:self#visit_expression;
-        Option.iter d.initval ~f:self#visit_expression
-      in
       match d with
       | AccessSpecifier _ -> ()
-      | MemberDecl d -> visit_vardecl d
+      | MemberDecl d -> self#visit_variable d
       | Constructor f -> self#visit_fundecl f
       | Destructor f -> self#visit_fundecl f
       | Method f -> self#visit_fundecl f

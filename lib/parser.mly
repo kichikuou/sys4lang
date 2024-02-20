@@ -39,6 +39,7 @@ let decl is_const type_spec vi =
     location = vi.loc;
     array_dim = List.rev vi.dims;
     is_const;
+    kind = LocalVar;
     type_spec;
     initval = vi.initval;
     index = None;
@@ -430,7 +431,7 @@ array_allocation
 
 external_declaration
   : declaration
-    { List.map (fun d -> Global (d)) $1 }
+    { List.map (fun d -> Global { d with kind = GlobalVar }) $1 }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Function (func $sloc $1 $2 $3 $4)] }
   | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
@@ -492,7 +493,7 @@ struct_declaration
   : access_specifier COLON
     { [AccessSpecifier $1] }
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
-    { decls false $1 $2 |> List.map (fun d -> MemberDecl d) }
+    { decls false $1 $2 |> List.map (fun d -> MemberDecl { d with kind = ClassVar }) }
   | declaration_specifiers IDENTIFIER parameter_list block
     { [Method (func $sloc $1 $2 $3 $4)] }
   | IDENTIFIER LPAREN VOID? RPAREN block
