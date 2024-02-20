@@ -20,7 +20,7 @@ open Printf
 
 let printf = Stdio.printf
 
-exception Syntax_error of Lexing.position * Lexing.position
+exception Syntax_error of location
 exception Type_error of jaf_type * expression option * ast_node
 exception Undefined_variable of string * ast_node
 exception Arity_error of Ain.Function.t * expression list * ast_node

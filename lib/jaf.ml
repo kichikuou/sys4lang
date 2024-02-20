@@ -17,6 +17,8 @@
 open Base
 open Printf
 
+type location = Lexing.position * Lexing.position
+
 type unary_op =
   | UPlus
   | UMinus
@@ -86,10 +88,7 @@ type jaf_type =
   | TyFunction of int
   | TyMethod of int
 
-type type_specifier = {
-  mutable ty : jaf_type;
-  location : Lexing.position * Lexing.position;
-}
+type type_specifier = { mutable ty : jaf_type; location : location }
 
 type ident_type =
   | LocalVariable of int
@@ -121,7 +120,7 @@ type call_type =
 type expression = {
   mutable ty : jaf_type;
   mutable node : ast_expression;
-  loc : Lexing.position * Lexing.position;
+  loc : location;
 }
 
 and ast_expression =
@@ -148,7 +147,7 @@ let clone_expr (e : expression) = { e with loc = e.loc }
 type statement = {
   mutable node : ast_statement;
   mutable delete_vars : int list;
-  loc : Lexing.position * Lexing.position;
+  loc : location;
 }
 
 and ast_statement =
@@ -174,7 +173,7 @@ and ast_statement =
 
 and variable = {
   name : string;
-  location : Lexing.position * Lexing.position;
+  location : location;
   array_dim : expression list;
   is_const : bool;
   kind : variable_type;
@@ -185,7 +184,7 @@ and variable = {
 
 type fundecl = {
   mutable name : string;
-  loc : Lexing.position * Lexing.position;
+  loc : location;
   struct_name : string option;
   return : type_specifier;
   params : variable list;
@@ -212,13 +211,13 @@ type struct_declaration =
 type structdecl = {
   name : string;
   is_class : bool;
-  loc : Lexing.position * Lexing.position;
+  loc : location;
   decls : struct_declaration list;
 }
 
 type enumdecl = {
   name : string option;
-  loc : Lexing.position * Lexing.position;
+  loc : location;
   values : (string * expression option) list;
 }
 

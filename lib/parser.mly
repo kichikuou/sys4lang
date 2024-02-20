@@ -28,7 +28,7 @@ let stmt loc ast =
 
 type varinit = {
   name: string;
-  loc: Lexing.position * Lexing.position;
+  loc: location;
   dims: expression list;
   initval: expression option;
 }
