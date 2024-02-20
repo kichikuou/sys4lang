@@ -88,6 +88,8 @@ type jaf_type =
   | TyFunction of string * int
   | TyMethod of string * int
 
+let jaf_type_equal (a : jaf_type) b = Poly.equal a b
+
 type type_specifier = { mutable ty : jaf_type; location : location }
 
 type ident_type =
@@ -267,8 +269,19 @@ let ast_node_pos = function
 type context = {
   ain : Ain.t;
   functions : (string, fundecl) Hashtbl.t;
+  functypes : (string, fundecl) Hashtbl.t;
+  delegates : (string, fundecl) Hashtbl.t;
   mutable const_vars : variable list;
 }
+
+let context_from_ain ain =
+  {
+    ain;
+    functions = Hashtbl.create (module String);
+    functypes = Hashtbl.create (module String);
+    delegates = Hashtbl.create (module String);
+    const_vars = [];
+  }
 
 type resolved_name =
   | ResolvedLocal of variable
@@ -845,14 +858,16 @@ let jaf_to_ain_struct j_s (a_s : Ain.Struct.t) =
     (* TODO: vmethods *);
   }
 
-let jaf_to_ain_functype j_f (a_f : Ain.FunctionType.t) =
+let jaf_to_ain_functype j_f =
   let variables = jaf_to_ain_variables j_f.params in
-  {
-    a_f with
-    variables;
-    nr_arguments = List.length variables;
-    return_type = jaf_to_ain_type j_f.return.ty;
-  }
+  Ain.FunctionType.
+    {
+      name = j_f.name;
+      index = Option.value_exn j_f.index;
+      variables;
+      nr_arguments = List.length variables;
+      return_type = jaf_to_ain_type j_f.return.ty;
+    }
 
 let jaf_to_ain_hll_function j_f =
   let jaf_to_ain_hll_argument (param : variable) =

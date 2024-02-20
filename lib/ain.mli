@@ -148,7 +148,6 @@ module FunctionType : sig
   }
 
   val logical_parameters : t -> Variable.t list
-  val function_compatible : t -> Function.t -> bool
   val equal : t -> t -> bool
 end
 

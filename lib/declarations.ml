@@ -43,14 +43,18 @@ class type_declare_visitor ctx =
                     (ASTDeclaration decl);
                 g.index <- Some (Ain.add_global ctx.ain g.name)))
       | Function f -> self#declare_function f
-      | FuncTypeDef f ->
-          if Option.is_some (Ain.get_functype ctx.ain f.name) then
-            compile_error "duplicate functype definition" (ASTDeclaration decl);
-          ignore (Ain.add_functype ctx.ain f.name : Ain.FunctionType.t)
-      | DelegateDef f ->
-          if Option.is_some (Ain.get_delegate ctx.ain f.name) then
-            compile_error "duplicate delegate definition" (ASTDeclaration decl);
-          ignore (Ain.add_delegate ctx.ain f.name : Ain.FunctionType.t)
+      | FuncTypeDef f -> (
+          match Hashtbl.add ctx.functypes ~key:f.name ~data:f with
+          | `Duplicate ->
+              compile_error "duplicate functype definition"
+                (ASTDeclaration decl)
+          | `Ok -> f.index <- Some (Ain.add_functype ctx.ain f.name).index)
+      | DelegateDef f -> (
+          match Hashtbl.add ctx.delegates ~key:f.name ~data:f with
+          | `Duplicate ->
+              compile_error "duplicate delegate definition"
+                (ASTDeclaration decl)
+          | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
       | StructDef s ->
           if Option.is_some (Ain.get_struct ctx.ain s.name) then
             compile_error "duplicate struct definition" (ASTDeclaration decl);
@@ -96,11 +100,11 @@ class type_resolve_visitor ctx decl_only =
       match Ain.get_struct_index ctx.ain name with
       | Some i -> Struct (name, i)
       | None -> (
-          match Ain.get_functype_index ctx.ain name with
-          | Some i -> FuncType (name, i)
+          match Hashtbl.find ctx.functypes name with
+          | Some ft -> FuncType (name, Option.value_exn ft.index)
           | None -> (
-              match Ain.get_delegate_index ctx.ain name with
-              | Some i -> Delegate (name, i)
+              match Hashtbl.find ctx.delegates name with
+              | Some dg -> Delegate (name, Option.value_exn dg.index)
               | None -> compile_error ("Undefined type: " ^ name) node))
 
     method! visit_type_specifier ts =
@@ -158,18 +162,8 @@ class type_define_visitor ctx =
             Ain.get_function_by_index ctx.ain (Option.value_exn f.index)
           in
           obj |> jaf_to_ain_function f |> Ain.write_function ctx.ain
-      | FuncTypeDef f -> (
-          match Ain.get_functype ctx.ain f.name with
-          | Some obj ->
-              obj |> jaf_to_ain_functype f |> Ain.write_functype ctx.ain
-          | None ->
-              compiler_bug "undefined functype" (Some (ASTDeclaration decl)))
-      | DelegateDef f -> (
-          match Ain.get_delegate ctx.ain f.name with
-          | Some obj ->
-              obj |> jaf_to_ain_functype f |> Ain.write_delegate ctx.ain
-          | None ->
-              compiler_bug "undefined delegate" (Some (ASTDeclaration decl)))
+      | FuncTypeDef f -> jaf_to_ain_functype f |> Ain.write_functype ctx.ain
+      | DelegateDef f -> jaf_to_ain_functype f |> Ain.write_delegate ctx.ain
       | StructDef s -> (
           match Ain.get_struct ctx.ain s.name with
           | Some obj -> obj |> jaf_to_ain_struct s |> Ain.write_struct ctx.ain

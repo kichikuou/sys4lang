@@ -7,14 +7,7 @@ let parse_jaf input =
   with Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
 
 let compile_jaf input =
-  let ctx =
-    Jaf.
-      {
-        ain = Ain.create 4 0;
-        functions = Hashtbl.create (module String);
-        const_vars = [];
-      }
-  in
+  let ctx = Jaf.context_from_ain (Ain.create 4 0) in
   try
     let jaf = parse_jaf input in
     Declarations.register_type_declarations ctx jaf;
@@ -135,7 +128,7 @@ let%expect_test "function call" =
       :24:21-23: Type error: expected ref float; got ref int
       	at: ri
       	in: ri
-      :26:16-24: Type error: expected ; got ref typeof(f_float)
+      :26:16-24: Type error: expected func; got ref typeof(f_float)
       	at: &f_float
       	in: &f_float |}]
 
@@ -181,7 +174,7 @@ let%expect_test "return statement" =
       :20:9-19: Type error: expected ref int; got ref float
       	at: rf
       	in: return rf;
-      :25:9-23: Type error: expected ; got ref typeof(f_int)
+      :25:9-23: Type error: expected func; got ref typeof(f_int)
       	at: &f_int
       	in: return &f_int; |}]
 

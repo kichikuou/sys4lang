@@ -148,6 +148,12 @@ let type_coerce_numerics parent a b =
   | Bool, Bool -> Bool
   | _ -> compiler_bug "coerce_numerics: non-numeric type" (Some parent)
 
+let function_compatible (ft : fundecl) (f : fundecl) =
+  jaf_type_equal ft.return.ty f.return.ty
+  && List.length ft.params = List.length f.params
+  && List.for_all2_exn ft.params f.params ~f:(fun a b ->
+         jaf_type_equal a.type_spec.ty b.type_spec.ty)
+
 class type_analyze_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
@@ -175,16 +181,16 @@ class type_analyze_visitor ctx =
       | Ref _ -> ()
       | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
-    method check_delegate_compatible parent dg_i (expr : expression) =
+    method check_delegate_compatible parent dg_name dg_i (expr : expression) =
       match expr.ty with
-      | Ref (TyMethod (_, f_i)) ->
-          let dg = Ain.get_delegate_by_index ctx.ain dg_i in
-          let f = Ain.get_function_by_index ctx.ain f_i in
-          if not (Ain.FunctionType.function_compatible dg f) then
-            type_error (Delegate ("", dg_i)) (Some expr) parent
-      | Delegate (_, no) ->
-          if not (phys_equal dg_i no) then
-            type_error (Delegate ("", dg_i)) (Some expr) parent
+      | Ref (TyMethod (f_name, _)) ->
+          let dg = Hashtbl.find_exn ctx.delegates dg_name in
+          let f = Hashtbl.find_exn ctx.functions f_name in
+          if not (function_compatible dg f) then
+            type_error (Delegate (dg_name, dg_i)) (Some expr) parent
+      | Delegate (name, idx) ->
+          if not (String.equal name dg_name && dg_i = idx) then
+            type_error (Delegate (dg_name, dg_i)) (Some expr) parent
       | _ -> type_error (Ref (TyMethod ("", -1))) (Some expr) parent
 
     method check_assign parent t (rhs : expression) =
@@ -195,17 +201,19 @@ class type_analyze_visitor ctx =
        * 'ref function'. This is then converted into the declared
        * functype of the variable (if the prototypes match).
        *)
-      | FuncType (_, ft_i) -> (
+      | FuncType (_ft_name, ft_i) -> (
           match rhs.ty with
-          | Ref (TyFunction (_, f_i)) ->
+          | Ref (TyFunction (f_name, _)) ->
+              (* TODO: ensure _ft_name is nonempty and remove the line below *)
               let ft = Ain.get_functype_by_index ctx.ain ft_i in
-              let f = Ain.get_function_by_index ctx.ain f_i in
-              if not (Ain.FunctionType.function_compatible ft f) then
-                type_error (FuncType ("", ft_i)) (Some rhs) parent
+              let ft = Hashtbl.find_exn ctx.functypes ft.name in
+              let f = Hashtbl.find_exn ctx.functions f_name in
+              if not (function_compatible ft f) then
+                type_error (FuncType (ft.name, ft_i)) (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
           | _ -> type_error (Ref (TyFunction ("", -1))) (Some rhs) parent)
-      | Delegate (_, dg_i) -> self#check_delegate_compatible parent dg_i rhs
+      | Delegate (dn, di) -> self#check_delegate_compatible parent dn di rhs
       | Int | LongInt | Bool | Float ->
           type_check_numeric parent rhs;
           insert_cast t rhs
@@ -353,10 +361,10 @@ class type_analyze_visitor ctx =
               | FuncType (_, ft_i), FuncType (_, ft_j) ->
                   if ft_i <> ft_j then
                     type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (_, ft_i), Ref (TyFunction (_, f_i)) ->
-                  let ft = Ain.get_functype_by_index ctx.ain ft_i in
-                  let f = Ain.get_function_by_index ctx.ain f_i in
-                  if not (Ain.FunctionType.function_compatible ft f) then
+              | FuncType (ft_name, _), Ref (TyFunction (f_name, _)) ->
+                  let ft = Hashtbl.find_exn ctx.functypes ft_name in
+                  let f = Hashtbl.find_exn ctx.functions f_name in
+                  if not (function_compatible ft f) then
                     type_error a.ty (Some b) (ASTExpression expr)
               | FuncType _, NullType -> b.ty <- a.ty
               | _ -> coerce_numerics a b |> ignore);
@@ -386,8 +394,8 @@ class type_analyze_visitor ctx =
           (match (lhs.ty, op) with
           | _, EqAssign -> self#check_assign (ASTExpression expr) lhs.ty rhs
           | String, PlusAssign -> check String rhs
-          | Delegate (_, dg_i), (PlusAssign | MinusAssign) ->
-              self#check_delegate_compatible (ASTExpression expr) dg_i rhs
+          | Delegate (dn, di), (PlusAssign | MinusAssign) ->
+              self#check_delegate_compatible (ASTExpression expr) dn di rhs
           | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
               check_numeric lhs;
               check_numeric rhs;

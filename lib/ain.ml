@@ -506,24 +506,6 @@ module FunctionType = struct
     in
     List.filter f.variables ~f:not_void
 
-  let function_compatible (ft : t) (f : Function.t) =
-    let take_types n vars =
-      let rec take_types_r n (vars : Variable.t list) result =
-        if n = 0 then List.rev result
-        else
-          match vars with
-          | [] -> failwith "function_compatible.take_types: n > nr_vars"
-          | x :: xs -> take_types_r (n - 1) xs (x.value_type :: result)
-      in
-      take_types_r n vars []
-    in
-    Type.equal ft.return_type f.return_type
-    && ft.nr_arguments = f.nr_args
-    && (List.for_all2_exn
-          (take_types ft.nr_arguments ft.variables)
-          (take_types f.nr_args f.vars))
-         ~f:Type.equal
-
   let equal a b =
     String.equal a.name b.name
     && a.nr_arguments = b.nr_arguments
