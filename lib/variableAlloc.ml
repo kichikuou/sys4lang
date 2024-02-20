@@ -198,7 +198,7 @@ class variable_alloc_visitor ctx =
       | While (_, _) | DoWhile (_, _) -> self#start_scope
       | For (_, _, _, _) -> self#start_scope
       | Switch (_, _) -> self#start_scope
-      | Labeled (name, _) -> self#add_label name
+      | Label name -> self#add_label name
       | Goto _ -> self#add_goto stmt
       | Continue -> self#add_continue stmt
       | Break -> self#add_break stmt

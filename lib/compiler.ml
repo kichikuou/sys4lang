@@ -913,9 +913,7 @@ class jaf_compiler ain =
           self#compile_expression e;
           self#compile_pop e.ty
       | Compound stmts -> self#compile_block stmts
-      | Labeled (name, s) ->
-          self#scope_add_label name;
-          self#compile_statement s
+      | Label name -> self#scope_add_label name
       | If (test, con, alt) -> (
           self#compile_expression test;
           let ifnz_addr = current_address + 2 in
@@ -1008,14 +1006,11 @@ class jaf_compiler ain =
           self#write_instruction1 SWITCH self#start_switch;
           List.iter stmts ~f:self#compile_statement;
           self#end_switch
-      | Case ({ node = ConstInt i; _ }, s) ->
-          self#add_switch_case i (ASTStatement stmt);
-          self#compile_statement s
-      | Case (_, _) ->
+      | Case { node = ConstInt i; _ } ->
+          self#add_switch_case i (ASTStatement stmt)
+      | Case _ ->
           compile_error "invalid expression in switch case" (ASTStatement stmt)
-      | Default s ->
-          self#set_switch_default (ASTStatement stmt);
-          self#compile_statement s
+      | Default -> self#set_switch_default (ASTStatement stmt)
       | Return None -> self#write_instruction0 RETURN
       | Return (Some e) ->
           (match (Option.value_exn current_function).return_type with

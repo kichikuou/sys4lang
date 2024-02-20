@@ -321,3 +321,19 @@ let%expect_test "RefEqual operator" =
       	at: false
       	in: false === NULL
       :31:9-18: Undefined variable: undefined |}]
+
+let%expect_test "label_is_a_statement" =
+  compile_jaf
+    {|
+      void f() {
+        switch (1) {
+          case 1:
+          default:
+        }
+        if (1)
+          label1:
+        else
+          label2:
+      }
+    |};
+  [%expect {| ok |}]
