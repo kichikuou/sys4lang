@@ -431,15 +431,15 @@ external_declaration
   : declaration
     { Global { $1 with vars = (List.map (fun d -> { d with kind = GlobalVar }) $1.vars) } }
   | declaration_specifiers IDENTIFIER parameter_list block
-    { Function (func $sloc $1 $2 $3 $4) }
+    { Function (func $sloc $1 $2 $3 (Some $4)) }
   | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
-    { Function (member_func $sloc $1 $2 $4 $5 $6 $7) }
+    { Function (member_func $sloc $1 $2 $4 $5 $6 (Some $7)) }
   | HASH IDENTIFIER parameter_list block
-    { Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 $4) with is_label=true } }
+    { Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 (Some $4)) with is_label=true } }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
-    { FuncTypeDef (func $sloc $2 $3 $4 []) }
+    { FuncTypeDef (func $sloc $2 $3 $4 None) }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
-    { DelegateDef (func $sloc $2 $3 $4 []) }
+    { DelegateDef (func $sloc $2 $3 $4 None) }
   | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
     { StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 }) }
   | ENUM enumerator_list SEMICOLON
@@ -450,7 +450,7 @@ external_declaration
 
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list SEMICOLON
-    { [Function (func $sloc $1 $2 $3 [])] }
+    { [Function (func $sloc $1 $2 $3 None)] }
   | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
     { [StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 })] }
   ;
@@ -493,15 +493,20 @@ struct_declaration
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
     { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls false $1 $2) in
       MemberDecl { decl_loc=$sloc; typespec=$1; vars } }
-  | declaration_specifiers IDENTIFIER parameter_list block
+  | declaration_specifiers IDENTIFIER parameter_list opt_body
     { Method (func $sloc $1 $2 $3 $4) }
-  | IDENTIFIER LPAREN VOID? RPAREN block
+  | IDENTIFIER LPAREN VOID? RPAREN opt_body
     { Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5) }
-  | BITNOT IDENTIFIER LPAREN RPAREN block
+  | BITNOT IDENTIFIER LPAREN RPAREN opt_body
     { Destructor (func $sloc (implicit_void $symbolstartpos) $2 [] $5) }
   ;
 
 access_specifier
   : PUBLIC { Public }
   | PRIVATE { Private }
+  ;
+
+opt_body
+  : SEMICOLON { None }
+  | block { Some $1 }
   ;

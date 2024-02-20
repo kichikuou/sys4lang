@@ -1271,7 +1271,7 @@ class jaf_compiler ain =
       in
       current_function <- Some func;
       self#write_instruction1 FUNC index;
-      self#compile_block decl.body;
+      self#compile_block (Option.value_exn decl.body);
       self#compile_default_return func.return_type
         (ASTDeclaration (Function decl));
       self#write_instruction0 RETURN;
@@ -1300,9 +1300,8 @@ class jaf_compiler ain =
               match d with
               | AccessSpecifier _ -> ()
               | MemberDecl _ -> () (* TODO: member initvals? *)
-              | Constructor f -> self#compile_function f
-              | Destructor f -> self#compile_function f
-              | Method f -> self#compile_function f
+              | Constructor f | Destructor f | Method f ->
+                  if Option.is_some f.body then self#compile_function f
             in
             List.iter d.decls ~f:compile_struct_decl
         | Enum e ->

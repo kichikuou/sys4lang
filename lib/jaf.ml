@@ -194,7 +194,7 @@ type fundecl = {
   struct_name : string option;
   return : type_specifier;
   params : variable list;
-  body : statement list;
+  body : statement list option;
   is_label : bool;
   mutable index : int option;
   mutable class_index : int option;
@@ -452,9 +452,10 @@ class ivisitor ctx =
     method visit_fundecl f =
       self#visit_type_specifier f.return;
       List.iter f.params ~f:self#visit_variable;
-      environment#enter_function f;
-      List.iter f.body ~f:self#visit_statement;
-      environment#leave_function
+      Option.iter f.body ~f:(fun body ->
+          environment#enter_function f;
+          List.iter ~f:self#visit_statement body;
+          environment#leave_function)
 
     method visit_declaration d =
       match d with
@@ -665,8 +666,11 @@ let params_to_string = function
       in
       sprintf "(%s)" (loop (var_to_string' p) ps)
 
-let block_to_string block =
-  List.fold (List.map block ~f:stmt_to_string) ~init:"" ~f:( ^ )
+let body_to_string = function
+  | None -> ";"
+  | Some block ->
+      List.fold (List.map block ~f:stmt_to_string) ~init:"" ~f:( ^ )
+      |> sprintf " { %s }"
 
 let sdecl_to_string = function
   | AccessSpecifier Public -> "public:"
@@ -674,17 +678,17 @@ let sdecl_to_string = function
   | MemberDecl ds -> vardecls_to_string ds
   | Constructor d ->
       let params = params_to_string d.params in
-      let body = block_to_string d.body in
-      sprintf "%s%s { %s }" d.name params body
+      let body = body_to_string d.body in
+      sprintf "%s%s%s" d.name params body
   | Destructor d ->
       let params = params_to_string d.params in
-      let body = block_to_string d.body in
-      sprintf "~%s%s { %s }" d.name params body
+      let body = body_to_string d.body in
+      sprintf "~%s%s%s" d.name params body
   | Method d ->
       let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
-      let body = block_to_string d.body in
-      sprintf "%s %s%s { %s }" return d.name params body
+      let body = body_to_string d.body in
+      sprintf "%s %s%s%s" return d.name params body
 
 let decl_to_string d =
   match d with
@@ -692,8 +696,8 @@ let decl_to_string d =
   | Function d ->
       let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
-      let body = block_to_string d.body in
-      sprintf "%s %s%s { %s }" return d.name params body
+      let body = body_to_string d.body in
+      sprintf "%s %s%s%s" return d.name params body
   | FuncTypeDef d ->
       let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
