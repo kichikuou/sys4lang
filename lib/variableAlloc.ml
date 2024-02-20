@@ -222,8 +222,6 @@ class variable_alloc_visitor ctx =
       let add_vars (a_f : Ain.Function.t) =
         { a_f with vars = List.mapi (List.rev vars) ~f:conv_var }
       in
-      (* add params to var list *)
-      List.iter f.params ~f:self#add_var;
       self#start_scope;
       super#visit_fundecl f;
       self#end_scope ScopeAnon;

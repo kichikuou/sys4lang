@@ -453,7 +453,7 @@ class ivisitor ctx =
 
     method visit_fundecl f =
       self#visit_type_specifier f.return;
-      List.iter f.params ~f:(fun p -> self#visit_type_specifier p.type_spec);
+      List.iter f.params ~f:self#visit_variable;
       environment#enter_function f;
       List.iter f.body ~f:self#visit_statement;
       environment#leave_function
