@@ -177,7 +177,7 @@ class type_analyze_visitor ctx =
 
     method check_delegate_compatible parent dg_i (expr : expression) =
       match expr.ty with
-      | Ref (TyMethod f_i) ->
+      | Ref (TyMethod (_, f_i)) ->
           let dg = Ain.get_delegate_by_index ctx.ain dg_i in
           let f = Ain.get_function_by_index ctx.ain f_i in
           if not (Ain.FunctionType.function_compatible dg f) then
@@ -185,7 +185,7 @@ class type_analyze_visitor ctx =
       | Delegate (_, no) ->
           if not (phys_equal dg_i no) then
             type_error (Delegate ("", dg_i)) (Some expr) parent
-      | _ -> type_error (Ref (TyMethod (-1))) (Some expr) parent
+      | _ -> type_error (Ref (TyMethod ("", -1))) (Some expr) parent
 
     method check_assign parent t (rhs : expression) =
       match t with
@@ -197,14 +197,14 @@ class type_analyze_visitor ctx =
        *)
       | FuncType (_, ft_i) -> (
           match rhs.ty with
-          | Ref (TyFunction f_i) ->
+          | Ref (TyFunction (_, f_i)) ->
               let ft = Ain.get_functype_by_index ctx.ain ft_i in
               let f = Ain.get_function_by_index ctx.ain f_i in
               if not (Ain.FunctionType.function_compatible ft f) then
                 type_error (FuncType ("", ft_i)) (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
-          | _ -> type_error (Ref (TyFunction (-1))) (Some rhs) parent)
+          | _ -> type_error (Ref (TyFunction ("", -1))) (Some rhs) parent)
       | Delegate (_, dg_i) -> self#check_delegate_compatible parent dg_i rhs
       | Int | LongInt | Bool | Float ->
           type_check_numeric parent rhs;
@@ -288,7 +288,7 @@ class type_analyze_visitor ctx =
               expr.ty <- ain_to_jaf_type g.value_type
           | ResolvedFunction f ->
               expr.node <- Ident (name, Some (FunctionName name));
-              expr.ty <- TyFunction (Option.value_exn f.index)
+              expr.ty <- TyFunction (name, Option.value_exn f.index)
           | ResolvedLibrary i ->
               expr.node <- Ident (name, Some (HLLName i));
               expr.ty <- Void
@@ -310,10 +310,11 @@ class type_analyze_visitor ctx =
               expr.ty <- e.ty
           | AddrOf -> (
               match e.ty with
-              | TyFunction i -> expr.ty <- Ref (TyFunction i)
-              | TyMethod i -> expr.ty <- Ref (TyMethod i)
-              | _ -> type_error (TyFunction (-1)) (Some e) (ASTExpression expr))
-          )
+              | TyFunction _ as f -> expr.ty <- Ref f
+              | TyMethod _ as m -> expr.ty <- Ref m
+              | _ ->
+                  type_error (TyFunction ("", -1)) (Some e) (ASTExpression expr)
+              ))
       | Binary (op, a, b) -> (
           match op with
           | Plus -> (
@@ -352,7 +353,7 @@ class type_analyze_visitor ctx =
               | FuncType (_, ft_i), FuncType (_, ft_j) ->
                   if ft_i <> ft_j then
                     type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (_, ft_i), Ref (TyFunction f_i) ->
+              | FuncType (_, ft_i), Ref (TyFunction (_, f_i)) ->
                   let ft = Ain.get_functype_by_index ctx.ain ft_i in
                   let f = Ain.get_function_by_index ctx.ain f_i in
                   if not (Ain.FunctionType.function_compatible ft f) then
@@ -428,7 +429,7 @@ class type_analyze_visitor ctx =
           match Bytecode.syscall_of_string syscall_name with
           | Some sys ->
               expr.node <- Member (e, syscall_name, Some (SystemFunction sys));
-              expr.ty <- TyFunction 0
+              expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error ("system." ^ syscall_name)
@@ -442,7 +443,7 @@ class type_analyze_visitor ctx =
           | Some fun_no ->
               expr.node <-
                 Member (e, fun_name, Some (HLLFunction (lib_no, fun_no)));
-              expr.ty <- TyFunction 0
+              expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error
@@ -454,7 +455,7 @@ class type_analyze_visitor ctx =
           match builtin_of_string e.ty name with
           | Some builtin ->
               expr.node <- Member (e, name, Some (BuiltinMethod builtin));
-              expr.ty <- TyFunction 0
+              expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error name (ASTExpression expr))
@@ -481,7 +482,7 @@ class type_analyze_visitor ctx =
                       ( obj,
                         member_name,
                         Some (ClassMethod (struc.index, f.index)) );
-                  expr.ty <- TyMethod f.index
+                  expr.ty <- TyMethod (fun_name, f.index)
               | None ->
                   (* TODO: separate error type for this? *)
                   undefined_variable_error

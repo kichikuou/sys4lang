@@ -85,8 +85,8 @@ type jaf_type =
   | FuncType of string * int
   | IMainSystem
   | NullType
-  | TyFunction of int
-  | TyMethod of int
+  | TyFunction of string * int
+  | TyMethod of string * int
 
 type type_specifier = { mutable ty : jaf_type; location : location }
 
@@ -552,8 +552,7 @@ let rec jaf_type_to_string = function
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
   | NullType -> "null"
-  | TyFunction i -> "function<" ^ Int.to_string i ^ ">"
-  | TyMethod i -> "method<" ^ Int.to_string i ^ ">"
+  | TyFunction (name, _) | TyMethod (name, _) -> "typeof(" ^ name ^ ")"
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string = function
@@ -756,8 +755,8 @@ let rec jaf_to_ain_data_type = function
   | FuncType (_, i) -> Ain.Type.FuncType i
   | IMainSystem -> Ain.Type.IMainSystem
   | NullType -> Ain.Type.NullType
-  | TyFunction i -> Ain.Type.Function i
-  | TyMethod i -> Ain.Type.Method i
+  | TyFunction (_, i) -> Ain.Type.Function i
+  | TyMethod (_, i) -> Ain.Type.Method i
 
 and jaf_to_ain_type = function
   | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)
@@ -778,8 +777,8 @@ let rec data_type_to_jaf_type = function
   | Delegate i -> Delegate ("", i)
   | FuncType i -> FuncType ("", i)
   | IMainSystem -> IMainSystem
-  | Function i -> TyFunction i
-  | Method i -> TyMethod i
+  | Function i -> TyFunction ("", i)
+  | Method i -> TyMethod ("", i)
   | t ->
       Printf.failwithf "cannot convert %s to jaf type"
         (Ain.Type.data_to_string t)

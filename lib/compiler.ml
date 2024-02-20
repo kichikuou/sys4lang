@@ -503,8 +503,8 @@ class jaf_compiler ain =
           self#write_instruction0 COMPL
       | Unary (AddrOf, e) -> (
           match (e.ty, e.node) with
-          | TyFunction no, _ -> self#write_instruction1 PUSH no
-          | TyMethod no, Member (e, _, Some (ClassMethod (_, _))) ->
+          | TyFunction (_, no), _ -> self#write_instruction1 PUSH no
+          | TyMethod (_, no), Member (e, _, Some (ClassMethod (_, _))) ->
               self#compile_lvalue e;
               self#write_instruction1 PUSH no
           | _ ->
