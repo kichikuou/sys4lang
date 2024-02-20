@@ -253,7 +253,7 @@ class jaf_compiler ain =
                  {
                    node = EmptyStatement;
                    delete_vars = [];
-                   loc = (Lexing.dummy_pos, Lexing.dummy_pos);
+                   loc = dummy_location;
                  }))
           else (
             self#compile_local_ref v.index;
@@ -504,7 +504,7 @@ class jaf_compiler ain =
       | Unary (AddrOf, e) -> (
           match (e.ty, e.node) with
           | TyFunction (_, no), _ -> self#write_instruction1 PUSH no
-          | TyMethod (_, no), Member (e, _, Some (ClassMethod (_, _))) ->
+          | TyMethod (_, no), Member (e, _, Some (ClassMethod _)) ->
               self#compile_lvalue e;
               self#write_instruction1 PUSH no
           | _ ->
@@ -748,7 +748,7 @@ class jaf_compiler ain =
           self#write_instruction1 PUSH member_no;
           self#compile_dereference
             (List.nth_exn struct_type.members member_no).value_type
-      | Member (_, _, Some (ClassMethod (_, _))) ->
+      | Member (_, _, Some (ClassMethod _)) ->
           compiler_bug "tried to compile method member expression"
             (Some (ASTExpression expr))
       | Member (_, _, Some (HLLFunction (_, _))) ->

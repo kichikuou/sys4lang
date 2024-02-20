@@ -201,12 +201,10 @@ class type_analyze_visitor ctx =
        * 'ref function'. This is then converted into the declared
        * functype of the variable (if the prototypes match).
        *)
-      | FuncType (_ft_name, ft_i) -> (
+      | FuncType (ft_name, ft_i) -> (
           match rhs.ty with
           | Ref (TyFunction (f_name, _)) ->
-              (* TODO: ensure _ft_name is nonempty and remove the line below *)
-              let ft = Ain.get_functype_by_index ctx.ain ft_i in
-              let ft = Hashtbl.find_exn ctx.functypes ft.name in
+              let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let f = Hashtbl.find_exn ctx.functions f_name in
               if not (function_compatible ft f) then
                 type_error (FuncType (ft.name, ft_i)) (Some rhs) parent
@@ -259,24 +257,39 @@ class type_analyze_visitor ctx =
       let check_struct = type_check_struct (ASTExpression expr) in
       let check_expr (a : expression) b = check a.ty b in
       (* check function call arguments *)
-      let check_call (f : Ain.Function.t) args =
-        let params = Ain.Function.logical_parameters f in
+      let check_call name params args =
         let nr_params = List.length params in
         if not (nr_params = List.length args) then
-          arity_error f args (ASTExpression expr)
+          arity_error name nr_params args (ASTExpression expr)
         else if nr_params > 0 then
-          let check_arg a (v : Ain.Variable.t) =
-            if v.value_type.is_ref then (
-              self#check_referenceable a (ASTExpression a);
-              ref_type_check (ASTExpression a)
-                (data_type_to_jaf_type v.value_type.data)
-                a)
-            else
-              self#check_assign (ASTExpression a)
-                (ain_to_jaf_type v.value_type)
-                a
+          let check_arg a v =
+            match v.type_spec.ty with
+            | Ref ty ->
+                self#check_referenceable a (ASTExpression a);
+                ref_type_check (ASTExpression a) ty a
+            | _ -> self#check_assign (ASTExpression a) v.type_spec.ty a
           in
           List.iter2_exn args params ~f:check_arg
+      in
+      let check_call_ain (f : Ain.Function.t) args =
+        let params =
+          List.map (Ain.Function.logical_parameters f) ~f:(fun v ->
+              {
+                name = v.name;
+                location = dummy_location;
+                array_dim = [];
+                is_const = false;
+                kind = LocalVar;
+                type_spec =
+                  {
+                    ty = ain_to_jaf_type v.value_type;
+                    location = dummy_location;
+                  };
+                initval = None;
+                index = None;
+              })
+        in
+        check_call f.name params args
       in
       match expr.node with
       | ConstInt _ -> expr.ty <- Int
@@ -483,14 +496,11 @@ class type_analyze_visitor ctx =
               expr.ty <- ain_to_jaf_type member.value_type
           | None -> (
               let fun_name = struc.name ^ "@" ^ member_name in
-              match Ain.get_function ctx.ain fun_name with
+              match Hashtbl.find ctx.functions fun_name with
               | Some f ->
                   expr.node <-
-                    Member
-                      ( obj,
-                        member_name,
-                        Some (ClassMethod (struc.index, f.index)) );
-                  expr.ty <- TyMethod (fun_name, f.index)
+                    Member (obj, member_name, Some (ClassMethod fun_name));
+                  expr.ty <- TyMethod (fun_name, Option.value_exn f.index)
               | None ->
                   (* TODO: separate error type for this? *)
                   undefined_variable_error
@@ -501,8 +511,7 @@ class type_analyze_visitor ctx =
         ->
           let f = Hashtbl.find_exn ctx.functions name in
           let fno = Option.value_exn f.index in
-          let af = Ain.get_function_by_index ctx.ain fno in
-          check_call af args;
+          check_call f.name f.params args;
           expr.node <- Call (e, args, Some (FunctionCall fno));
           expr.ty <- f.return.ty
       (* built-in function call *)
@@ -511,18 +520,20 @@ class type_analyze_visitor ctx =
             args,
             _ ) ->
           let f = Bytecode.function_of_builtin builtin (Ain.Type.make Void) in
-          check_call f args;
+          check_call_ain f args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
           expr.ty <- ain_to_jaf_type f.return_type
       (* method call *)
       | Call
-          ( ({ node = Member (_, _, Some (ClassMethod (sno, mno))); _ } as e),
-            args,
-            _ ) ->
-          let f = Ain.get_function_by_index ctx.ain mno in
-          check_call f args;
-          expr.node <- Call (e, args, Some (MethodCall (sno, mno)));
-          expr.ty <- ain_to_jaf_type f.return_type
+          (({ node = Member (_, _, Some (ClassMethod name)); _ } as e), args, _)
+        ->
+          let f = Hashtbl.find_exn ctx.functions name in
+          check_call f.name f.params args;
+          let mcall =
+            MethodCall (Option.value_exn f.class_index, Option.value_exn f.index)
+          in
+          expr.node <- Call (e, args, Some mcall);
+          expr.ty <- f.return.ty
       (* HLL call *)
       | Call
           ( ({ node = Member (_, _, Some (HLLFunction (lib_no, fun_no))); _ } as
@@ -530,7 +541,7 @@ class type_analyze_visitor ctx =
             args,
             _ ) ->
           let f = Ain.function_of_hll_function_index ctx.ain lib_no fun_no in
-          check_call f args;
+          check_call_ain f args;
           expr.node <- Call (e, args, Some (HLLCall (lib_no, fun_no, -1)));
           expr.ty <- ain_to_jaf_type f.return_type
       (* system call *)
@@ -539,7 +550,7 @@ class type_analyze_visitor ctx =
             args,
             _ ) ->
           let f = Bytecode.function_of_syscall sys in
-          check_call f args;
+          check_call_ain f args;
           expr.node <- Call (e, args, Some (SystemCall sys));
           expr.ty <- ain_to_jaf_type f.return_type
       (* built-in method call *)
@@ -558,36 +569,36 @@ class type_analyze_visitor ctx =
           in
           let f = Bytecode.function_of_builtin builtin elem_t in
           (* TODO: properly check type-generic arguments based on object type *)
-          check_call f args;
+          check_call_ain f args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
           expr.ty <- ain_to_jaf_type f.return_type
       (* functype/delegate call *)
       | Call (e, args, _) -> (
           match e.ty with
-          | FuncType (_, no) ->
-              let f = Ain.function_of_functype_index ctx.ain no in
-              check_call f args;
-              expr.node <- Call (e, args, Some (FuncTypeCall no));
-              expr.ty <- ain_to_jaf_type f.return_type
-          | Delegate (_, no) ->
-              let f = Ain.function_of_delegate_index ctx.ain no in
-              check_call f args;
-              expr.node <- Call (e, args, Some (DelegateCall no));
-              expr.ty <- ain_to_jaf_type f.return_type
+          | FuncType (name, _) ->
+              let f = Hashtbl.find_exn ctx.functypes name in
+              check_call f.name f.params args;
+              expr.node <-
+                Call (e, args, Some (FuncTypeCall (Option.value_exn f.index)));
+              expr.ty <- f.return.ty
+          | Delegate (name, _) ->
+              let f = Hashtbl.find_exn ctx.delegates name in
+              check_call f.name f.params args;
+              expr.node <-
+                Call (e, args, Some (DelegateCall (Option.value_exn f.index)));
+              expr.ty <- f.return.ty
           | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
       | New (t, args, _) -> (
           match t with
-          | Struct (_, i) ->
+          | Struct (st_name, _) ->
               (* TODO: look up the correct constructor for given arguments *)
-              (match (Ain.get_struct_by_index ctx.ain i).constructor with
-              | -1 ->
+              (match Hashtbl.find ctx.functions (st_name ^ "@0") with
+              | None ->
                   if not (List.length args = 0) then
                     (* TODO: signal error properly here *)
                     compile_error "Arguments provided to default constructor"
                       (ASTExpression expr)
-              | no ->
-                  let ctor = Ain.get_function_by_index ctx.ain no in
-                  check_call ctor args);
+              | Some ctor -> check_call ctor.name ctor.params args);
               expr.ty <- t
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | This -> (
@@ -649,10 +660,14 @@ class type_analyze_visitor ctx =
           | MessageCall (msg, f_name, _) -> (
               match f_name with
               | Some name -> (
-                  match Ain.get_function ctx.ain name with
+                  match Hashtbl.find ctx.functions name with
                   | Some f ->
-                      if f.nr_args > 0 then arity_error f [] (ASTStatement stmt);
-                      stmt.node <- MessageCall (msg, f_name, Some f.index)
+                      if not (List.is_empty f.params) then
+                        arity_error f.name (List.length f.params) []
+                          (ASTStatement stmt);
+                      stmt.node <-
+                        MessageCall
+                          (msg, f_name, Some (Option.value_exn f.index))
                   | None -> undefined_variable_error name (ASTStatement stmt))
               | None -> ())
           | RefAssign (lhs, rhs) ->

@@ -1,5 +1,6 @@
 class C {
 public:
+	C() { this.m = 1; }
 	int m;
 private:
 	int n;
@@ -13,6 +14,7 @@ C::set() {
 int main()
 {
 	C f;
+	assert(f.m == 1);
 	f.set();
 	assert(f.m == 42);
 	f.n = 42;  // FIXME: should cause a compile error

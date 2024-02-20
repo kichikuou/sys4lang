@@ -23,7 +23,7 @@ let printf = Stdio.printf
 exception Syntax_error of location
 exception Type_error of jaf_type * expression option * ast_node
 exception Undefined_variable of string * ast_node
-exception Arity_error of Ain.Function.t * expression list * ast_node
+exception Arity_error of string * int * expression list * ast_node
 exception Not_lvalue_error of expression * ast_node
 exception Const_error of variable
 exception CompileError of string * ast_node
@@ -41,7 +41,9 @@ let type_error ty expr parent = raise (Type_error (ty, expr, parent))
 let undefined_variable_error name parent =
   raise (Undefined_variable (name, parent))
 
-let arity_error t args parent = raise (Arity_error (t, args, parent))
+let arity_error name nr_params args parent =
+  raise (Arity_error (name, nr_params, args, parent))
+
 let not_an_lvalue_error expr parent = raise (Not_lvalue_error (expr, parent))
 let const_error v = raise (Const_error v)
 let compile_error str node = raise (CompileError (str, node))
@@ -76,11 +78,11 @@ let rec print_error = function
       printf "\tin: %s\n" (ast_to_string parent)
   | Undefined_variable (name, node) ->
       printf "%s: Undefined variable: %s\n" (format_node_location node) name
-  | Arity_error (f, args, parent) ->
+  | Arity_error (name, nr_params, args, parent) ->
       printf
         "%s: wrong number of arguments to function %s (expected %d; got %d)\n"
         (format_node_location parent)
-        f.name f.nr_args (List.length args);
+        name nr_params (List.length args);
       printf "\tin: %s\n" (ast_to_string parent)
   | Not_lvalue_error (expr, parent) ->
       printf "%s: not an lvalue: %s\n"

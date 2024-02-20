@@ -19,6 +19,8 @@ open Printf
 
 type location = Lexing.position * Lexing.position
 
+let dummy_location = (Lexing.dummy_pos, Lexing.dummy_pos)
+
 type unary_op =
   | UPlus
   | UMinus
@@ -103,7 +105,7 @@ type ident_type =
 
 type member_type =
   | ClassVariable of int * int
-  | ClassMethod of int * int
+  | ClassMethod of string
   | HLLFunction of int * int
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
@@ -259,7 +261,7 @@ let ast_node_pos = function
       | Enum e -> e.loc)
   | ASTStructDecl d -> (
       match d with
-      | AccessSpecifier _ -> (Lexing.dummy_pos, Lexing.dummy_pos)
+      | AccessSpecifier _ -> dummy_location
       | MemberDecl d -> d.decl_loc
       | Constructor f -> f.loc
       | Destructor f -> f.loc
