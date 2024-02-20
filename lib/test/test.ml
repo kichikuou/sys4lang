@@ -66,8 +66,8 @@ let%expect_test "undefined type error" =
   |};
   [%expect
     {|
-    :2:13-14: Undefined type: undef_t
-    	in: Unresolved<undef_t> c; |}]
+    :2:5-12: Undefined type: undef_t
+    	in: Unresolved<undef_t> |}]
 
 let%expect_test "type error" =
   compile_jaf {|

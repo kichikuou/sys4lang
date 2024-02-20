@@ -216,22 +216,25 @@ class variable_alloc_visitor ctx =
       super#visit_variable v
 
     method! visit_fundecl f =
-      let conv_var index (v : variable) =
-        Ain.Variable.make ~index v.name (jaf_to_ain_type v.type_spec.ty)
-      in
-      let add_vars (a_f : Ain.Function.t) =
-        { a_f with vars = List.mapi (List.rev vars) ~f:conv_var }
-      in
-      self#start_scope;
-      super#visit_fundecl f;
-      self#end_scope ScopeAnon;
-      (* write updated fundecl to ain file *)
-      (match Ain.get_function ctx.ain (mangled_name f) with
-      | Some obj ->
-          obj |> jaf_to_ain_function f |> add_vars |> Ain.write_function ctx.ain
-      | None ->
-          compiler_bug "Undefined function" (Some (ASTDeclaration (Function f))));
-      vars <- []
+      if Option.is_some f.body then (
+        let conv_var index (v : variable) =
+          Ain.Variable.make ~index v.name (jaf_to_ain_type v.type_spec.ty)
+        in
+        let add_vars (a_f : Ain.Function.t) =
+          { a_f with vars = List.mapi (List.rev vars) ~f:conv_var }
+        in
+        self#start_scope;
+        super#visit_fundecl f;
+        self#end_scope ScopeAnon;
+        (* write updated fundecl to ain file *)
+        (match Ain.get_function ctx.ain (mangled_name f) with
+        | Some obj ->
+            obj |> jaf_to_ain_function f |> add_vars
+            |> Ain.write_function ctx.ain
+        | None ->
+            compiler_bug "Undefined function"
+              (Some (ASTDeclaration (Function f))));
+        vars <- [])
   end
 
 let allocate_variables ctx decls =

@@ -460,9 +460,7 @@ class ivisitor ctx =
     method visit_declaration d =
       match d with
       | Global ds -> self#visit_vardecls ds
-      | Function f -> self#visit_fundecl f
-      | FuncTypeDef _ -> ()
-      | DelegateDef _ -> ()
+      | Function f | FuncTypeDef f | DelegateDef f -> self#visit_fundecl f
       | StructDef s -> List.iter s.decls ~f:self#visit_struct_declaration
       | Enum enum ->
           let visit_enumval (_, expr) =

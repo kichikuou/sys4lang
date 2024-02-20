@@ -105,16 +105,16 @@ class type_resolve_visitor ctx decl_only =
               | Some i -> Delegate (name, i)
               | None -> compile_error ("Undefined type: " ^ name) node))
 
-    method resolve_typespec ts node =
+    method! visit_type_specifier ts =
       let rec resolve t =
         match t with
-        | Unresolved t -> self#resolve_type t node
+        | Unresolved t -> self#resolve_type t (ASTType ts)
         | Ref t -> Ref (resolve t)
         | Array t -> Array (resolve t)
         | Wrap t -> Wrap (resolve t)
         | _ -> t
       in
-      resolve ts
+      ts.ty <- resolve ts.ty
 
     method! visit_expression expr =
       (match expr.node with
@@ -123,36 +123,15 @@ class type_resolve_visitor ctx decl_only =
       | _ -> ());
       super#visit_expression expr
 
-    method! visit_variable decl =
-      decl.type_spec.ty <-
-        self#resolve_typespec decl.type_spec.ty (ASTVariable decl);
-      super#visit_variable decl
-
     method! visit_declaration decl =
       let function_class (f : fundecl) =
         match f.struct_name with
         | Some name -> Ain.get_struct_index ctx.ain name
         | _ -> None
       in
-      let resolve_function f =
-        f.return.ty <-
-          self#resolve_typespec f.return.ty (ASTDeclaration (Function f));
-        List.iter f.params ~f:(fun v ->
-            v.type_spec.ty <-
-              self#resolve_typespec v.type_spec.ty (ASTVariable v))
-      in
       (match decl with
-      | Function f ->
-          resolve_function f;
-          f.class_index <- function_class f
-      | FuncTypeDef f | DelegateDef f -> resolve_function f
-      | Global _ -> ()
-      | StructDef s ->
-          let resolve_structdecl = function
-            | AccessSpecifier _ | MemberDecl _ -> ()
-            | Constructor f | Destructor f | Method f -> resolve_function f
-          in
-          List.iter s.decls ~f:resolve_structdecl
+      | Function f -> f.class_index <- function_class f
+      | FuncTypeDef _ | DelegateDef _ | Global _ | StructDef _ -> ()
       | Enum _ ->
           compile_error "enum types not yet supported" (ASTDeclaration decl));
       if not decl_only then super#visit_declaration decl

@@ -51,12 +51,13 @@ class sanity_check_visitor ctx =
       | _ -> ()
 
     method! visit_fundecl f =
-      super#visit_fundecl f;
-      match f.index with
-      | Some _ -> ()
-      | None ->
-          compiler_bug "function index not set"
-            (Some (ASTDeclaration (Function f)))
+      if Option.is_some f.body then (
+        super#visit_fundecl f;
+        match f.index with
+        | Some _ -> ()
+        | None ->
+            compiler_bug "function index not set"
+              (Some (ASTDeclaration (Function f))))
   end
 
 let check_invariants ctx decls =
