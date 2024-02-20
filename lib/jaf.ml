@@ -152,7 +152,7 @@ type statement = {
 
 and ast_statement =
   | EmptyStatement
-  | Declarations of variable list
+  | Declarations of vardecls
   | Expression of expression
   | Compound of statement list
   | Labeled of string * statement
@@ -182,6 +182,12 @@ and variable = {
   mutable index : int option;
 }
 
+and vardecls = {
+  decl_loc : location;
+  typespec : type_specifier;
+  vars : variable list;
+}
+
 type fundecl = {
   mutable name : string;
   loc : location;
@@ -203,7 +209,7 @@ type access_specifier = Public | Private
 
 type struct_declaration =
   | AccessSpecifier of access_specifier
-  | MemberDecl of variable
+  | MemberDecl of vardecls
   | Constructor of fundecl
   | Destructor of fundecl
   | Method of fundecl
@@ -223,7 +229,7 @@ type enumdecl = {
 
 type declaration =
   | Function of fundecl
-  | Global of variable
+  | Global of vardecls
   | FuncTypeDef of fundecl
   | DelegateDef of fundecl
   | StructDef of structdecl
@@ -244,7 +250,7 @@ let ast_node_pos = function
   | ASTDeclaration d -> (
       match d with
       | Function f -> f.loc
-      | Global v -> v.location
+      | Global d -> d.decl_loc
       | FuncTypeDef f -> f.loc
       | DelegateDef f -> f.loc
       | StructDef s -> s.loc
@@ -252,7 +258,7 @@ let ast_node_pos = function
   | ASTStructDecl d -> (
       match d with
       | AccessSpecifier _ -> (Lexing.dummy_pos, Lexing.dummy_pos)
-      | MemberDecl v -> v.location
+      | MemberDecl d -> d.decl_loc
       | Constructor f -> f.loc
       | Destructor f -> f.loc
       | Method f -> f.loc)
@@ -388,13 +394,16 @@ class ivisitor ctx =
       | This -> ()
       | Null -> ()
 
+    method visit_vardecls (ds : vardecls) =
+      self#visit_type_specifier ds.typespec;
+      List.iter ds.vars ~f:(fun v ->
+          self#visit_variable v;
+          match v.kind with LocalVar -> environment#push_var v | _ -> ())
+
     method visit_statement (s : statement) =
       match s.node with
       | EmptyStatement -> ()
-      | Declarations ds ->
-          List.iter ds ~f:(fun v ->
-              self#visit_variable v;
-              environment#push_var v)
+      | Declarations ds -> self#visit_vardecls ds
       | Expression e -> self#visit_expression e
       | Compound stmts ->
           environment#push;
@@ -451,7 +460,7 @@ class ivisitor ctx =
 
     method visit_declaration d =
       match d with
-      | Global g -> self#visit_variable g
+      | Global ds -> self#visit_vardecls ds
       | Function f -> self#visit_fundecl f
       | FuncTypeDef _ -> ()
       | DelegateDef _ -> ()
@@ -465,7 +474,7 @@ class ivisitor ctx =
     method visit_struct_declaration d =
       match d with
       | AccessSpecifier _ -> ()
-      | MemberDecl d -> self#visit_variable d
+      | MemberDecl ds -> self#visit_vardecls ds
       | Constructor f -> self#visit_fundecl f
       | Destructor f -> self#visit_fundecl f
       | Method f -> self#visit_fundecl f
@@ -589,8 +598,7 @@ let rec expr_to_string (e : expression) =
 let rec stmt_to_string (stmt : statement) =
   match stmt.node with
   | EmptyStatement -> ";"
-  | Declarations ds ->
-      List.fold (List.map ds ~f:var_to_string) ~init:"" ~f:( ^ )
+  | Declarations ds -> vardecls_to_string ds
   | Expression e -> expr_to_string e ^ ";"
   | Compound stmts ->
       stmts |> List.map ~f:stmt_to_string |> List.fold ~init:"" ~f:( ^ )
@@ -634,7 +642,6 @@ let rec stmt_to_string (stmt : statement) =
   | ObjSwap (a, b) -> sprintf "%s <=> %s;" (expr_to_string a) (expr_to_string b)
 
 and var_to_string' d =
-  let t = jaf_type_to_string d.type_spec.ty in
   let dim_iter l r = l ^ sprintf "[%s]" (expr_to_string r) in
   let dims = List.fold d.array_dim ~init:"" ~f:dim_iter in
   let init =
@@ -642,9 +649,15 @@ and var_to_string' d =
     | None -> ""
     | Some e -> sprintf " = %s" (expr_to_string e)
   in
-  sprintf "%s %s%s%s" t dims d.name init
+  sprintf "%s%s%s" dims d.name init
 
-and var_to_string d = var_to_string' d ^ ";"
+and var_to_string d =
+  let t = jaf_type_to_string d.type_spec.ty in
+  sprintf "%s %s;" t (var_to_string' d)
+
+and vardecls_to_string (decls : vardecls) =
+  let vars = List.map decls.vars ~f:var_to_string' |> String.concat ~sep:", " in
+  sprintf "%s %s" (jaf_type_to_string decls.typespec.ty) vars
 
 let params_to_string = function
   | [] -> "()"
@@ -661,7 +674,7 @@ let block_to_string block =
 let sdecl_to_string = function
   | AccessSpecifier Public -> "public:"
   | AccessSpecifier Private -> "private:"
-  | MemberDecl d -> var_to_string d
+  | MemberDecl ds -> vardecls_to_string ds
   | Constructor d ->
       let params = params_to_string d.params in
       let body = block_to_string d.body in
@@ -678,7 +691,7 @@ let sdecl_to_string = function
 
 let decl_to_string d =
   match d with
-  | Global d -> var_to_string d
+  | Global ds -> vardecls_to_string ds
   | Function d ->
       let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
@@ -804,8 +817,10 @@ let jaf_to_ain_function j_f (a_f : Ain.Function.t) =
 
 let jaf_to_ain_struct j_s (a_s : Ain.Struct.t) =
   let members =
-    List.filter_map j_s.decls ~f:(function MemberDecl v -> Some v | _ -> None)
-    |> jaf_to_ain_variables
+    List.filter_map j_s.decls ~f:(function
+      | MemberDecl ds -> Some ds.vars
+      | _ -> None)
+    |> List.concat |> jaf_to_ain_variables
   in
   let is_ctor = function Constructor _ -> true | _ -> false in
   let constructor =

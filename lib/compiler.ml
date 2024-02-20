@@ -907,7 +907,8 @@ class jaf_compiler ain =
           self#compile_delete_var (self#get_local i));
       match stmt.node with
       | EmptyStatement -> ()
-      | Declarations vars -> List.iter vars ~f:self#compile_variable_declaration
+      | Declarations decls ->
+          List.iter decls.vars ~f:self#compile_variable_declaration
       | Expression e ->
           self#compile_expression e;
           self#compile_pop e.ty
@@ -1289,14 +1290,15 @@ class jaf_compiler ain =
       current_address <- start_address;
       let compile_decl = function
         | Jaf.Function f -> self#compile_function f
-        | Global g -> (
-            if g.is_const then ()
-            else
-              match g.initval with
-              | Some _ ->
-                  compile_error "Global initvals not implemented"
-                    (ASTDeclaration (Global g))
-              | None -> ())
+        | Global decls ->
+            List.iter decls.vars ~f:(fun g ->
+                if g.is_const then ()
+                else
+                  match g.initval with
+                  | Some _ ->
+                      compile_error "Global initvals not implemented"
+                        (ASTDeclaration (Global decls))
+                  | None -> ())
         | FuncTypeDef _ | DelegateDef _ -> ()
         | StructDef d ->
             let compile_struct_decl (d : struct_declaration) =

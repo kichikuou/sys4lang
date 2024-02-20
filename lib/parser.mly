@@ -123,7 +123,7 @@ let rec multidim_array dims t =
 %%
 
 jaf
-  : external_declaration* EOF { List.concat $1 }
+  : external_declaration* EOF { $1 }
   ;
 
 hll
@@ -403,9 +403,9 @@ assert_statement
 
 declaration
   : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { decls true $2 $3 }
+    { { decl_loc = $sloc; typespec = $2; vars = decls true $2 $3 } }
   | declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { decls false $1 $2 }
+    { { decl_loc = $sloc; typespec = $1; vars = decls false $1 $2 } }
   ;
 
 declaration_specifiers
@@ -431,30 +431,30 @@ array_allocation
 
 external_declaration
   : declaration
-    { List.map (fun d -> Global { d with kind = GlobalVar }) $1 }
+    { Global { $1 with vars = (List.map (fun d -> { d with kind = GlobalVar }) $1.vars) } }
   | declaration_specifiers IDENTIFIER parameter_list block
-    { [Function (func $sloc $1 $2 $3 $4)] }
+    { Function (func $sloc $1 $2 $3 $4) }
   | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
-    { [Function (member_func $sloc $1 $2 $4 $5 $6 $7)] }
+    { Function (member_func $sloc $1 $2 $4 $5 $6 $7) }
   | HASH IDENTIFIER parameter_list block
-    { [Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 $4) with is_label=true }] }
+    { Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 $4) with is_label=true } }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
-    { [FuncTypeDef (func $sloc $2 $3 $4 [])] }
+    { FuncTypeDef (func $sloc $2 $3 $4 []) }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
-    { [DelegateDef (func $sloc $2 $3 $4 [])] }
+    { DelegateDef (func $sloc $2 $3 $4 []) }
   | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
-    { [StructDef ({ loc=$sloc; is_class=$1; name=$2; decls=(List.concat $4) })] }
+    { StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 }) }
   | ENUM enumerator_list SEMICOLON
-    { [Enum ({ loc=$sloc; name=None; values=$2 })] }
+    { Enum ({ loc=$sloc; name=None; values=$2 }) }
   | ENUM IDENTIFIER enumerator_list SEMICOLON
-    { [Enum ({ loc=$sloc; name=Some $2; values=$3 })] }
+    { Enum ({ loc=$sloc; name=Some $2; values=$3 }) }
   ;
 
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list SEMICOLON
     { [Function (func $sloc $1 $2 $3 [])] }
   | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
-    { [StructDef ({ loc=$sloc; is_class=$1; name=$2; decls=(List.concat $4) })] }
+    { [StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 })] }
   ;
 
 struct_or_class
@@ -491,15 +491,16 @@ functype_parameter_list
 
 struct_declaration
   : access_specifier COLON
-    { [AccessSpecifier $1] }
+    { AccessSpecifier $1 }
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
-    { decls false $1 $2 |> List.map (fun d -> MemberDecl { d with kind = ClassVar }) }
+    { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls false $1 $2) in
+      MemberDecl { decl_loc=$sloc; typespec=$1; vars } }
   | declaration_specifiers IDENTIFIER parameter_list block
-    { [Method (func $sloc $1 $2 $3 $4)] }
+    { Method (func $sloc $1 $2 $3 $4) }
   | IDENTIFIER LPAREN VOID? RPAREN block
-    { [Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5)] }
+    { Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5) }
   | BITNOT IDENTIFIER LPAREN RPAREN block
-    { [Destructor (func $sloc (implicit_void $symbolstartpos) $2 [] $5)] }
+    { Destructor (func $sloc (implicit_void $symbolstartpos) $2 [] $5) }
   ;
 
 access_specifier
