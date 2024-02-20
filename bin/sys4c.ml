@@ -68,7 +68,9 @@ let compile_sources sources major minor decl_only =
     | _ -> (Ain.create major minor, sources)
   in
   (* compile sources *)
-  let ctx = { ain; const_vars = [] } in
+  let ctx =
+    { ain; functions = Hashtbl.create (module String); const_vars = [] }
+  in
   let compile_file f =
     if Filename.check_suffix f ".jaf" || String.equal f "-" then
       compile_jaf ctx f decl_only

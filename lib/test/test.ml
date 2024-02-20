@@ -7,7 +7,14 @@ let parse_jaf input =
   with Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
 
 let compile_jaf input =
-  let ctx = Jaf.{ ain = Ain.create 4 0; const_vars = [] } in
+  let ctx =
+    Jaf.
+      {
+        ain = Ain.create 4 0;
+        functions = Hashtbl.create (module String);
+        const_vars = [];
+      }
+  in
   try
     let jaf = parse_jaf input in
     Declarations.register_type_declarations ctx jaf;
@@ -236,7 +243,7 @@ let%expect_test "RefAssign operator" =
       :15:9-20: Type error: expected ref int; got null
       	at: NULL
       	in: NULL <- ra;
-      :18:9-23: Type error: expected ref int; got ref
+      :18:9-23: Type error: expected ref int; got ref S
       	at: ref_S()
       	in: ra <- ref_S();
       :19:9-17: not an lvalue: 3
@@ -300,10 +307,10 @@ let%expect_test "RefEqual operator" =
       	in: a === ra
       :15:9-20: not an lvalue: NULL
       	in: NULL === ra
-      :18:9-23: Type error: expected ref int; got ref
+      :18:9-23: Type error: expected ref int; got ref S
       	at: ref_S()
       	in: ra === ref_S()
-      :19:9-23: Type error: expected ref ; got ref int
+      :19:9-23: Type error: expected ref S; got ref int
       	at: ra
       	in: ref_S() === ra
       :20:9-17: not an lvalue: 3

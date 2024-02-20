@@ -24,16 +24,14 @@ open CompileError
 class type_declare_visitor ctx =
   object (self)
     inherit ivisitor ctx
-    val functions = Stack.create ()
 
     method declare_function decl =
       let name = mangled_name decl in
-      (match Ain.get_function ctx.ain name with
-      | Some _ ->
+      match Hashtbl.add ctx.functions ~key:name ~data:decl with
+      | `Duplicate ->
           compile_error "Duplicate function definition"
             (ASTDeclaration (Function decl))
-      | None -> decl.index <- Some (Ain.add_function ctx.ain name).index);
-      Stack.push functions decl
+      | `Ok -> decl.index <- Some (Ain.add_function ctx.ain name).index
 
     method! visit_declaration decl =
       match decl with

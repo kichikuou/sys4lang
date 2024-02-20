@@ -94,7 +94,7 @@ type ident_type =
   | LocalVariable of int
   | GlobalVariable of int
   | GlobalConstant
-  | FunctionName of int
+  | FunctionName of string
   | HLLName of int
   | System
   | BuiltinFunction of Bytecode.builtin
@@ -264,13 +264,17 @@ let ast_node_pos = function
       | Method f -> f.loc)
   | ASTType t -> t.location
 
-type context = { ain : Ain.t; mutable const_vars : variable list }
+type context = {
+  ain : Ain.t;
+  functions : (string, fundecl) Hashtbl.t;
+  mutable const_vars : variable list;
+}
 
 type resolved_name =
   | ResolvedLocal of variable
   | ResolvedConstant of variable
   | ResolvedGlobal of Ain.Variable.t
-  | ResolvedFunction of int
+  | ResolvedFunction of fundecl
   | ResolvedLibrary of int
   | ResolvedSystem
   | ResolvedBuiltin of Bytecode.builtin
@@ -326,14 +330,14 @@ class ivisitor ctx =
           search variables stack
 
         method resolve name =
-          let ain_resolve ain =
-            match Ain.get_global ain name with
+          let ctx_resolve ctx =
+            match Ain.get_global ctx.ain name with
             | Some g -> ResolvedGlobal g
             | None -> (
-                match Ain.get_function ain name with
-                | Some f -> ResolvedFunction f.index
+                match Hashtbl.find ctx.functions name with
+                | Some f -> ResolvedFunction f
                 | None -> (
-                    match Ain.get_library_index ain name with
+                    match Ain.get_library_index ctx.ain name with
                     | Some i -> ResolvedLibrary i
                     | None -> UnresolvedName))
           in
@@ -358,7 +362,7 @@ class ivisitor ctx =
                         String.equal v.name name)
                   with
                   | Some (_, v) -> ResolvedConstant v
-                  | None -> ain_resolve ctx.ain))
+                  | None -> ctx_resolve ctx))
       end
 
     method visit_expression (e : expression) =

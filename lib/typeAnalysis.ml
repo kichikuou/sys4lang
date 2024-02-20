@@ -286,9 +286,9 @@ class type_analyze_visitor ctx =
           | ResolvedGlobal g ->
               expr.node <- Ident (name, Some (GlobalVariable g.index));
               expr.ty <- ain_to_jaf_type g.value_type
-          | ResolvedFunction i ->
-              expr.node <- Ident (name, Some (FunctionName i));
-              expr.ty <- TyFunction i
+          | ResolvedFunction f ->
+              expr.node <- Ident (name, Some (FunctionName name));
+              expr.ty <- TyFunction (Option.value_exn f.index)
           | ResolvedLibrary i ->
               expr.node <- Ident (name, Some (HLLName i));
               expr.ty <- Void
@@ -488,12 +488,14 @@ class type_analyze_visitor ctx =
                     (struc.name ^ "." ^ member_name)
                     (ASTExpression expr)))
       (* regular function call *)
-      | Call (({ node = Ident (_, Some (FunctionName fno)); _ } as e), args, _)
+      | Call (({ node = Ident (_, Some (FunctionName name)); _ } as e), args, _)
         ->
-          let f = Ain.get_function_by_index ctx.ain fno in
-          check_call f args;
+          let f = Hashtbl.find_exn ctx.functions name in
+          let fno = Option.value_exn f.index in
+          let af = Ain.get_function_by_index ctx.ain fno in
+          check_call af args;
           expr.node <- Call (e, args, Some (FunctionCall fno));
-          expr.ty <- ain_to_jaf_type f.return_type
+          expr.ty <- f.return.ty
       (* built-in function call *)
       | Call
           ( ({ node = Ident (_, Some (BuiltinFunction builtin)); _ } as e),
