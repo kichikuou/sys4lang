@@ -5,7 +5,7 @@ AIN_FILE="$(mktemp --suffix=.ain)"
 
 printf "Running test $TEST_FILE... "
 
-if ! ${SYS4C:-sys4c} -o "$AIN_FILE" "$TEST_FILE"; then
+if ! ${SYS4C:-sys4c} -o "$AIN_FILE" "$@"; then
     echo compile failed
     rm -f "$AIN_FILE"
     exit 1

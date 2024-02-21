@@ -185,10 +185,19 @@ let define_library ctx decls name =
   (* define library *)
   let functions =
     List.map fun_decls ~f:(function
-      | Function f -> jaf_to_ain_hll_function f
+      | Function f -> f
       | decl ->
           compiler_bug "unexpected declaration in .hll file"
             (Some (ASTDeclaration decl)))
   in
-  let lib = { (Ain.add_library ctx.ain name) with functions } in
-  Ain.write_library ctx.ain lib
+  Ain.write_library ctx.ain
+    {
+      (Ain.add_library ctx.ain name) with
+      functions = List.map ~f:jaf_to_ain_hll_function functions;
+    };
+  let lib =
+    Hashtbl.of_alist_exn
+      (module String)
+      (List.map ~f:(fun d -> (d.name, d)) functions)
+  in
+  Hashtbl.add_exn ctx.libraries ~key:name ~data:lib

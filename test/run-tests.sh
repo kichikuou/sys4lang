@@ -17,3 +17,4 @@ cd $(dirname "$0")
 ./test-runner.sh char-constant.jaf
 ./test-runner.sh const.jaf
 ./test-runner.sh unicode.jaf
+./test-runner.sh Math.hll hllcall.jaf

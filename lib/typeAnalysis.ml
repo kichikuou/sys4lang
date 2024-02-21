@@ -271,26 +271,6 @@ class type_analyze_visitor ctx =
           in
           List.iter2_exn args params ~f:check_arg
       in
-      let check_call_ain (f : Ain.Function.t) args =
-        let params =
-          List.map (Ain.Function.logical_parameters f) ~f:(fun v ->
-              {
-                name = v.name;
-                location = dummy_location;
-                array_dim = [];
-                is_const = false;
-                kind = LocalVar;
-                type_spec =
-                  {
-                    ty = ain_to_jaf_type v.value_type;
-                    location = dummy_location;
-                  };
-                initval = None;
-                index = None;
-              })
-        in
-        check_call f.name params args
-      in
       match expr.node with
       | ConstInt _ -> expr.ty <- Int
       | ConstFloat _ -> expr.ty <- Float
@@ -310,8 +290,8 @@ class type_analyze_visitor ctx =
           | ResolvedFunction f ->
               expr.node <- Ident (name, Some (FunctionName name));
               expr.ty <- TyFunction (name, Option.value_exn f.index)
-          | ResolvedLibrary i ->
-              expr.node <- Ident (name, Some (HLLName i));
+          | ResolvedLibrary _ ->
+              expr.node <- Ident (name, Some (HLLName name));
               expr.ty <- Void
           | ResolvedSystem ->
               expr.node <- Ident ("system", Some System);
@@ -457,13 +437,12 @@ class type_analyze_visitor ctx =
                 (ASTExpression expr))
       (* HLL function *)
       | Member
-          ( ({ node = Ident (lib_name, Some (HLLName lib_no)); _ } as e),
-            fun_name,
-            _ ) -> (
-          match Ain.get_library_function_index ctx.ain lib_no fun_name with
-          | Some fun_no ->
+          (({ node = Ident (lib_name, Some (HLLName _)); _ } as e), fun_name, _)
+        -> (
+          match find_hll_function ctx lib_name fun_name with
+          | Some _ ->
               expr.node <-
-                Member (e, fun_name, Some (HLLFunction (lib_no, fun_no)));
+                Member (e, fun_name, Some (HLLFunction (lib_name, fun_name)));
               expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
@@ -536,14 +515,21 @@ class type_analyze_visitor ctx =
           expr.ty <- f.return.ty
       (* HLL call *)
       | Call
-          ( ({ node = Member (_, _, Some (HLLFunction (lib_no, fun_no))); _ } as
-             e),
+          ( ({ node = Member (_, _, Some (HLLFunction (lib_name, fun_name))); _ }
+             as e),
             args,
             _ ) ->
-          let f = Ain.function_of_hll_function_index ctx.ain lib_no fun_no in
-          check_call_ain f args;
+          let f = Option.value_exn (find_hll_function ctx lib_name fun_name) in
+          check_call f.name f.params args;
+          let lib_no =
+            Option.value_exn (Ain.get_library_index ctx.ain lib_name)
+          in
+          let fun_no =
+            Option.value_exn
+              (Ain.get_library_function_index ctx.ain lib_no fun_name)
+          in
           expr.node <- Call (e, args, Some (HLLCall (lib_no, fun_no, -1)));
-          expr.ty <- ain_to_jaf_type f.return_type
+          expr.ty <- f.return.ty
       (* system call *)
       | Call
           ( ({ node = Member (_, _, Some (SystemFunction sys)); _ } as e),

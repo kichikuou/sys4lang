@@ -99,14 +99,14 @@ type ident_type =
   | GlobalVariable of int
   | GlobalConstant
   | FunctionName of string
-  | HLLName of int
+  | HLLName of string
   | System
   | BuiltinFunction of Bytecode.builtin
 
 type member_type =
   | ClassVariable of int * int
   | ClassMethod of string
-  | HLLFunction of int * int
+  | HLLFunction of string * string
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
 
@@ -268,11 +268,14 @@ let ast_node_pos = function
       | Method f -> f.loc)
   | ASTType t -> t.location
 
+type library = (string, fundecl) Hashtbl.t
+
 type context = {
   ain : Ain.t;
   functions : (string, fundecl) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
   delegates : (string, fundecl) Hashtbl.t;
+  libraries : (string, library) Hashtbl.t;
   mutable const_vars : variable list;
 }
 
@@ -282,15 +285,21 @@ let context_from_ain ain =
     functions = Hashtbl.create (module String);
     functypes = Hashtbl.create (module String);
     delegates = Hashtbl.create (module String);
+    libraries = Hashtbl.create (module String);
     const_vars = [];
   }
+
+let find_hll_function ctx lib func =
+  match Hashtbl.find ctx.libraries lib with
+  | Some l -> Hashtbl.find l func
+  | None -> None
 
 type resolved_name =
   | ResolvedLocal of variable
   | ResolvedConstant of variable
   | ResolvedGlobal of Ain.Variable.t
   | ResolvedFunction of fundecl
-  | ResolvedLibrary of int
+  | ResolvedLibrary of library
   | ResolvedSystem
   | ResolvedBuiltin of Bytecode.builtin
   | UnresolvedName
@@ -352,18 +361,14 @@ class ivisitor ctx =
                 match Hashtbl.find ctx.functions name with
                 | Some f -> ResolvedFunction f
                 | None -> (
-                    match Ain.get_library_index ctx.ain name with
-                    | Some i -> ResolvedLibrary i
+                    match Hashtbl.find ctx.libraries name with
+                    | Some l -> ResolvedLibrary l
                     | None -> UnresolvedName))
           in
           match name with
-          | "system" ->
+          | "system" when not (Ain.version_gte ctx.ain (11, 0)) ->
               (* NOTE: on ain v11+, "system" is a library *)
-              if Ain.version_gte ctx.ain (11, 0) then
-                match Ain.get_library_index ctx.ain "system" with
-                | Some i -> ResolvedLibrary i
-                | None -> UnresolvedName
-              else ResolvedSystem
+              ResolvedSystem
           | "assert" ->
               ResolvedBuiltin
                 (Option.value_exn
