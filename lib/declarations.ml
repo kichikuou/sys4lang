@@ -37,11 +37,12 @@ class type_declare_visitor ctx =
       match decl with
       | Global ds ->
           List.iter ds.vars ~f:(fun g ->
-              if not g.is_const then (
-                if Option.is_some (Ain.get_global ctx.ain g.name) then
-                  compile_error "duplicate global variable definition"
-                    (ASTDeclaration decl);
-                g.index <- Some (Ain.add_global ctx.ain g.name)))
+              if not g.is_const then
+                match Hashtbl.add ctx.globals ~key:g.name ~data:g with
+                | `Duplicate ->
+                    compile_error "duplicate global variable definition"
+                      (ASTDeclaration decl)
+                | `Ok -> g.index <- Some (Ain.add_global ctx.ain g.name))
       | Function f -> self#declare_function f
       | FuncTypeDef f -> (
           match Hashtbl.add ctx.functypes ~key:f.name ~data:f with

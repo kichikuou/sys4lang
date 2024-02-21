@@ -225,19 +225,10 @@ class type_analyze_visitor ctx =
       match lhs.node with
       | Ident (name, _) -> (
           match environment#resolve name with
-          | ResolvedLocal v -> (
+          | ResolvedLocal v | ResolvedGlobal v -> (
               match v.type_spec.ty with
               | Ref ty -> ref_type_check parent ty rhs
               | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
-          | ResolvedGlobal g ->
-              if g.value_type.is_ref then
-                ref_type_check parent
-                  (data_type_to_jaf_type g.value_type.data)
-                  rhs
-              else
-                type_error
-                  (Ref (data_type_to_jaf_type g.value_type.data))
-                  (Some lhs) parent
           | UnresolvedName -> undefined_variable_error name parent
           | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
       | Member (_, _, Some (ClassVariable _)) -> (
@@ -285,8 +276,9 @@ class type_analyze_visitor ctx =
               expr.node <- Ident (name, Some GlobalConstant);
               expr.ty <- v.type_spec.ty
           | ResolvedGlobal g ->
-              expr.node <- Ident (name, Some (GlobalVariable g.index));
-              expr.ty <- ain_to_jaf_type g.value_type
+              expr.node <-
+                Ident (name, Some (GlobalVariable (Option.value_exn g.index)));
+              expr.ty <- g.type_spec.ty
           | ResolvedFunction f ->
               expr.node <- Ident (name, Some (FunctionName name));
               expr.ty <- TyFunction (name, Option.value_exn f.index)

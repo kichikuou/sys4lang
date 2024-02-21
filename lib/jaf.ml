@@ -272,6 +272,7 @@ type library = (string, fundecl) Hashtbl.t
 
 type context = {
   ain : Ain.t;
+  globals : (string, variable) Hashtbl.t;
   functions : (string, fundecl) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
   delegates : (string, fundecl) Hashtbl.t;
@@ -282,6 +283,7 @@ type context = {
 let context_from_ain ain =
   {
     ain;
+    globals = Hashtbl.create (module String);
     functions = Hashtbl.create (module String);
     functypes = Hashtbl.create (module String);
     delegates = Hashtbl.create (module String);
@@ -297,7 +299,7 @@ let find_hll_function ctx lib func =
 type resolved_name =
   | ResolvedLocal of variable
   | ResolvedConstant of variable
-  | ResolvedGlobal of Ain.Variable.t
+  | ResolvedGlobal of variable
   | ResolvedFunction of fundecl
   | ResolvedLibrary of library
   | ResolvedSystem
@@ -355,7 +357,7 @@ class ivisitor ctx =
 
         method resolve name =
           let ctx_resolve ctx =
-            match Ain.get_global ctx.ain name with
+            match Hashtbl.find ctx.globals name with
             | Some g -> ResolvedGlobal g
             | None -> (
                 match Hashtbl.find ctx.functions name with
