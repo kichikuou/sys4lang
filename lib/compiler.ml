@@ -789,7 +789,7 @@ class jaf_compiler ain =
               "attempted to compile old-style system call in ain v11+"
               (Some (ASTExpression expr))
           else
-            let f = function_of_syscall sys in
+            let f = Builtin.function_of_syscall sys in
             self#compile_function_arguments args f;
             self#write_instruction1 CALLSYS f.index
       (* built-in call *)
@@ -797,7 +797,7 @@ class jaf_compiler ain =
           if Ain.version_gte ain (11, 0) then
             compiler_bug "tried to compile old-style built-in call in ain v11+"
               (Some (ASTExpression expr));
-          let t_param = ref (Ain.Type.make Void) in
+          let receiver_ty = ref Void in
           (match lhs with
           | { node = Member (e, _, _); _ } -> (
               match builtin with
@@ -811,13 +811,13 @@ class jaf_compiler ain =
               | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
               | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty
               | ArrayErase | ArrayInsert | ArraySort ->
-                  t_param := jaf_to_ain_type e.ty;
+                  receiver_ty := e.ty;
                   self#compile_variable_ref e
               | Assert ->
                   compiler_bug "invalid assert expression"
                     (Some (ASTExpression expr)))
           | _ -> ());
-          let f = function_of_builtin builtin !t_param in
+          let f = Builtin.function_of_builtin builtin !receiver_ty in
           self#compile_function_arguments args f;
           match builtin with
           | Assert -> self#write_instruction0 ASSERT

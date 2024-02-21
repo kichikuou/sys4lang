@@ -519,10 +519,10 @@ class type_analyze_visitor ctx =
           ( ({ node = Ident (_, Some (BuiltinFunction builtin)); _ } as e),
             args,
             _ ) ->
-          let f = Bytecode.function_of_builtin builtin (Ain.Type.make Void) in
-          check_call_ain f args;
+          let f = Builtin.fundecl_of_builtin builtin Void in
+          check_call f.name f.params args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
-          expr.ty <- ain_to_jaf_type f.return_type
+          expr.ty <- f.return.ty
       (* method call *)
       | Call
           (({ node = Member (_, _, Some (ClassMethod name)); _ } as e), args, _)
@@ -549,10 +549,10 @@ class type_analyze_visitor ctx =
           ( ({ node = Member (_, _, Some (SystemFunction sys)); _ } as e),
             args,
             _ ) ->
-          let f = Bytecode.function_of_syscall sys in
-          check_call_ain f args;
+          let f = Builtin.fundecl_of_syscall sys in
+          check_call f.name f.params args;
           expr.node <- Call (e, args, Some (SystemCall sys));
-          expr.ty <- ain_to_jaf_type f.return_type
+          expr.ty <- f.return.ty
       (* built-in method call *)
       | Call
           ( ({ node = Member (obj, _, Some (BuiltinMethod builtin)); _ } as e),
@@ -562,16 +562,11 @@ class type_analyze_visitor ctx =
           if Ain.version_gte ctx.ain (11, 0) then
             compile_error "ain v11+ built-ins not implemented"
               (ASTExpression expr);
-          let elem_t =
-            match obj.ty with
-            | Array t -> jaf_to_ain_type t
-            | _ -> Ain.Type.make Void
-          in
-          let f = Bytecode.function_of_builtin builtin elem_t in
+          let f = Builtin.fundecl_of_builtin builtin obj.ty in
           (* TODO: properly check type-generic arguments based on object type *)
-          check_call_ain f args;
+          check_call f.name f.params args;
           expr.node <- Call (e, args, Some (BuiltinCall builtin));
-          expr.ty <- ain_to_jaf_type f.return_type
+          expr.ty <- f.return.ty
       (* functype/delegate call *)
       | Call (e, args, _) -> (
           match e.ty with
