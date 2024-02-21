@@ -37,7 +37,13 @@ class type_declare_visitor ctx =
       match decl with
       | Global ds ->
           List.iter ds.vars ~f:(fun g ->
-              if not g.is_const then
+              if g.is_const then
+                match Hashtbl.add ctx.consts ~key:g.name ~data:g with
+                | `Duplicate ->
+                    compile_error "duplicate global constant definition"
+                      (ASTDeclaration decl)
+                | `Ok -> ()
+              else
                 match Hashtbl.add ctx.globals ~key:g.name ~data:g with
                 | `Duplicate ->
                     compile_error "duplicate global variable definition"
@@ -154,8 +160,7 @@ class type_define_visitor ctx =
       match decl with
       | Global ds ->
           List.iter ds.vars ~f:(fun g ->
-              if g.is_const then ctx.const_vars <- g :: ctx.const_vars
-              else
+              if not g.is_const then
                 Ain.set_global_type ctx.ain g.name
                   (jaf_to_ain_type g.type_spec.ty))
       | Function f ->

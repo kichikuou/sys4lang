@@ -189,7 +189,7 @@ class const_eval_visitor ctx =
         | None -> const_error g
       in
       (* XXX: evaluate all global constants first *)
-      List.iter ctx.const_vars ~f:eval_global;
+      Hashtbl.iter ctx.consts ~f:eval_global;
       super#visit_toplevel decls
 
     method! visit_expression expr =

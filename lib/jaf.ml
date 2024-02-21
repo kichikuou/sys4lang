@@ -273,22 +273,22 @@ type library = (string, fundecl) Hashtbl.t
 type context = {
   ain : Ain.t;
   globals : (string, variable) Hashtbl.t;
+  consts : (string, variable) Hashtbl.t;
   functions : (string, fundecl) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
   delegates : (string, fundecl) Hashtbl.t;
   libraries : (string, library) Hashtbl.t;
-  mutable const_vars : variable list;
 }
 
 let context_from_ain ain =
   {
     ain;
     globals = Hashtbl.create (module String);
+    consts = Hashtbl.create (module String);
     functions = Hashtbl.create (module String);
     functypes = Hashtbl.create (module String);
     delegates = Hashtbl.create (module String);
     libraries = Hashtbl.create (module String);
-    const_vars = [];
   }
 
 let find_hll_function ctx lib func =
@@ -357,15 +357,18 @@ class ivisitor ctx =
 
         method resolve name =
           let ctx_resolve ctx =
-            match Hashtbl.find ctx.globals name with
-            | Some g -> ResolvedGlobal g
+            match Hashtbl.find ctx.consts name with
+            | Some v -> ResolvedConstant v
             | None -> (
-                match Hashtbl.find ctx.functions name with
-                | Some f -> ResolvedFunction f
+                match Hashtbl.find ctx.globals name with
+                | Some g -> ResolvedGlobal g
                 | None -> (
-                    match Hashtbl.find ctx.libraries name with
-                    | Some l -> ResolvedLibrary l
-                    | None -> UnresolvedName))
+                    match Hashtbl.find ctx.functions name with
+                    | Some f -> ResolvedFunction f
+                    | None -> (
+                        match Hashtbl.find ctx.libraries name with
+                        | Some l -> ResolvedLibrary l
+                        | None -> UnresolvedName)))
           in
           match name with
           | "system" when not (Ain.version_gte ctx.ain (11, 0)) ->
@@ -378,13 +381,7 @@ class ivisitor ctx =
           | _ -> (
               match self#get_local name with
               | Some v -> ResolvedLocal v
-              | None -> (
-                  match
-                    List.findi ctx.const_vars ~f:(fun _ (v : variable) ->
-                        String.equal v.name name)
-                  with
-                  | Some (_, v) -> ResolvedConstant v
-                  | None -> ctx_resolve ctx))
+              | None -> ctx_resolve ctx)
       end
 
     method visit_expression (e : expression) =
