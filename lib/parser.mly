@@ -58,23 +58,23 @@ let func loc typespec name params body =
   {
     name;
     loc;
-    struct_name = None;
     return = typespec;
     params = plist;
     body;
     is_label = false;
     index = None;
+    class_name = None;
     class_index = None;
   }
 
-let member_func loc typespec_opt struct_name is_dtor name params body =
+let member_func loc typespec_opt class_name is_dtor name params body =
   let name = if is_dtor then "~" ^ name else name in
   let type_spec = match typespec_opt with
     | Some ts -> ts
     | None -> implicit_void (fst loc)
   in
   let fundecl = func loc type_spec name params body in
-  { fundecl with struct_name=Some struct_name }
+  { fundecl with class_name = Some class_name }
 
 let rec multidim_array dims t =
   if dims <= 0 then t else multidim_array (dims - 1) (Array t)

@@ -62,10 +62,10 @@ class type_declare_visitor ctx =
               compile_error "duplicate delegate definition"
                 (ASTDeclaration decl)
           | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
-      | StructDef s ->
-          if Option.is_some (Ain.get_struct ctx.ain s.name) then
-            compile_error "duplicate struct definition" (ASTDeclaration decl);
+      | StructDef s -> (
           let ain_s = Ain.add_struct ctx.ain s.name in
+          let jaf_s = new_jaf_struct s.name ain_s.index in
+          let next_index = ref 0 in
           let visit_decl = function
             | AccessSpecifier _ -> ()
             | Constructor f ->
@@ -73,6 +73,7 @@ class type_declare_visitor ctx =
                   compile_error "constructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.name <- s.name ^ "@0";
+                f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 self#declare_function f
             | Destructor f ->
@@ -80,15 +81,29 @@ class type_declare_visitor ctx =
                   compile_error "destructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.name <- s.name ^ "@1";
+                f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 self#declare_function f
             | Method f ->
                 f.name <- s.name ^ "@" ^ f.name;
+                f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 self#declare_function f
-            | MemberDecl _ -> ()
+            | MemberDecl ds ->
+                List.iter ds.vars ~f:(fun v ->
+                    v.index <- Some !next_index;
+                    next_index := !next_index + type_size v.type_spec.ty;
+                    match Hashtbl.add jaf_s.members ~key:v.name ~data:v with
+                    | `Duplicate ->
+                        compile_error "duplicate member variable declaration"
+                          (ASTVariable v)
+                    | `Ok -> ())
           in
-          List.iter s.decls ~f:visit_decl
+          List.iter s.decls ~f:visit_decl;
+          match Hashtbl.add ctx.structs ~key:s.name ~data:jaf_s with
+          | `Duplicate ->
+              compile_error "duplicate struct definition" (ASTDeclaration decl)
+          | `Ok -> ())
       | Enum _ ->
           compile_error "enum types not yet supported" (ASTDeclaration decl)
   end
@@ -104,8 +119,8 @@ class type_resolve_visitor ctx decl_only =
     inherit ivisitor ctx as super
 
     method resolve_type name node =
-      match Ain.get_struct_index ctx.ain name with
-      | Some i -> Struct (name, i)
+      match Hashtbl.find ctx.structs name with
+      | Some s -> Struct (name, s.index)
       | None -> (
           match Hashtbl.find ctx.functypes name with
           | Some ft -> FuncType (name, Option.value_exn ft.index)
@@ -133,13 +148,12 @@ class type_resolve_visitor ctx decl_only =
       super#visit_expression expr
 
     method! visit_declaration decl =
-      let function_class (f : fundecl) =
-        match f.struct_name with
-        | Some name -> Ain.get_struct_index ctx.ain name
-        | _ -> None
-      in
       (match decl with
-      | Function f -> f.class_index <- function_class f
+      | Function f -> (
+          match f.class_name with
+          | Some name ->
+              f.class_index <- Some (Hashtbl.find_exn ctx.structs name).index
+          | _ -> ())
       | FuncTypeDef _ | DelegateDef _ | Global _ | StructDef _ -> ()
       | Enum _ ->
           compile_error "enum types not yet supported" (ASTDeclaration decl));

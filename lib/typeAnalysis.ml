@@ -106,7 +106,7 @@ let type_check_numeric parent (actual : expression) =
 let type_check_struct parent (actual : expression) =
   maybe_deref actual;
   match actual.ty with
-  | Struct (_, i) -> i
+  | Struct (name, _) -> name
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
   | _ -> type_error (Struct ("", 0)) (Some actual) parent
@@ -453,18 +453,17 @@ class type_analyze_visitor ctx =
               undefined_variable_error name (ASTExpression expr))
       (* member variable OR method *)
       | Member (obj, member_name, _) -> (
-          let struc = Ain.get_struct_by_index ctx.ain (check_struct obj) in
-          let check_member _ (m : Ain.Variable.t) =
-            String.equal m.name member_name
-          in
-          match List.findi struc.members ~f:check_member with
-          | Some (_, member) ->
+          let struc = Hashtbl.find_exn ctx.structs (check_struct obj) in
+          match Hashtbl.find struc.members member_name with
+          | Some member ->
               expr.node <-
                 Member
                   ( obj,
                     member_name,
-                    Some (ClassVariable (struc.index, member.index)) );
-              expr.ty <- ain_to_jaf_type member.value_type
+                    Some
+                      (ClassVariable (struc.index, Option.value_exn member.index))
+                  );
+              expr.ty <- member.type_spec.ty
           | None -> (
               let fun_name = struc.name ^ "@" ^ member_name in
               match Hashtbl.find ctx.functions fun_name with
@@ -576,7 +575,7 @@ class type_analyze_visitor ctx =
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with
-          | Some i -> expr.ty <- Struct ("", i)
+          | Some ty -> expr.ty <- ty
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error "this" (ASTExpression expr))

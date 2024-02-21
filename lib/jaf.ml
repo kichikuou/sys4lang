@@ -92,6 +92,10 @@ type jaf_type =
 
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
 
+let type_size = function
+  | Ref (Int | Bool | Float | FuncType (_, _)) -> 2
+  | _ -> 1
+
 type type_specifier = { mutable ty : jaf_type; location : location }
 
 type ident_type =
@@ -195,17 +199,17 @@ and vardecls = {
 type fundecl = {
   mutable name : string;
   loc : location;
-  struct_name : string option;
   return : type_specifier;
   params : variable list;
   body : statement list option;
   is_label : bool;
   mutable index : int option;
+  mutable class_name : string option;
   mutable class_index : int option;
 }
 
 let mangled_name fdecl =
-  match fdecl.struct_name with
+  match fdecl.class_name with
   | Some s -> s ^ "@" ^ fdecl.name
   | None -> fdecl.name
 
@@ -268,12 +272,22 @@ let ast_node_pos = function
       | Method f -> f.loc)
   | ASTType t -> t.location
 
+type jaf_struct = {
+  name : string;
+  index : int;
+  members : (string, variable) Hashtbl.t;
+}
+
+let new_jaf_struct name index =
+  { name; index; members = Hashtbl.create (module String) }
+
 type library = (string, fundecl) Hashtbl.t
 
 type context = {
   ain : Ain.t;
   globals : (string, variable) Hashtbl.t;
   consts : (string, variable) Hashtbl.t;
+  structs : (string, jaf_struct) Hashtbl.t;
   functions : (string, fundecl) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
   delegates : (string, fundecl) Hashtbl.t;
@@ -285,6 +299,7 @@ let context_from_ain ain =
     ain;
     globals = Hashtbl.create (module String);
     consts = Hashtbl.create (module String);
+    structs = Hashtbl.create (module String);
     functions = Hashtbl.create (module String);
     functypes = Hashtbl.create (module String);
     delegates = Hashtbl.create (module String);
@@ -343,7 +358,10 @@ class ivisitor ctx =
         method current_function = current_function
 
         method current_class =
-          match current_function with Some f -> f.class_index | None -> None
+          match current_function with
+          | Some { class_name = Some name; class_index = Some index; _ } ->
+              Some (Struct (name, index))
+          | _ -> None
 
         method get_local name =
           let var_eq _ (v : variable) = String.equal v.name name in

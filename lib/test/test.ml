@@ -247,7 +247,7 @@ let%expect_test "RefAssign operator" =
       :22:9-19: Type error: expected ref int; got int
       	at: s.f
       	in: s.f <- ra;
-      :24:9-23: Type error: expected ref S; got
+      :24:9-23: Type error: expected ref S; got S
       	at: this
       	in: this <- other;
       :26:9-19: Type error: expected ref int; got int

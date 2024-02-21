@@ -36,12 +36,12 @@ let fundecl_of_syscall sys =
     {
       name;
       loc = dummy_location;
-      struct_name = None;
       return = { ty = return_type; location = dummy_location };
       params = make_vars arg_types;
       body = None;
       is_label = false;
       index = Some (int_of_syscall sys);
+      class_name = None;
       class_index = None;
     }
   in
@@ -86,12 +86,12 @@ let fundecl_of_builtin builtin receiver_ty =
     {
       name;
       loc = dummy_location;
-      struct_name = None;
       return = { ty = return_type; location = dummy_location };
       params = make_vars arg_types;
       body = None;
       is_label = false;
       index = None;
+      class_name = None;
       class_index = None;
     }
   in
