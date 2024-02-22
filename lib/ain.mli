@@ -212,15 +212,10 @@ val nr_functypes : t -> int
 val nr_delegates : t -> int
 val nr_libraries : t -> int
 val global_iter : ?from:int -> f:(Global.t -> unit) -> t -> unit
-val global_for_all : ?from:int -> f:(Global.t -> bool) -> t -> bool
 val function_iter : ?from:int -> f:(Function.t -> unit) -> t -> unit
-val function_for_all : ?from:int -> f:(Function.t -> bool) -> t -> bool
 val struct_iter : ?from:int -> f:(Struct.t -> unit) -> t -> unit
-val struct_for_all : ?from:int -> f:(Struct.t -> bool) -> t -> bool
 val functype_iter : ?from:int -> f:(FunctionType.t -> unit) -> t -> unit
-val functype_for_all : ?from:int -> f:(FunctionType.t -> bool) -> t -> bool
 val delegate_iter : ?from:int -> f:(FunctionType.t -> unit) -> t -> unit
-val delegate_for_all : ?from:int -> f:(FunctionType.t -> bool) -> t -> bool
 
 exception File_error
 exception Unrecognized_format

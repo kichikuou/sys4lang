@@ -57,7 +57,7 @@ let compile_hll ctx hll_file =
   let hll = In_channel.with_file hll_file ~f:(fun file -> do_parse file) in
   Declarations.define_library ctx hll (get_lib_name hll_file)
 
-let compile_sources sources major minor decl_only =
+let compile_sources sources major minor =
   (* open/create the output .ain file *)
   (* XXX: if the first file is a .ain file, open it instead of linking against a blank file *)
   let ain, sources =
@@ -71,28 +71,19 @@ let compile_sources sources major minor decl_only =
   let ctx = context_from_ain ain in
   let compile_file f =
     if Filename.check_suffix f ".jaf" || String.equal f "-" then
-      compile_jaf ctx f decl_only
+      compile_jaf ctx f false
     else if Filename.check_suffix f ".hll" then compile_hll ctx f
-    else if Filename.check_suffix f ".ain" then
-      Link.link ctx.ain (Ain.load f) decl_only
     else failwith "unsupported file type"
   in
   List.iter sources ~f:compile_file;
   ctx.ain
 
-let do_compile sources output major minor decl_only compile_unit match_decls =
+let do_compile sources output major minor =
   try
     (* create output .ain file by compiling/linking inputs *)
-    let ain = compile_sources sources major minor decl_only in
-    (* -m option: check if declarations match then return status code *)
-    (match match_decls with
-    | [] -> ()
-    | _ ->
-        let decl_ain = compile_sources match_decls major minor true in
-        let matched = Link.declarations_match decl_ain ain in
-        exit (if matched then 0 else 1));
-    (* -c/-d option: skip final check for undefined functions *)
-    if (not compile_unit) && not decl_only then Link.check_undefined ain;
+    let ain = compile_sources sources major minor in
+    (* final check for undefined functions *)
+    SanityCheck.check_undefined ain;
     (* write output .ain file to disk *)
     Ain.write_file ain output
   with e ->
@@ -118,15 +109,6 @@ let cmd_compile_jaf =
         flag "-ain-minor-version"
           (optional_with_default 0 int)
           ~doc:"version The output .ain file minor version (default: 0)"
-      and decl_only =
-        flag "-declarations-only" no_arg ~doc:" Output declarations only"
-      and compile_unit =
-        flag "-compile-unit" no_arg
-          ~doc:" Compile as a unit (allow undefined functions)"
-      and match_decls =
-        flag "-match-declarations"
-          (listed Filename_unix.arg_type)
-          ~doc:"ain-file Compare declarations against the given .ain file"
       and test =
         flag "-test" (optional Filename_unix.arg_type) ~doc:" Testing"
       in
@@ -134,8 +116,6 @@ let cmd_compile_jaf =
         if Option.is_some test then
           let ain = Ain.load (Option.value_exn test) in
           Ain.write_file ain output
-        else
-          do_compile sources output major minor decl_only compile_unit
-            match_decls)
+        else do_compile sources output major minor)
 
 let () = Command_unix.run ~version:"0.1" cmd_compile_jaf

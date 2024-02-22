@@ -1668,26 +1668,11 @@ let array_iter ?(from = 0) a ~f =
     f a.(i)
   done
 
-let array_for_all ?(from = 0) a ~f =
-  let finish = Array.length a in
-  let rec iter i =
-    if i < finish then if f a.(i) then iter (i + 1) else false else true
-  in
-  iter from
-
 let global_iter ?(from = 0) ~f ain = array_iter ~from ain.globals ~f
-let global_for_all ?(from = 0) ~f ain = array_for_all ~from ain.globals ~f
 let function_iter ?(from = 0) ~f ain = array_iter ~from ain.functions ~f
-let function_for_all ?(from = 0) ~f ain = array_for_all ~from ain.functions ~f
 let struct_iter ?(from = 0) ~f ain = array_iter ~from ain.structures ~f
-let struct_for_all ?(from = 0) ~f ain = array_for_all ~from ain.structures ~f
 let functype_iter ?(from = 0) ~f ain = array_iter ~from ain.function_types ~f
-
-let functype_for_all ?(from = 0) ~f ain =
-  array_for_all ~from ain.function_types ~f
-
 let delegate_iter ?(from = 0) ~f ain = array_iter ~from ain.delegates ~f
-let delegate_for_all ?(from = 0) ~f ain = array_for_all ~from ain.delegates ~f
 
 exception File_error
 exception Unrecognized_format
