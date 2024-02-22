@@ -55,6 +55,7 @@ let compile_hll ctx hll_file =
     Filename.chop_extension (Filename.basename filename)
   in
   let hll = In_channel.with_file hll_file ~f:(fun file -> do_parse file) in
+  Declarations.resolve_types ctx hll false;
   Declarations.define_library ctx hll (get_lib_name hll_file)
 
 let compile_sources sources major minor =

@@ -775,7 +775,8 @@ let ast_to_string = function
 
 let rec jaf_to_ain_data_type = function
   | Untyped -> failwith "tried to convert Untyped to ain data type"
-  | Unresolved _ -> failwith "tried to convert Unresolved to ain data type"
+  | Unresolved s ->
+      failwith ("tried to convert Unresolved to ain data type: " ^ s)
   | Ref _ -> failwith "tried to convert Ref to ain data type"
   | Void -> Ain.Type.Void
   | Int -> Ain.Type.Int
