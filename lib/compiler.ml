@@ -1285,16 +1285,7 @@ class jaf_compiler ain =
       current_address <- start_address;
       let compile_decl = function
         | Jaf.Function f -> self#compile_function f
-        | Global decls ->
-            List.iter decls.vars ~f:(fun g ->
-                if g.is_const then ()
-                else
-                  match g.initval with
-                  | Some _ ->
-                      compile_error "Global initvals not implemented"
-                        (ASTDeclaration (Global decls))
-                  | None -> ())
-        | FuncTypeDef _ | DelegateDef _ -> ()
+        | Global _ | FuncTypeDef _ | DelegateDef _ -> ()
         | StructDef d ->
             let compile_struct_decl (d : struct_declaration) =
               match d with
