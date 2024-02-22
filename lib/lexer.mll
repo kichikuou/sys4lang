@@ -113,7 +113,7 @@ let () =
               "private",      PRIVATE;
               "public",       PUBLIC;
               "enum",         ENUM;
-              "imain_system", IMAINSYSTEM ]
+            ]
 }
 
 let u  = ['\x80'-'\xbf']

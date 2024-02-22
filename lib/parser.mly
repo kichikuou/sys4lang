@@ -103,7 +103,6 @@ let rec multidim_array dims t =
 %token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH
 /* types */
 %token VOID CHAR INT LINT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
-%token IMAINSYSTEM
 /* keywords */
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN ASSERT
@@ -293,7 +292,6 @@ primitive_type_specifier
   | HLL_PARAM    { HLLParam }
   | HLL_FUNC     { HLLFunc }
   | HLL_DELEGATE { Delegate("hll_delegate", -1) }
-  | IMAINSYSTEM  { IMainSystem }
   ;
 
 atomic_type_specifier

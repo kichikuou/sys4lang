@@ -127,7 +127,10 @@ class type_resolve_visitor ctx decl_only =
           | None -> (
               match Hashtbl.find ctx.delegates name with
               | Some dg -> Delegate (name, Option.value_exn dg.index)
-              | None -> compile_error ("Undefined type: " ^ name) node))
+              | None -> (
+                  match name with
+                  | "IMainSystem" -> IMainSystem
+                  | _ -> compile_error ("Undefined type: " ^ name) node)))
 
     method! visit_type_specifier ts =
       let rec resolve t =
