@@ -157,9 +157,11 @@ let function_compatible (ft : fundecl) (f : fundecl) =
 class type_analyze_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
-    val mutable errors : exn list = []
+    val mutable errors : compile_error list = []
     method errors = List.rev errors
-    method catch_errors f = try f () with exn -> errors <- exn :: errors
+
+    method catch_errors f =
+      try f () with CompileError e -> errors <- e :: errors
 
     (* an lvalue is an expression which denotes a location that can be assigned to *)
     method check_lvalue (e : expression) (parent : ast_node) =
@@ -711,4 +713,4 @@ let check_types ctx decls =
   let visitor = new type_analyze_visitor ctx in
   visitor#visit_toplevel decls;
   let errors = visitor#errors in
-  if not (List.is_empty errors) then raise (CompileError.ErrorList errors)
+  if not (List.is_empty errors) then raise_error (CompileError.ErrorList errors)

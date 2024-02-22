@@ -19,7 +19,7 @@ let compile_jaf input =
     SanityCheck.check_invariants ctx jaf;
     Compiler.compile ctx jaf;
     Stdio.print_endline "ok"
-  with e -> CompileError.print_error e
+  with CompileError.CompileError e -> CompileError.print_error e
 
 let%expect_test "empty jaf" =
   compile_jaf {||};

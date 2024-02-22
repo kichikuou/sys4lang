@@ -86,7 +86,7 @@ let do_compile sources output major minor =
     SanityCheck.check_undefined ain;
     (* write output .ain file to disk *)
     Ain.write_file ain output
-  with e ->
+  with CompileError.CompileError e ->
     CompileError.print_error e;
     exit 1
 

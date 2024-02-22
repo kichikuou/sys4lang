@@ -20,36 +20,41 @@ open Printf
 
 let printf = Stdio.printf
 
-exception Syntax_error of location
-exception Type_error of jaf_type * expression option * ast_node
-exception Undefined_variable of string * ast_node
-exception Arity_error of string * int * expression list * ast_node
-exception Not_lvalue_error of expression * ast_node
-exception Const_error of variable
-exception CompileError of string * ast_node
-exception CompilerBug of string * ast_node option
-exception LinkError of string
-exception LinkerBug of string
-exception ErrorList of exn list
+type compile_error =
+  | Syntax_error of location
+  | Type_error of jaf_type * expression option * ast_node
+  | Undefined_variable of string * ast_node
+  | Arity_error of string * int * expression list * ast_node
+  | Not_lvalue_error of expression * ast_node
+  | Const_error of variable
+  | CompileError of string * ast_node
+  | CompilerBug of string * ast_node option
+  | LinkError of string
+  | ErrorList of compile_error list
+
+exception CompileError of compile_error
+
+let raise_error e = raise (CompileError e)
 
 let syntax_error lexbuf =
-  raise
+  raise_error
     (Syntax_error (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf))
 
-let type_error ty expr parent = raise (Type_error (ty, expr, parent))
+let type_error ty expr parent = raise_error (Type_error (ty, expr, parent))
 
 let undefined_variable_error name parent =
-  raise (Undefined_variable (name, parent))
+  raise_error (Undefined_variable (name, parent))
 
 let arity_error name nr_params args parent =
-  raise (Arity_error (name, nr_params, args, parent))
+  raise_error (Arity_error (name, nr_params, args, parent))
 
-let not_an_lvalue_error expr parent = raise (Not_lvalue_error (expr, parent))
-let const_error v = raise (Const_error v)
-let compile_error str node = raise (CompileError (str, node))
-let compiler_bug str node = raise (CompilerBug (str, node))
-let link_error str = raise (LinkError str)
-let linker_bug str = raise (LinkerBug str)
+let not_an_lvalue_error expr parent =
+  raise_error (Not_lvalue_error (expr, parent))
+
+let const_error v = raise_error (Const_error v)
+let compile_error str node = raise_error (CompileError (str, node))
+let compiler_bug str node = raise_error (CompilerBug (str, node))
+let link_error str = raise_error (LinkError str)
 
 let format_location (s, e) =
   Lexing.(
@@ -107,7 +112,3 @@ let rec print_error = function
             (ast_to_string n)
       | None -> printf "Error: %s\n" msg);
       printf "(This is a compiler bug!)"
-  | LinkerBug msg ->
-      printf "Error: %s\n" msg;
-      printf "(This is a linker bug!)"
-  | e -> raise e
