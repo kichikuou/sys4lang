@@ -1,3 +1,0 @@
-struct object {
-	int i;
-};

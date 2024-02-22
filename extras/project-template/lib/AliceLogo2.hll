@@ -1,3 +1,0 @@
-int Init(imain_system pIMainSystem);
-void SetWaveNum(int nNum, int nWave);
-void Run(int nType, int nLoopFlag);
