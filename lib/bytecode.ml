@@ -1179,6 +1179,38 @@ let int_of_syscall = function
   | ExistFunc -> 0x1B
   | CopySaveFile -> 0x1C
 
+let syscall_of_int = function
+  | 0x00 -> Exit
+  | 0x01 -> GlobalSave
+  | 0x02 -> GlobalLoad
+  | 0x03 -> LockPeek
+  | 0x04 -> UnlockPeek
+  | 0x05 -> Reset
+  | 0x06 -> Output
+  | 0x07 -> MsgBox
+  | 0x08 -> ResumeSave
+  | 0x09 -> ResumeLoad
+  | 0x0A -> ExistFile
+  | 0x0B -> OpenWeb
+  | 0x0C -> GetSaveFolderName
+  | 0x0D -> GetTime
+  | 0x0E -> GetGameName
+  | 0x0F -> Error
+  | 0x10 -> ExistSaveFile
+  | 0x11 -> IsDebugMode
+  | 0x12 -> MsgBoxOkCancel
+  | 0x13 -> GetFuncStackName
+  | 0x14 -> Peek
+  | 0x15 -> Sleep
+  | 0x16 -> ResumeWriteComment
+  | 0x17 -> ResumeReadComment
+  | 0x18 -> GroupSave
+  | 0x19 -> GroupLoad
+  | 0x1A -> DeleteSaveFile
+  | 0x1B -> ExistFunc
+  | 0x1C -> CopySaveFile
+  | _ -> failwith "invalid syscall"
+
 let syscall_of_string = function
   | "Exit" -> Some Exit
   | "GlobalSave" -> Some GlobalSave
@@ -1210,6 +1242,37 @@ let syscall_of_string = function
   | "ExistFunc" -> Some ExistFunc
   | "CopySaveFile" -> Some CopySaveFile
   | _ -> None
+
+let string_of_syscall = function
+  | Exit -> "Exit"
+  | GlobalSave -> "GlobalSave"
+  | GlobalLoad -> "GlobalLoad"
+  | LockPeek -> "LockPeek"
+  | UnlockPeek -> "UnlockPeek"
+  | Reset -> "Reset"
+  | Output -> "Output"
+  | MsgBox -> "MsgBox"
+  | ResumeSave -> "ResumeSave"
+  | ResumeLoad -> "ResumeLoad"
+  | ExistFile -> "ExistFile"
+  | OpenWeb -> "OpenWeb"
+  | GetSaveFolderName -> "GetSaveFolderName"
+  | GetTime -> "GetTime"
+  | GetGameName -> "GetGameName"
+  | Error -> "Error"
+  | ExistSaveFile -> "ExistSaveFile"
+  | IsDebugMode -> "IsDebugMode"
+  | MsgBoxOkCancel -> "MsgBoxOkCancel"
+  | GetFuncStackName -> "GetFuncStackName"
+  | Peek -> "Peek"
+  | Sleep -> "Sleep"
+  | ResumeWriteComment -> "ResumeWriteComment"
+  | ResumeReadComment -> "ResumeReadComment"
+  | GroupSave -> "GroupSave"
+  | GroupLoad -> "GroupLoad"
+  | DeleteSaveFile -> "DeleteSaveFile"
+  | ExistFunc -> "ExistFunc"
+  | CopySaveFile -> "CopySaveFile"
 
 type builtin =
   | Assert

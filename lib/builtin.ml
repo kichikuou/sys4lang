@@ -32,9 +32,9 @@ let make_vars (types : jaf_type list) =
       })
 
 let fundecl_of_syscall sys =
-  let make return_type name arg_types =
+  let make return_type arg_types =
     {
-      name;
+      name = string_of_syscall sys;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
       params = make_vars arg_types;
@@ -46,37 +46,35 @@ let fundecl_of_syscall sys =
     }
   in
   match sys with
-  | Exit -> make Void "Exit" [ Int ]
-  | GlobalSave -> make Int "GlobalSave" [ String; String ]
-  | GlobalLoad -> make Int "GlobalLoad" [ String; String ]
-  | LockPeek -> make Int "LockPeek" []
-  | UnlockPeek -> make Int "UnlockPeek" []
-  | Reset -> make Void "Reset" []
-  | Output -> make String "Output" [ String ]
-  | MsgBox -> make String "MsgBox" [ String ]
-  | ResumeSave -> make Int "ResumeSave" [ String; String; Ref Int ]
-  | ResumeLoad -> make Void "ResumeLoad" [ String; String ]
-  | ExistFile -> make Int "ExistFile" [ String ]
-  | OpenWeb -> make Void "OpenWeb" [ String ]
-  | GetSaveFolderName -> make String "GetSaveFolderName" []
-  | GetTime -> make Int "GetTime" []
-  | GetGameName -> make String "GetGameName" []
-  | Error -> make String "Error" [ String ]
-  | ExistSaveFile -> make Int "ExistSaveFile" [ String ]
-  | IsDebugMode -> make Int "IsDebugMode" []
-  | MsgBoxOkCancel -> make Int "MsgBoxOkCancel" [ String ]
-  | GetFuncStackName -> make String "GetFuncStackName" [ Int ]
-  | Peek -> make Void "Peek" []
-  | Sleep -> make Void "Sleep" [ Int ]
-  | ResumeWriteComment ->
-      make Bool "ResumeWriteComment" [ String; String; Ref (Array String) ]
-  | ResumeReadComment ->
-      make Bool "ResumeReadComment" [ String; String; Ref (Array String) ]
-  | GroupSave -> make Int "GroupSave" [ String; String; String; Ref Int ]
-  | GroupLoad -> make Int "GroupLoad" [ String; String; String; Ref Int ]
-  | DeleteSaveFile -> make Int "DeleteSaveFile" [ String ]
-  | ExistFunc -> make Bool "ExistFunc" [ String ]
-  | CopySaveFile -> make Int "CopySaveFile" [ String; String ]
+  | Exit -> make Void [ Int ]
+  | GlobalSave -> make Int [ String; String ]
+  | GlobalLoad -> make Int [ String; String ]
+  | LockPeek -> make Int []
+  | UnlockPeek -> make Int []
+  | Reset -> make Void []
+  | Output -> make String [ String ]
+  | MsgBox -> make String [ String ]
+  | ResumeSave -> make Int [ String; String; Ref Int ]
+  | ResumeLoad -> make Void [ String; String ]
+  | ExistFile -> make Int [ String ]
+  | OpenWeb -> make Void [ String ]
+  | GetSaveFolderName -> make String []
+  | GetTime -> make Int []
+  | GetGameName -> make String []
+  | Error -> make String [ String ]
+  | ExistSaveFile -> make Int [ String ]
+  | IsDebugMode -> make Int []
+  | MsgBoxOkCancel -> make Int [ String ]
+  | GetFuncStackName -> make String [ Int ]
+  | Peek -> make Void []
+  | Sleep -> make Void [ Int ]
+  | ResumeWriteComment -> make Bool [ String; String; Ref (Array String) ]
+  | ResumeReadComment -> make Bool [ String; String; Ref (Array String) ]
+  | GroupSave -> make Int [ String; String; String; Ref Int ]
+  | GroupLoad -> make Int [ String; String; String; Ref Int ]
+  | DeleteSaveFile -> make Int [ String ]
+  | ExistFunc -> make Bool [ String ]
+  | CopySaveFile -> make Int [ String; String ]
 
 let fundecl_of_builtin builtin receiver_ty =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
