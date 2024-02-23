@@ -18,75 +18,66 @@ open Core
 open Sys4cLib
 open Jaf
 
-let parse_jaf jaf_file =
-  let do_parse file =
-    let lexbuf = Lexing.from_channel file in
-    Lexing.set_filename lexbuf jaf_file;
-    try Parser.jaf Lexer.token lexbuf with
+type source = Jaf of declaration list | Hll of string * declaration list
+type program = source list
+
+let parse_file parse_func file =
+  let do_parse ch =
+    let lexbuf = Lexing.from_channel ch in
+    Lexing.set_filename lexbuf file;
+    try parse_func Lexer.token lexbuf with
     | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
     | e -> raise e
   in
-  match jaf_file with
+  match file with
   | "-" -> do_parse In_channel.stdin
   | path -> In_channel.with_file path ~f:(fun file -> do_parse file)
 
-let compile_jaf ctx jaf_file decl_only =
-  let jaf = parse_jaf jaf_file in
-  Declarations.register_type_declarations ctx jaf;
-  Declarations.resolve_types ctx jaf decl_only;
-  Declarations.define_types ctx jaf;
-  if not decl_only then (
-    TypeAnalysis.check_types ctx jaf;
-    ConstEval.evaluate_constant_expressions ctx jaf;
-    VariableAlloc.allocate_variables ctx jaf;
-    SanityCheck.check_invariants ctx jaf;
-    (* TODO: disable in release builds *)
-    Compiler.compile ctx jaf)
+(* pass 1: Parse jaf/hll files and create symbol table entries *)
+let pass_one ctx sources =
+  List.map sources ~f:(fun f ->
+      if Filename.check_suffix f ".jaf" || String.equal f "-" then (
+        let jaf = parse_file Parser.jaf f in
+        Declarations.register_type_declarations ctx jaf;
+        Jaf jaf)
+      else if Filename.check_suffix f ".hll" then
+        let hll = parse_file Parser.hll f in
+        let lib_name = Filename.chop_extension (Filename.basename f) in
+        Hll (lib_name, hll)
+      else failwith "unsupported file type")
 
-let compile_hll ctx hll_file =
-  let do_parse file =
-    let lexbuf = Lexing.from_channel file in
-    Lexing.set_filename lexbuf hll_file;
-    try Parser.hll Lexer.token lexbuf with
-    | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
-    | e -> raise e
-  in
-  let get_lib_name filename =
-    Filename.chop_extension (Filename.basename filename)
-  in
-  let hll = In_channel.with_file hll_file ~f:(fun file -> do_parse file) in
-  Declarations.resolve_types ctx hll false;
-  Declarations.define_library ctx hll (get_lib_name hll_file)
+(* pass 2: Resolve type specifiers *)
+let pass_two ctx program =
+  List.iter program ~f:(function
+    | Jaf jaf ->
+        Declarations.resolve_types ctx jaf false;
+        Declarations.define_types ctx jaf
+    | Hll (lib_name, hll) ->
+        Declarations.resolve_types ctx hll false;
+        Declarations.define_library ctx hll lib_name)
 
-let compile_sources sources major minor =
-  (* open/create the output .ain file *)
-  (* XXX: if the first file is a .ain file, open it instead of linking against a blank file *)
-  let ain, sources =
-    match sources with
-    | [] -> (Ain.create major minor, [ "-" ])
-    | file :: rest when Filename.check_suffix file ".ain" ->
-        (Ain.load file, rest)
-    | _ -> (Ain.create major minor, sources)
-  in
-  (* compile sources *)
-  let ctx = context_from_ain ain in
-  let compile_file f =
-    if Filename.check_suffix f ".jaf" || String.equal f "-" then
-      compile_jaf ctx f false
-    else if Filename.check_suffix f ".hll" then compile_hll ctx f
-    else failwith "unsupported file type"
-  in
-  List.iter sources ~f:compile_file;
-  ctx.ain
+(* pass 3: Type checking and code generation *)
+let pass_three ctx program =
+  List.iter program ~f:(function
+    | Jaf jaf ->
+        TypeAnalysis.check_types ctx jaf;
+        ConstEval.evaluate_constant_expressions ctx jaf;
+        VariableAlloc.allocate_variables ctx jaf;
+        (* TODO: disable in release builds *)
+        SanityCheck.check_invariants ctx jaf;
+        Compiler.compile ctx jaf
+    | Hll _ -> ())
 
 let do_compile sources output major minor =
   try
-    (* create output .ain file by compiling/linking inputs *)
-    let ain = compile_sources sources major minor in
+    let ctx = context_from_ain (Ain.create major minor) in
+    let program = pass_one ctx sources in
+    pass_two ctx program;
+    pass_three ctx program;
     (* final check for undefined functions *)
-    SanityCheck.check_undefined ain;
+    SanityCheck.check_undefined ctx.ain;
     (* write output .ain file to disk *)
-    Ain.write_file ain output
+    Ain.write_file ctx.ain output
   with CompileError.CompileError e ->
     CompileError.print_error e;
     exit 1
