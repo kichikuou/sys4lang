@@ -214,6 +214,11 @@ class type_analyze_visitor ctx =
               let f = Hashtbl.find_exn ctx.functions f_name in
               if not (function_compatible ft f) then
                 type_error (FuncType (ft.name, ft_i)) (Some rhs) parent
+          | FuncType (ft2_name, _) ->
+              let ft = Hashtbl.find_exn ctx.functypes ft_name in
+              let ft2 = Hashtbl.find_exn ctx.functypes ft2_name in
+              if not (function_compatible ft ft2) then
+                type_error (FuncType (ft_name, ft_i)) (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
           | _ -> type_error (Ref (TyFunction ("", -1))) (Some rhs) parent)

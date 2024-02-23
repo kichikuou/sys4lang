@@ -384,3 +384,20 @@ let%expect_test "jump statement" =
       -:6:15-17: Type error: expected string; got typeof(sf)
       	at: sf
       	in: sf |}]
+
+let%expect_test "functype assignment" =
+  type_test
+    {|
+      functype void ft(void);
+      functype void ft2(void);
+      functype void ft3(int);
+      void f(ft f) {
+        ft2 f2 = f;  // ok
+        ft3 f3 = f;  // error
+      }
+    |};
+  [%expect
+    {|
+      -:7:13-19: Type error: expected ft3; got ft
+      	at: f
+      	in: ft3 f3 = f; |}]
