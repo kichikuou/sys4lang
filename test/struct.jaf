@@ -23,6 +23,9 @@ int main()
 	set_ref(b);
 	assert(b.i == 1);
 
+	a = b;
+	assert(a.i == 1);
+
 	foo c;
 	ref foo r1;
 	ref foo r2;

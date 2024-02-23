@@ -411,7 +411,8 @@ class jaf_compiler ain =
           if Ain.version_gte ain (11, 0) then self#write_instruction0 DELETE
           else self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
-      | Ref _ | Struct _ | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc
+      | Struct _ -> self#write_instruction0 SR_POP
+      | Ref _ | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc
       | TyFunction _ | TyMethod _ | NullType | Untyped | Unresolved _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
@@ -706,6 +707,9 @@ class jaf_compiler ain =
           | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
           | MinusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ERASE
           | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
+          | EqAssign, Struct (_, sno) ->
+              self#write_instruction1 PUSH sno;
+              self#write_instruction0 SR_ASSIGN
           | _, _ ->
               compiler_bug "invalid assignment" (Some (ASTExpression expr)))
       | Seq (a, b) ->
