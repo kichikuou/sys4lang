@@ -76,6 +76,7 @@ let type_castable (dst : jaf_type) (src : jaf_type) =
   | _ -> false
 
 let type_check parent expected (actual : expression) =
+  (match expected with Ref _ -> () | _ -> maybe_deref actual);
   match actual.ty with
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
@@ -409,7 +410,6 @@ class type_analyze_visitor ctx =
           expr.ty <- t
       | Subscript (obj, i) -> (
           maybe_deref obj;
-          maybe_deref i;
           check Int i;
           match obj.ty with
           | Array t -> expr.ty <- t

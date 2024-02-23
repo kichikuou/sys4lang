@@ -335,6 +335,22 @@ let%expect_test "RefEqual operator" =
       	in: false === NULL
       -:31:9-18: Undefined variable: undefined |}]
 
+let%expect_test "implicit dereference" =
+  type_test
+    {|
+      int f() {
+        ref int r;
+        for (r = 10; r; r--) {
+          switch (r) {
+            case 1:
+              r + r || r;
+          }
+        }
+        return r;
+      }
+    |};
+  [%expect {| ok |}]
+
 let%expect_test "label_is_a_statement" =
   type_test
     {|
