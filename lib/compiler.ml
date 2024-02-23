@@ -392,7 +392,10 @@ class jaf_compiler ain =
           | Ref t ->
               self#write_instruction1 PUSH (-1);
               if is_numeric t then self#write_instruction1 PUSH 0
-          | _ -> compiler_bug "untyped NULL" (Some (ASTExpression e)))
+          | ty ->
+              compiler_bug
+                ("unimplemented: NULL value of type " ^ jaf_type_to_string ty)
+                (Some (ASTExpression e)))
       | _ ->
           compiler_bug
             ("invalid lvalue: " ^ expr_to_string e)
@@ -896,8 +899,11 @@ class jaf_compiler ain =
       | This -> self#write_instruction0 PUSHSTRUCTPAGE
       | Null -> (
           match expr.ty with
-          | FuncType _ -> self#write_instruction1 PUSH 0
-          | _ -> compiler_bug "untyped NULL" (Some (ASTExpression expr)))
+          | FuncType _ | IMainSystem -> self#write_instruction1 PUSH 0
+          | ty ->
+              compiler_bug
+                ("unimplemented: NULL value of type " ^ jaf_type_to_string ty)
+                (Some (ASTExpression expr)))
 
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
       state of the stack is unchanged after executing a statement. *)

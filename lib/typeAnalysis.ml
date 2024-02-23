@@ -37,7 +37,6 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | IMainSystem, IMainSystem -> true
   | FuncType (_, a), FuncType (_, b) -> a = b
   | Delegate (_, a), Delegate (_, b) -> a = b
-  | (FuncType _ | Delegate _ | IMainSystem), NullType -> true
   | NullType, (FuncType _ | Delegate _ | IMainSystem | NullType) -> true
   | HLLParam, HLLParam -> true
   | Array a, Array b -> type_equal a b
@@ -80,6 +79,10 @@ let type_check parent expected (actual : expression) =
   match actual.ty with
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
+  | NullType -> (
+      match expected with
+      | Ref _ | FuncType _ | Delegate _ | IMainSystem -> actual.ty <- expected
+      | _ -> type_error expected (Some actual) parent)
   | a_t ->
       if not (type_equal expected a_t) then
         type_error expected (Some actual) parent

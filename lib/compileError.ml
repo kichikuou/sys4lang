@@ -111,4 +111,4 @@ let rec print_error = function
           printf "%s: %s\n\tin: %s\n" (format_node_location n) msg
             (ast_to_string n)
       | None -> printf "Error: %s\n" msg);
-      printf "(This is a compiler bug!)"
+      printf "(This is a compiler bug!)\n"
