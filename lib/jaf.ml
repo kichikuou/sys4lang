@@ -146,7 +146,7 @@ and ast_expression =
   | Subscript of expression * expression
   | Member of expression * string * member_type option
   | Call of expression * expression list * call_type option
-  | New of jaf_type * expression list * int option
+  | New of type_specifier * expression list * int option
   | This
   | Null
 
@@ -431,7 +431,9 @@ class ivisitor ctx =
       | Call (f, args, _) ->
           self#visit_expression f;
           List.iter args ~f:self#visit_expression
-      | New (_, args, _) -> List.iter args ~f:self#visit_expression
+      | New (t, args, _) ->
+          self#visit_type_specifier t;
+          List.iter args ~f:self#visit_expression
       | This -> ()
       | Null -> ()
 
@@ -627,8 +629,8 @@ let rec expr_to_string (e : expression) =
   | Member (e, s, _) -> sprintf "%s.%s" (expr_to_string e) s
   | Call (f, args, _) ->
       sprintf "%s%s" (expr_to_string f) (arglist_to_string args)
-  | New (t, args, _) ->
-      sprintf "new %s%s" (jaf_type_to_string t) (arglist_to_string args)
+  | New (ts, args, _) ->
+      sprintf "new %s%s" (jaf_type_to_string ts.ty) (arglist_to_string args)
   | This -> "this"
   | Null -> "NULL"
 

@@ -562,8 +562,8 @@ class type_analyze_visitor ctx =
                 Call (e, args, Some (DelegateCall (Option.value_exn f.index)));
               expr.ty <- f.return.ty
           | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
-      | New (t, args, _) -> (
-          match t with
+      | New ({ ty; _ }, args, _) -> (
+          match ty with
           | Struct (st_name, _) ->
               (* TODO: look up the correct constructor for given arguments *)
               (match Hashtbl.find ctx.functions (st_name ^ "@0") with
@@ -573,7 +573,7 @@ class type_analyze_visitor ctx =
                     compile_error "Arguments provided to default constructor"
                       (ASTExpression expr)
               | Some ctor -> check_call ctor.name ctor.params args);
-              expr.ty <- t
+              expr.ty <- ty
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with

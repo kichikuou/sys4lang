@@ -143,13 +143,6 @@ class type_resolve_visitor ctx decl_only =
       in
       ts.ty <- resolve ts.ty
 
-    method! visit_expression expr =
-      (match expr.node with
-      | New (Unresolved t, e, _) ->
-          expr.node <- New (self#resolve_type t (ASTExpression expr), e, None)
-      | _ -> ());
-      super#visit_expression expr
-
     method! visit_declaration decl =
       (match decl with
       | Function f -> (

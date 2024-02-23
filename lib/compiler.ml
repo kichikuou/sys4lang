@@ -365,7 +365,7 @@ class jaf_compiler ain =
           self#compile_lvalue obj;
           self#compile_expression index;
           compile_lvalue_after (jaf_to_ain_type e.ty)
-      | New (Struct (_, s_no), args, Some var_no) ->
+      | New ({ ty = Struct (_, s_no); _ }, args, Some var_no) ->
           let s = Ain.get_struct_by_index ain s_no in
           (* delete dummy variable *)
           self#write_instruction0 PUSHLOCALPAGE;

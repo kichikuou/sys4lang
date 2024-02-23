@@ -167,10 +167,10 @@ class variable_alloc_visitor ctx =
               expr.node <-
                 Ident (name, Some (LocalVariable (self#get_var_no name)))
           | _ -> ())
-      | New (t, args, _) ->
+      | New (ts, args, _) ->
           (* create dummy ref variable to store object for extent of new expression *)
           let struct_name =
-            match t with
+            match ts.ty with
             | Struct (name, _) -> name
             | _ ->
                 compiler_bug "Non-struct type in new expression"
@@ -183,12 +183,12 @@ class variable_alloc_visitor ctx =
               array_dim = [];
               is_const = false;
               kind = LocalVar;
-              type_spec = { ty = Ref t; location = expr.loc };
+              type_spec = { ty = Ref ts.ty; location = expr.loc };
               initval = None;
               index = Some (List.length vars);
             }
           in
-          expr.node <- New (t, args, Some (Option.value_exn v.index));
+          expr.node <- New (ts, args, Some (Option.value_exn v.index));
           vars <- v :: vars
       | _ -> ()
 

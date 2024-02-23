@@ -159,7 +159,7 @@ postfix_expression
   | postfix_expression LBRACKET expression RBRACKET { expr $sloc (Subscript ($1, $3)) }
   | primitive_type_specifier LPAREN expression RPAREN { expr $sloc (Cast ($1, $3)) }
   | postfix_expression arglist { expr $sloc (Call ($1, $2, None)) }
-  | NEW IDENTIFIER arglist { expr $sloc (New (Unresolved ($2), $3, None)) }
+  | NEW IDENTIFIER arglist { expr $sloc (New ({ ty = Unresolved $2; location = $loc($2) }, $3, None)) }
   | postfix_expression DOT IDENTIFIER { expr $sloc (Member ($1, $3, None)) }
   | postfix_expression INC { expr $sloc (Unary (PostInc, $1)) }
   | postfix_expression DEC { expr $sloc (Unary (PostDec, $1)) }
