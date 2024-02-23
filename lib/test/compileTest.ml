@@ -17,6 +17,8 @@
 open Base
 open Sys4cLib
 
+let sprintf = Printf.sprintf
+
 let parse_jaf input =
   let lexbuf = Lexing.from_string input in
   Lexing.set_filename lexbuf "-";
@@ -29,19 +31,23 @@ let arg_to_string ain (argtype : Bytecode.argtype) arg =
   | Float -> Int32.float_of_bits arg |> Float.to_string
   | Address -> Int32.to_string arg
   | Function -> (Ain.get_function_by_index ain (Int32.to_int_exn arg)).name
-  | String -> Ain.get_string ain (Int32.to_int_exn arg) |> Option.value_exn
-  | Message -> Ain.get_message ain (Int32.to_int_exn arg) |> Option.value_exn
-  | Local -> Printf.sprintf "local(%ld)" arg
-  | Global -> Printf.sprintf "global(%ld)" arg
-  | Struct -> Printf.sprintf "struct(%ld)" arg
+  | String ->
+      sprintf "\"%s\""
+        (Ain.get_string ain (Int32.to_int_exn arg) |> Option.value_exn)
+  | Message ->
+      sprintf "\'%s\'"
+        (Ain.get_message ain (Int32.to_int_exn arg) |> Option.value_exn)
+  | Local -> sprintf "local(%ld)" arg
+  | Global -> sprintf "global(%ld)" arg
+  | Struct -> sprintf "struct(%ld)" arg
   | Syscall ->
       Bytecode.string_of_syscall
         (Bytecode.syscall_of_int (Int32.to_int_exn arg))
-  | Library -> Printf.sprintf "library(%ld)" arg
-  | LibraryFunction -> Printf.sprintf "library_function(%ld)" arg
-  | File -> Printf.sprintf "file(%ld)" arg
-  | Delegate -> Printf.sprintf "delegate(%ld)" arg
-  | Switch -> Printf.sprintf "switch(%ld)" arg
+  | Library -> sprintf "library(%ld)" arg
+  | LibraryFunction -> sprintf "library_function(%ld)" arg
+  | File -> sprintf "file(%ld)" arg
+  | Delegate -> sprintf "delegate(%ld)" arg
+  | Switch -> sprintf "switch(%ld)" arg
 
 let print_disassemble ain =
   let dasm = Dasm.create ain in
@@ -147,4 +153,25 @@ let%expect_test "local ref string" =
       044: POP
       046: RETURN
       048: ENDFUNC f
+  |}]
+
+let%expect_test "jump statement" =
+  compile_test
+    {|
+    #sfunc(void) {
+      jumps "foo";
+      jump sfunc;
+    }
+  |};
+  [%expect
+    {|
+      000: FUNC sfunc
+      006: S_PUSH "foo"
+      012: CALLONJUMP
+      014: SJUMP
+      016: S_PUSH "sfunc"
+      022: CALLONJUMP
+      024: SJUMP
+      026: RETURN
+      028: ENDFUNC sfunc
   |}]

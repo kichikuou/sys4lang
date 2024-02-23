@@ -98,6 +98,8 @@ let () =
               "continue",     CONTINUE;
               "break",        BREAK;
               "return",       RETURN;
+              "jump",         JUMP;
+              "jumps",        JUMPS;
               "assert",       ASSERT;
               "NULL",         NULL;
               "this",         THIS;

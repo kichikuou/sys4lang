@@ -350,3 +350,21 @@ let%expect_test "label_is_a_statement" =
       }
     |};
   [%expect {| ok |}]
+
+let%expect_test "jump statement" =
+  type_test
+    {|
+      #sf() {}
+      void f() {
+        jump sf;  // ok
+        jump f;   // error : f is not a scenario function
+        jumps sf; // error: jumps expects a string
+      }
+    |};
+  [%expect
+    {|
+      -:5:9-16: f is not a scenario function
+      	in: jump f;
+      -:6:15-17: Type error: expected string; got typeof(sf)
+      	at: sf
+      	in: sf |}]

@@ -1028,6 +1028,15 @@ class jaf_compiler ain =
                 (ASTStatement stmt)
           | _ -> self#compile_expression e);
           self#write_instruction0 RETURN
+      | Jump funcname ->
+          let no = Ain.add_string ain funcname in
+          self#write_instruction1 S_PUSH no;
+          self#write_instruction0 CALLONJUMP;
+          self#write_instruction0 SJUMP
+      | Jumps e ->
+          self#compile_expression e;
+          self#write_instruction0 CALLONJUMP;
+          self#write_instruction0 SJUMP
       | MessageCall (msg, _, fno) -> (
           let msg_no = Ain.add_message ain msg in
           self#write_instruction1 MSG msg_no;

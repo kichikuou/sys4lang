@@ -631,6 +631,14 @@ class type_analyze_visitor ctx =
                   match f.return.ty with
                   | Void -> ()
                   | _ -> type_error f.return.ty None (ASTStatement stmt)))
+          | Jump name -> (
+              match environment#resolve name with
+              | ResolvedFunction f when f.is_label -> ()
+              | _ ->
+                  compile_error
+                    (name ^ " is not a scenario function")
+                    (ASTStatement stmt))
+          | Jumps e -> type_check (ASTExpression e) String e
           | MessageCall (msg, f_name, _) -> (
               match f_name with
               | Some name -> (
