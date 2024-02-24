@@ -133,7 +133,7 @@ let insert_cast t (e : expression) =
   e.node <- Cast (t, clone_expr e);
   e.ty <- t
 
-let type_coerce_numerics parent a b =
+let type_coerce_numerics parent op a b =
   type_check_numeric parent a;
   type_check_numeric parent b;
   let coerce t e =
@@ -147,9 +147,13 @@ let type_coerce_numerics parent a b =
   | LongInt, LongInt -> LongInt
   | LongInt, _ -> coerce LongInt b
   | _, LongInt -> coerce LongInt a
-  | Int, _ -> Int
-  | _, Int -> Int
-  | Bool, Bool -> Bool
+  | Int, Int -> Int
+  | Int, _ -> coerce Int b
+  | _, Int -> coerce Int a
+  | Bool, Bool -> (
+      match op with
+      | Equal | NEqual | LogOr | LogAnd | BitOr | BitAnd | BitXor -> Bool
+      | _ -> compile_error "invalid operation on boolean type" parent)
   | _ -> compiler_bug "coerce_numerics: non-numeric type" (Some parent)
 
 let function_compatible (ft : fundecl) (f : fundecl) =
@@ -328,8 +332,8 @@ class type_analyze_visitor ctx =
               | String ->
                   check String b;
                   expr.ty <- a.ty
-              | _ -> expr.ty <- coerce_numerics a b)
-          | Minus | Times | Divide -> expr.ty <- coerce_numerics a b
+              | _ -> expr.ty <- coerce_numerics op a b)
+          | Minus | Times | Divide -> expr.ty <- coerce_numerics op a b
           | LogOr | LogAnd | BitOr | BitXor | BitAnd | LShift | RShift ->
               maybe_deref a;
               maybe_deref b;
@@ -363,14 +367,14 @@ class type_analyze_visitor ctx =
                   if not (function_compatible ft f) then
                     type_error a.ty (Some b) (ASTExpression expr)
               | FuncType _, NullType -> b.ty <- a.ty
-              | _ -> coerce_numerics a b |> ignore);
+              | _ -> coerce_numerics op a b |> ignore);
               expr.ty <- Int
           | LT | GT | LTE | GTE ->
               maybe_deref a;
               maybe_deref b;
               (match a.ty with
               | String -> check String b
-              | _ -> coerce_numerics a b |> ignore);
+              | _ -> coerce_numerics op a b |> ignore);
               expr.ty <- Int
           | RefEqual | RefNEqual ->
               (match a.node with

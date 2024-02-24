@@ -32,6 +32,11 @@ int main()
 	i = 1; assert((i |= 2) == 3);
 	i = 2; assert((i ^= 3) == 1);
 
+	// boolean ops
+	bool b, b2;
+	b = 0; assert(b == 0);
+	b2 = b; assert(b == b2);
+
 	// floating point ops
 	float f;
 	f = 2.0; assert(f + 3.3 == 5.3);
@@ -74,6 +79,8 @@ int main()
 	f = 2.0; i = f; assert(i == 2);
 	i = 2; f = 2.0; assert(f == i);
 	i = 2; l = 3; assert(i + l == 5);
+	b = 0; i = 2; assert(b + i == 2);
+	i = 2; b = i; assert(1 == b);
 
 	return 0;
 }

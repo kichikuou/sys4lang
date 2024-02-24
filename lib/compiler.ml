@@ -583,13 +583,13 @@ class jaf_compiler ain =
               self#compile_expression a;
               self#compile_expression b);
           match (a.ty, op) with
+          | (Int | LongInt | Bool), Equal -> self#write_instruction0 EQUALE
+          | (Int | LongInt | Bool), NEqual -> self#write_instruction0 NOTE
           | Int, Plus -> self#write_instruction0 ADD
           | Int, Minus -> self#write_instruction0 SUB
           | Int, Times -> self#write_instruction0 MUL
           | Int, Divide -> self#write_instruction0 DIV
           | Int, Modulo -> self#write_instruction0 MOD
-          | Int, Equal -> self#write_instruction0 EQUALE
-          | Int, NEqual -> self#write_instruction0 NOTE
           | Int, LT -> self#write_instruction0 LT
           | Int, GT -> self#write_instruction0 GT
           | Int, LTE -> self#write_instruction0 LTE
@@ -607,8 +607,6 @@ class jaf_compiler ain =
           | LongInt, Times -> self#write_instruction0 LI_MUL
           | LongInt, Divide -> self#write_instruction0 LI_DIV
           | LongInt, Modulo -> self#write_instruction0 LI_MOD
-          | LongInt, Equal -> self#write_instruction0 EQUALE
-          | LongInt, NEqual -> self#write_instruction0 NOTE
           | Float, Plus -> self#write_instruction0 F_ADD
           | Float, Minus -> self#write_instruction0 F_SUB
           | Float, Times -> self#write_instruction0 F_MUL
@@ -732,9 +730,11 @@ class jaf_compiler ain =
           self#compile_expression e;
           match (src_t, dst_t) with
           | Int, Int -> ()
+          | Int, Bool -> self#write_instruction0 ITOB
           | Int, Float -> self#write_instruction0 ITOF
           | Int, LongInt -> self#write_instruction0 ITOLI
           | Int, String -> self#write_instruction0 I_STRING
+          | Bool, (Bool | Int) -> ()
           | Float, Float -> ()
           | Float, Int -> self#write_instruction0 FTOI
           | Float, String ->

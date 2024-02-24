@@ -401,3 +401,23 @@ let%expect_test "functype assignment" =
       -:7:13-19: Type error: expected ft3; got ft
       	at: f
       	in: ft3 f3 = f; |}]
+
+let%expect_test "boolean ops" =
+  type_test
+    {|
+      void f(bool b1, bool b2) {
+        b1 = b2;         // ok
+        b1 == b2;        // ok
+        b1 != b2;        // ok
+        b1 + b2;         // error
+        b1 || b2 && b1;  // ok
+        b1 & b2 ^ b1;    // ok
+        b1 < b2;         // error
+      }
+    |};
+  [%expect
+    {|
+      -:6:9-16: invalid operation on boolean type
+      	in: b1 + b2
+      -:9:9-16: invalid operation on boolean type
+      	in: b1 < b2 |}]
