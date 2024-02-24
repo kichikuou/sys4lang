@@ -156,12 +156,6 @@ let type_coerce_numerics parent op a b =
       | _ -> compile_error "invalid operation on boolean type" parent)
   | _ -> compiler_bug "coerce_numerics: non-numeric type" (Some parent)
 
-let function_compatible (ft : fundecl) (f : fundecl) =
-  jaf_type_equal ft.return.ty f.return.ty
-  && List.length ft.params = List.length f.params
-  && List.for_all2_exn ft.params f.params ~f:(fun a b ->
-         jaf_type_equal a.type_spec.ty b.type_spec.ty)
-
 class type_analyze_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
@@ -196,7 +190,7 @@ class type_analyze_visitor ctx =
       | Ref (TyMethod (f_name, _)) ->
           let dg = Hashtbl.find_exn ctx.delegates dg_name in
           let f = Hashtbl.find_exn ctx.functions f_name in
-          if not (function_compatible dg f) then
+          if not (fundecl_compatible dg f) then
             type_error (Delegate (dg_name, dg_i)) (Some expr) parent
       | Delegate (name, idx) ->
           if not (String.equal name dg_name && dg_i = idx) then
@@ -216,12 +210,12 @@ class type_analyze_visitor ctx =
           | Ref (TyFunction (f_name, _)) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let f = Hashtbl.find_exn ctx.functions f_name in
-              if not (function_compatible ft f) then
+              if not (fundecl_compatible ft f) then
                 type_error (FuncType (ft.name, ft_i)) (Some rhs) parent
           | FuncType (ft2_name, _) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let ft2 = Hashtbl.find_exn ctx.functypes ft2_name in
-              if not (function_compatible ft ft2) then
+              if not (fundecl_compatible ft ft2) then
                 type_error (FuncType (ft_name, ft_i)) (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
@@ -364,7 +358,7 @@ class type_analyze_visitor ctx =
               | FuncType (ft_name, _), Ref (TyFunction (f_name, _)) ->
                   let ft = Hashtbl.find_exn ctx.functypes ft_name in
                   let f = Hashtbl.find_exn ctx.functions f_name in
-                  if not (function_compatible ft f) then
+                  if not (fundecl_compatible ft f) then
                     type_error a.ty (Some b) (ASTExpression expr)
               | FuncType _, NullType -> b.ty <- a.ty
               | _ -> coerce_numerics op a b |> ignore);

@@ -210,9 +210,20 @@ type fundecl = {
   mutable class_index : int option;
 }
 
+let fundecl_compatible (f : fundecl) (g : fundecl) =
+  jaf_type_equal f.return.ty g.return.ty
+  && List.length f.params = List.length g.params
+  && List.for_all2_exn f.params g.params ~f:(fun a b ->
+         jaf_type_equal a.type_spec.ty b.type_spec.ty)
+
 let mangled_name fdecl =
   match fdecl.class_name with
-  | Some s -> s ^ "@" ^ fdecl.name
+  | Some s ->
+      s
+      ^
+      if String.equal fdecl.name s then "@0"
+      else if String.equal fdecl.name ("~" ^ s) then "@1"
+      else "@" ^ fdecl.name
   | None -> fdecl.name
 
 type access_specifier = Public | Private

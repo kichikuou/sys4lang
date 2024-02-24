@@ -213,7 +213,11 @@ let%expect_test "RefAssign operator" =
   type_test
     {|
       const int false = 0;
-      struct S { int f; ref int rf; };
+      struct S {
+        int f;
+        ref int rf;
+        void f(ref S other);
+      };
       ref int ref_val() { return NULL; }
       ref S ref_S() { return NULL; }
       int g_i;
@@ -244,39 +248,43 @@ let%expect_test "RefAssign operator" =
     |};
   [%expect
     {|
-      -:14:9-17: Type error: expected ref int; got int
+      -:18:9-17: Type error: expected ref int; got int
       	at: a
       	in: a <- ra;
-      -:15:9-20: Type error: expected ref int; got null
+      -:19:9-20: Type error: expected ref int; got null
       	at: NULL
       	in: NULL <- ra;
-      -:18:9-23: Type error: expected ref int; got ref S
+      -:22:9-23: Type error: expected ref int; got ref S
       	at: ref_S()
       	in: ra <- ref_S();
-      -:19:9-17: not an lvalue: 3
+      -:23:9-17: not an lvalue: 3
       	in: ra <- 3;
-      -:20:9-25: Type error: expected ref int; got ref int
+      -:24:9-25: Type error: expected ref int; got ref int
       	at: ref_val()
       	in: ref_val() <- ra;
-      -:22:9-19: Type error: expected ref int; got int
+      -:26:9-19: Type error: expected ref int; got int
       	at: s.f
       	in: s.f <- ra;
-      -:24:9-23: Type error: expected ref S; got S
+      -:28:9-23: Type error: expected ref S; got S
       	at: this
       	in: this <- other;
-      -:26:9-19: Type error: expected ref int; got int
+      -:30:9-19: Type error: expected ref int; got int
       	at: g_i
       	in: g_i <- ra;
-      -:27:9-23: Type error: expected ref null; got int
+      -:31:9-23: Type error: expected ref null; got int
       	at: false
       	in: false <- NULL;
-      -:28:9-18: Undefined variable: undefined |}]
+      -:32:9-18: Undefined variable: undefined |}]
 
 let%expect_test "RefEqual operator" =
   type_test
     {|
       const int false = 0;
-      struct S { int f; ref int rf; };
+      struct S {
+        int f;
+        ref int rf;
+        void f(ref S other);
+      };
       ref int ref_int() { return NULL; }
       ref S ref_S() { return NULL; }
       int g_i;
@@ -309,31 +317,31 @@ let%expect_test "RefEqual operator" =
     |};
   [%expect
     {|
-      -:14:9-17: Type error: expected ref int; got int
+      -:18:9-17: Type error: expected ref int; got int
       	at: a
       	in: a === ra
-      -:15:9-20: not an lvalue: NULL
+      -:19:9-20: not an lvalue: NULL
       	in: NULL === ra
-      -:18:9-23: Type error: expected ref int; got ref S
+      -:22:9-23: Type error: expected ref int; got ref S
       	at: ref_S()
       	in: ra === ref_S()
-      -:19:9-23: Type error: expected ref S; got ref int
+      -:23:9-23: Type error: expected ref S; got ref int
       	at: ra
       	in: ref_S() === ra
-      -:20:9-17: not an lvalue: 3
+      -:24:9-17: not an lvalue: 3
       	in: ra === 3
-      -:23:9-19: Type error: expected ref int; got int
+      -:27:9-19: Type error: expected ref int; got int
       	at: s.f
       	in: s.f === ra
-      -:25:9-23: not an lvalue: this
+      -:29:9-23: not an lvalue: this
       	in: this === other
-      -:29:9-19: Type error: expected ref int; got int
+      -:33:9-19: Type error: expected ref int; got int
       	at: g_i
       	in: g_i === ra
-      -:30:9-23: Type error: expected ref null; got int
+      -:34:9-23: Type error: expected ref null; got int
       	at: false
       	in: false === NULL
-      -:31:9-18: Undefined variable: undefined |}]
+      -:35:9-18: Undefined variable: undefined |}]
 
 let%expect_test "implicit dereference" =
   type_test
@@ -421,3 +429,50 @@ let%expect_test "boolean ops" =
       	in: b1 + b2
       -:9:9-16: invalid operation on boolean type
       	in: b1 < b2 |}]
+
+let%expect_test "method declaration mismatch" =
+  type_test
+    {|
+      class C {
+        void f(int x);
+      };
+      void C::f() {}
+    |};
+  [%expect
+    {|
+      -:5:7-21: Function signature mismatch
+      	in: void f() {  } |}]
+
+let%expect_test "duplicated function definition" =
+  type_test
+    {|
+      class C {
+        void f() {}
+      };
+      void C::f() {}
+    |};
+  [%expect
+    {|
+      -:5:7-21: Duplicate function definition
+      	in: void f() {  } |}]
+
+let%expect_test "undeclared method" =
+  type_test {|
+      class C {};
+      void C::f() {}
+    |};
+  [%expect
+    {|
+      -:3:7-21: f is not declared in class C
+      	in: void f() {  } |}]
+
+let%expect_test "wrong constructor name" =
+  type_test {|
+      class C {
+        X();
+      };
+    |};
+  [%expect
+    {|
+      -:3:9-13: constructor name doesn't match struct name
+      	in: void X(); |}]

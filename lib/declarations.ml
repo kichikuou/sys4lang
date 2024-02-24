@@ -27,11 +27,20 @@ class type_declare_visitor ctx =
 
     method declare_function decl =
       let name = mangled_name decl in
-      match Hashtbl.add ctx.functions ~key:name ~data:decl with
-      | `Duplicate ->
-          compile_error "Duplicate function definition"
-            (ASTDeclaration (Function decl))
-      | `Ok -> decl.index <- Some (Ain.add_function ctx.ain name).index
+      Hashtbl.update ctx.functions name ~f:(function
+        | Some prev_decl ->
+            if not (fundecl_compatible decl prev_decl) then
+              compile_error "Function signature mismatch"
+                (ASTDeclaration (Function decl))
+            else if Option.is_some prev_decl.body then
+              compile_error "Duplicate function definition"
+                (ASTDeclaration (Function decl))
+            else (
+              decl.index <- prev_decl.index;
+              decl)
+        | None ->
+            decl.index <- Some (Ain.add_function ctx.ain name).index;
+            decl)
 
     method! visit_declaration decl =
       match decl with
@@ -49,7 +58,19 @@ class type_declare_visitor ctx =
                     compile_error "duplicate global variable definition"
                       (ASTDeclaration decl)
                 | `Ok -> g.index <- Some (Ain.add_global ctx.ain g.name))
-      | Function f -> self#declare_function f
+      | Function f ->
+          (match f.class_name with
+          | Some name ->
+              if not (Hashtbl.mem ctx.structs name) then
+                compile_error
+                  ("undefined class name " ^ name)
+                  (ASTDeclaration decl)
+              else if not (Hashtbl.mem ctx.functions (mangled_name f)) then
+                compile_error
+                  (f.name ^ " is not declared in class " ^ name)
+                  (ASTDeclaration decl)
+          | None -> ());
+          self#declare_function f
       | FuncTypeDef f -> (
           match Hashtbl.add ctx.functypes ~key:f.name ~data:f with
           | `Duplicate ->
@@ -72,20 +93,17 @@ class type_declare_visitor ctx =
                 if not (String.equal f.name s.name) then
                   compile_error "constructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
-                f.name <- s.name ^ "@0";
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 self#declare_function f
             | Destructor f ->
-                if not (String.equal f.name s.name) then
+                if not (String.equal f.name ("~" ^ s.name)) then
                   compile_error "destructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
-                f.name <- s.name ^ "@1";
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 self#declare_function f
             | Method f ->
-                f.name <- s.name ^ "@" ^ f.name;
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 self#declare_function f

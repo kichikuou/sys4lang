@@ -1,6 +1,7 @@
 class C {
 public:
 	C() { this.m = 1; }
+	void set();
 	int m;
 private:
 	int n;
@@ -11,6 +12,16 @@ C::set() {
 	this.m = 42;
 }
 
+class C2 {
+public:
+	int m;
+	C2();
+};
+
+C2::C2() {
+	this.m = 2;
+}
+
 int main()
 {
 	C f;
@@ -18,6 +29,9 @@ int main()
 	f.set();
 	assert(f.m == 42);
 	f.n = 42;  // FIXME: should cause a compile error
+
+	C2 c2;
+	assert(c2.m == 2);
 
 	return 0;
 }

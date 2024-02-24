@@ -1,6 +1,8 @@
 delegate int dg(int a);
 
 struct obj {
+	int method1(int a);
+	int method2(int a);
 	int m;
 };
 

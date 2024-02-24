@@ -498,7 +498,7 @@ struct_declaration
   | IDENTIFIER LPAREN VOID? RPAREN opt_body
     { Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5) }
   | BITNOT IDENTIFIER LPAREN RPAREN opt_body
-    { Destructor (func $sloc (implicit_void $symbolstartpos) $2 [] $5) }
+    { Destructor (func $sloc (implicit_void $symbolstartpos) ("~" ^ $2) [] $5) }
   ;
 
 access_specifier
