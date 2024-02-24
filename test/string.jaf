@@ -26,7 +26,12 @@ int main()
 	// s-pushback
 	// s-popback
 	// s-erase
+
 	// s-mod
+	bool b;
+	int i;
+	i = 42; b = 1; s = "ab"; assert("42 1 ab" == "%d %d %s" % i % b % s);
+
 	// s-from-int
 	// s-from-float
 	// s-to-int
