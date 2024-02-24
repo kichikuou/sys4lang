@@ -200,3 +200,23 @@ let%expect_test "new" =
       052: RETURN
       054: ENDFUNC f
   |}]
+
+let%expect_test "function returning ref" =
+  compile_test {|
+      struct S {};
+      ref S f() { return f(); }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSHLOCALPAGE
+      008: PUSH 0
+      014: CALLFUNC f
+      020: ASSIGN
+      022: DUP
+      024: SP_INC
+      026: RETURN
+      028: PUSH -1
+      034: RETURN
+      036: ENDFUNC f
+  |}]

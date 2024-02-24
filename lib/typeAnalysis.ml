@@ -553,10 +553,12 @@ class type_analyze_visitor ctx =
                 Call (e, args, DelegateCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
           | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
-      | New ({ ty; _ }, _) -> (
+      | New { ty; _ } -> (
           match ty with
           | Struct _ -> expr.ty <- Ref ty
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
+      | DummyRef _ ->
+          compiler_bug "dummy ref in type checker" (Some (ASTExpression expr))
       | This -> (
           match environment#current_class with
           | Some ty -> expr.ty <- ty

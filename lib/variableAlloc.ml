@@ -41,6 +41,7 @@ class variable_alloc_visitor ctx =
     inherit ivisitor ctx as super
     val mutable vars : variable list = []
     val scopes = Stack.create ()
+    val dummy_var_seqno = ref 0
 
     method start_scope =
       let initial_vars = Set.of_list (module Int) environment#var_id_list in
@@ -157,6 +158,24 @@ class variable_alloc_visitor ctx =
           vars <- void :: v :: vars
       | _ -> vars <- v :: vars
 
+    method create_dummy_var name ty =
+      (* create dummy ref variable to store object for extent of statement *)
+      let index = List.length vars in
+      vars <-
+        {
+          name = Printf.sprintf "<dummy : %s : %d>" name !dummy_var_seqno;
+          location = dummy_location;
+          array_dim = [];
+          is_const = false;
+          kind = LocalVar;
+          type_spec = { ty; location = dummy_location };
+          initval = None;
+          index = Some index;
+        }
+        :: vars;
+      dummy_var_seqno := !dummy_var_seqno + 1;
+      index
+
     method! visit_expression expr =
       super#visit_expression expr;
       match expr.node with
@@ -166,29 +185,30 @@ class variable_alloc_visitor ctx =
           | LocalVariable _ ->
               expr.node <- Ident (name, LocalVariable (self#get_var_no name))
           | _ -> ())
-      | New (ts, _) ->
-          (* create dummy ref variable to store object for extent of new expression *)
-          let struct_name =
+      | Call (_, _, calltype) -> (
+          match expr.ty with
+          | Ref _ ->
+              let varname =
+                match calltype with
+                | FunctionCall fno | MethodCall (_, fno) ->
+                    (Ain.get_function_by_index ctx.ain fno).name
+                | _ ->
+                    compiler_bug "variable_alloc_visitor: unexpected call type"
+                      (Some (ASTExpression expr))
+              in
+              let v = self#create_dummy_var varname expr.ty in
+              expr.node <- DummyRef (v, clone_expr expr)
+          | _ -> ())
+      | New ts ->
+          let varname =
             match ts.ty with
             | Struct (name, _) -> name
             | _ ->
                 compiler_bug "Non-struct type in new expression"
                   (Some (ASTExpression expr))
           in
-          let v =
-            {
-              name = "<dummy : new " ^ struct_name ^ ">";
-              location = expr.loc;
-              array_dim = [];
-              is_const = false;
-              kind = LocalVar;
-              type_spec = { ty = Ref ts.ty; location = expr.loc };
-              initval = None;
-              index = Some (List.length vars);
-            }
-          in
-          expr.node <- New (ts, Some (Option.value_exn v.index));
-          vars <- v :: vars
+          let v = self#create_dummy_var varname (Ref ts.ty) in
+          expr.node <- DummyRef (v, clone_expr expr)
       | _ -> ()
 
     method! visit_statement stmt =

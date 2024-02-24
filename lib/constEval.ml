@@ -179,6 +179,7 @@ class const_eval_visitor ctx =
       | Member (_, _, _) -> ()
       | Call (_, _, _) -> ()
       | New _ -> ()
+      | DummyRef _ -> ()
       | This -> ()
       | Null -> ()
 

@@ -365,16 +365,22 @@ class jaf_compiler ain =
           self#compile_lvalue obj;
           self#compile_expression index;
           compile_lvalue_after (jaf_to_ain_type e.ty)
-      | New ({ ty = Struct (_, s_no); _ }, Some var_no) ->
+      | New _ -> compiler_bug "bare new expression" (Some (ASTExpression e))
+      | DummyRef (var_no, ref_expr) -> (
           (* prepare for assign to dummy variable *)
           self#write_instruction0 PUSHLOCALPAGE;
           self#write_instruction1 PUSH var_no;
-          self#write_instruction1 PUSH s_no;
-          self#compile_lock_peek;
-          self#write_instruction0 NEW;
-          (* assign to dummy variable *)
-          self#write_instruction0 ASSIGN;
-          self#compile_unlock_peek
+          match ref_expr.node with
+          | New { ty = Struct (_, s_no); _ } ->
+              self#write_instruction1 PUSH s_no;
+              self#compile_lock_peek;
+              self#write_instruction0 NEW;
+              (* assign to dummy variable *)
+              self#write_instruction0 ASSIGN;
+              self#compile_unlock_peek
+          | _ ->
+              self#compile_expression ref_expr;
+              self#write_instruction0 ASSIGN)
       | This -> self#compile_expression e
       | Null -> (
           match e.ty with
@@ -890,7 +896,8 @@ class jaf_compiler ain =
           self#write_address_at (loop_addr + 6) current_address
       | Call (_, _, _) ->
           compiler_bug "invalid call expression" (Some (ASTExpression expr))
-      | New _ ->
+      | New _ -> compiler_bug "bare new expression" (Some (ASTExpression expr))
+      | DummyRef _ ->
           self#compile_lvalue expr;
           self#write_instruction0 A_REF
       | This -> self#write_instruction0 PUSHSTRUCTPAGE
