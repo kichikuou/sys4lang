@@ -139,6 +139,7 @@ let p  = ['P' 'p'] ['+' '-']? d+
 let es = '\\' ( ['\'' '"' '?' '\\' 'a' 'b' 'f' 'n' 'r' 't' 'v'] | 'x' h+ )
 let ws = [' ' '\t']
 let sc = [^ '\\' '\n' '"'] | es
+let mc = [^ '\\' '\n' '\''] | es
 
 rule token = parse
     [' ' '\t' '\r']         { token lexbuf } (* skip blanks *)
@@ -155,7 +156,7 @@ rule token = parse
   | (hp h+ p) as n          { F_CONSTANT(Float.of_string n) }
   | (hp h* '.' h+ p) as n   { F_CONSTANT(Float.of_string n) }
   | (hp h+ '.' p) as n      { F_CONSTANT(Float.of_string n) }
-  | ("'" sc* "'") as s      { C_CONSTANT(process_message s) }
+  | ("'" mc* "'") as s      { C_CONSTANT(process_message s) }
   | ('"' sc* '"' ws*)+ as s { S_CONSTANT(process_string s) }
   | '+'                     { PLUS }
   | '-'                     { MINUS }
