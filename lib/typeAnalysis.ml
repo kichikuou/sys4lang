@@ -239,7 +239,7 @@ class type_analyze_visitor ctx =
               | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
           | UnresolvedName -> undefined_variable_error name parent
           | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
-      | Member (_, _, Some (ClassVariable _)) -> (
+      | Member (_, _, ClassVariable _) -> (
           match lhs.ty with
           | Ref t -> ref_type_check parent t rhs
           | _ -> type_error (Ref rhs.ty) (Some lhs) parent)
@@ -278,26 +278,26 @@ class type_analyze_visitor ctx =
       | Ident (name, _) -> (
           match environment#resolve name with
           | ResolvedLocal v ->
-              expr.node <- Ident (name, Some (LocalVariable (-1)));
+              expr.node <- Ident (name, LocalVariable (-1));
               expr.ty <- v.type_spec.ty
           | ResolvedConstant v ->
-              expr.node <- Ident (name, Some GlobalConstant);
+              expr.node <- Ident (name, GlobalConstant);
               expr.ty <- v.type_spec.ty
           | ResolvedGlobal g ->
               expr.node <-
-                Ident (name, Some (GlobalVariable (Option.value_exn g.index)));
+                Ident (name, GlobalVariable (Option.value_exn g.index));
               expr.ty <- g.type_spec.ty
           | ResolvedFunction f ->
-              expr.node <- Ident (name, Some (FunctionName name));
+              expr.node <- Ident (name, FunctionName name);
               expr.ty <- TyFunction (name, Option.value_exn f.index)
           | ResolvedLibrary _ ->
-              expr.node <- Ident (name, Some (HLLName name));
+              expr.node <- Ident (name, HLLName name);
               expr.ty <- Void
           | ResolvedSystem ->
-              expr.node <- Ident ("system", Some System);
+              expr.node <- Ident ("system", System);
               expr.ty <- Void
           | ResolvedBuiltin builtin ->
-              expr.node <- Ident (name, Some (BuiltinFunction builtin));
+              expr.node <- Ident (name, BuiltinFunction builtin);
               expr.ty <- Void
           | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
           )
@@ -371,7 +371,7 @@ class type_analyze_visitor ctx =
               expr.ty <- Int
           | RefEqual | RefNEqual ->
               (match a.node with
-              | Ident _ | Member (_, _, Some (ClassVariable _)) ->
+              | Ident _ | Member (_, _, ClassVariable _) ->
                   self#check_ref_assign (ASTExpression expr) a b
               | This -> not_an_lvalue_error a (ASTExpression expr)
               | _ -> (
@@ -424,24 +424,21 @@ class type_analyze_visitor ctx =
               let expected = Array Void in
               type_error expected (Some obj) (ASTExpression expr))
       (* system function *)
-      | Member (({ node = Ident (_, Some System); _ } as e), syscall_name, _)
-        -> (
+      | Member (({ node = Ident (_, System); _ } as e), syscall_name, _) -> (
           match Bytecode.syscall_of_string syscall_name with
           | Some sys ->
-              expr.node <- Member (e, syscall_name, Some (SystemFunction sys));
+              expr.node <- Member (e, syscall_name, SystemFunction sys);
               expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error ("system." ^ syscall_name)
                 (ASTExpression expr))
       (* HLL function *)
-      | Member
-          (({ node = Ident (lib_name, Some (HLLName _)); _ } as e), fun_name, _)
+      | Member (({ node = Ident (lib_name, HLLName _); _ } as e), fun_name, _)
         -> (
           match find_hll_function ctx lib_name fun_name with
           | Some _ ->
-              expr.node <-
-                Member (e, fun_name, Some (HLLFunction (lib_name, fun_name)));
+              expr.node <- Member (e, fun_name, HLLFunction (lib_name, fun_name));
               expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
@@ -453,7 +450,7 @@ class type_analyze_visitor ctx =
           maybe_deref e;
           match builtin_of_string e.ty name with
           | Some builtin ->
-              expr.node <- Member (e, name, Some (BuiltinMethod builtin));
+              expr.node <- Member (e, name, BuiltinMethod builtin);
               expr.ty <- TyFunction ("", 0)
           | None ->
               (* TODO: separate error type for this? *)
@@ -467,16 +464,14 @@ class type_analyze_visitor ctx =
                 Member
                   ( obj,
                     member_name,
-                    Some
-                      (ClassVariable (struc.index, Option.value_exn member.index))
+                    ClassVariable (struc.index, Option.value_exn member.index)
                   );
               expr.ty <- member.type_spec.ty
           | None -> (
               let fun_name = struc.name ^ "@" ^ member_name in
               match Hashtbl.find ctx.functions fun_name with
               | Some f ->
-                  expr.node <-
-                    Member (obj, member_name, Some (ClassMethod fun_name));
+                  expr.node <- Member (obj, member_name, ClassMethod fun_name);
                   expr.ty <- TyMethod (fun_name, Option.value_exn f.index)
               | None ->
                   (* TODO: separate error type for this? *)
@@ -484,37 +479,31 @@ class type_analyze_visitor ctx =
                     (struc.name ^ "." ^ member_name)
                     (ASTExpression expr)))
       (* regular function call *)
-      | Call (({ node = Ident (_, Some (FunctionName name)); _ } as e), args, _)
-        ->
+      | Call (({ node = Ident (_, FunctionName name); _ } as e), args, _) ->
           let f = Hashtbl.find_exn ctx.functions name in
           let fno = Option.value_exn f.index in
           check_call f.name f.params args;
-          expr.node <- Call (e, args, Some (FunctionCall fno));
+          expr.node <- Call (e, args, FunctionCall fno);
           expr.ty <- f.return.ty
       (* built-in function call *)
-      | Call
-          ( ({ node = Ident (_, Some (BuiltinFunction builtin)); _ } as e),
-            args,
-            _ ) ->
+      | Call (({ node = Ident (_, BuiltinFunction builtin); _ } as e), args, _)
+        ->
           let f = Builtin.fundecl_of_builtin builtin Void in
           check_call f.name f.params args;
-          expr.node <- Call (e, args, Some (BuiltinCall builtin));
+          expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
       (* method call *)
-      | Call
-          (({ node = Member (_, _, Some (ClassMethod name)); _ } as e), args, _)
-        ->
+      | Call (({ node = Member (_, _, ClassMethod name); _ } as e), args, _) ->
           let f = Hashtbl.find_exn ctx.functions name in
           check_call f.name f.params args;
           let mcall =
             MethodCall (Option.value_exn f.class_index, Option.value_exn f.index)
           in
-          expr.node <- Call (e, args, Some mcall);
+          expr.node <- Call (e, args, mcall);
           expr.ty <- f.return.ty
       (* HLL call *)
       | Call
-          ( ({ node = Member (_, _, Some (HLLFunction (lib_name, fun_name))); _ }
-             as e),
+          ( ({ node = Member (_, _, HLLFunction (lib_name, fun_name)); _ } as e),
             args,
             _ ) ->
           let f = Option.value_exn (find_hll_function ctx lib_name fun_name) in
@@ -526,22 +515,19 @@ class type_analyze_visitor ctx =
             Option.value_exn
               (Ain.get_library_function_index ctx.ain lib_no fun_name)
           in
-          expr.node <- Call (e, args, Some (HLLCall (lib_no, fun_no, -1)));
+          expr.node <- Call (e, args, HLLCall (lib_no, fun_no, -1));
           expr.ty <- f.return.ty
       (* system call *)
-      | Call
-          ( ({ node = Member (_, _, Some (SystemFunction sys)); _ } as e),
-            args,
-            _ ) ->
+      | Call (({ node = Member (_, _, SystemFunction sys); _ } as e), args, _)
+        ->
           let f = Builtin.fundecl_of_syscall sys in
           check_call f.name f.params args;
-          expr.node <- Call (e, args, Some (SystemCall sys));
+          expr.node <- Call (e, args, SystemCall sys);
           expr.ty <- f.return.ty
       (* built-in method call *)
       | Call
-          ( ({ node = Member (obj, _, Some (BuiltinMethod builtin)); _ } as e),
-            args,
-            _ ) ->
+          (({ node = Member (obj, _, BuiltinMethod builtin); _ } as e), args, _)
+        ->
           (* TODO: rewrite to HLL call for 11+ (?) *)
           if Ain.version_gte ctx.ain (11, 0) then
             compile_error "ain v11+ built-ins not implemented"
@@ -549,7 +535,7 @@ class type_analyze_visitor ctx =
           let f = Builtin.fundecl_of_builtin builtin obj.ty in
           (* TODO: properly check type-generic arguments based on object type *)
           check_call f.name f.params args;
-          expr.node <- Call (e, args, Some (BuiltinCall builtin));
+          expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
       (* functype/delegate call *)
       | Call (e, args, _) -> (
@@ -558,13 +544,13 @@ class type_analyze_visitor ctx =
               let f = Hashtbl.find_exn ctx.functypes name in
               check_call f.name f.params args;
               expr.node <-
-                Call (e, args, Some (FuncTypeCall (Option.value_exn f.index)));
+                Call (e, args, FuncTypeCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
           | Delegate (name, _) ->
               let f = Hashtbl.find_exn ctx.delegates name in
               check_call f.name f.params args;
               expr.node <-
-                Call (e, args, Some (DelegateCall (Option.value_exn f.index)));
+                Call (e, args, DelegateCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
           | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
       | New ({ ty; _ }, _) -> (

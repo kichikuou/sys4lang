@@ -99,6 +99,7 @@ let type_size = function
 type type_specifier = { mutable ty : jaf_type; location : location }
 
 type ident_type =
+  | UnresolvedIdent
   | LocalVariable of int
   | GlobalVariable of int
   | GlobalConstant
@@ -108,6 +109,7 @@ type ident_type =
   | BuiltinFunction of Bytecode.builtin
 
 type member_type =
+  | UnresolvedMember
   | ClassVariable of int * int
   | ClassMethod of string
   | HLLFunction of string * string
@@ -117,6 +119,7 @@ type member_type =
 type variable_type = LocalVar | GlobalVar | ClassVar
 
 type call_type =
+  | UnresolvedCall
   | FunctionCall of int
   | MethodCall of int * int
   | HLLCall of int * int * int
@@ -136,7 +139,7 @@ and ast_expression =
   | ConstFloat of float
   | ConstChar of string
   | ConstString of string
-  | Ident of string * ident_type option
+  | Ident of string * ident_type
   | Unary of unary_op * expression
   | Binary of binary_op * expression * expression
   | Assign of assign_op * expression * expression
@@ -144,8 +147,8 @@ and ast_expression =
   | Ternary of expression * expression * expression
   | Cast of jaf_type * expression
   | Subscript of expression * expression
-  | Member of expression * string * member_type option
-  | Call of expression * expression list * call_type option
+  | Member of expression * string * member_type
+  | Call of expression * expression list * call_type
   | New of type_specifier * int option
   | This
   | Null

@@ -130,7 +130,7 @@ hll
   ;
 
 primary_expression
-  : IDENTIFIER { expr $sloc (Ident ($1, None)) }
+  : IDENTIFIER { expr $sloc (Ident ($1, UnresolvedIdent)) }
   | THIS { expr $sloc This }
   | NULL { expr $sloc Null }
   | constant { expr $sloc $1 }
@@ -158,9 +158,9 @@ postfix_expression
   : primary_expression { $1 }
   | postfix_expression LBRACKET expression RBRACKET { expr $sloc (Subscript ($1, $3)) }
   | primitive_type_specifier LPAREN expression RPAREN { expr $sloc (Cast ($1, $3)) }
-  | postfix_expression arglist { expr $sloc (Call ($1, $2, None)) }
+  | postfix_expression arglist { expr $sloc (Call ($1, $2, UnresolvedCall)) }
   | NEW IDENTIFIER { expr $sloc (New ({ ty = Unresolved $2; location = $loc($2) }, None)) }
-  | postfix_expression DOT IDENTIFIER { expr $sloc (Member ($1, $3, None)) }
+  | postfix_expression DOT IDENTIFIER { expr $sloc (Member ($1, $3, UnresolvedMember)) }
   | postfix_expression INC { expr $sloc (Unary (PostInc, $1)) }
   | postfix_expression DEC { expr $sloc (Unary (PostDec, $1)) }
   ;
@@ -397,7 +397,7 @@ assert_statement
                   expr $loc($3) (ConstString (expr_to_string $3));
                   expr $loc($1) (ConstString $startpos.Lexing.pos_fname);
                   expr $loc($1) (ConstInt $startpos.pos_lnum)] in
-      Expression (expr $sloc (Call (expr $loc($1) (Ident ("assert", None)), args, None))) }
+      Expression (expr $sloc (Call (expr $loc($1) (Ident ("assert", UnresolvedIdent)), args, UnresolvedCall))) }
 
 declaration
   : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON

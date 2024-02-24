@@ -163,9 +163,8 @@ class variable_alloc_visitor ctx =
       | Ident (name, t) -> (
           (* save local variable number at identifier nodes *)
           match t with
-          | Some (LocalVariable _) ->
-              expr.node <-
-                Ident (name, Some (LocalVariable (self#get_var_no name)))
+          | LocalVariable _ ->
+              expr.node <- Ident (name, LocalVariable (self#get_var_no name))
           | _ -> ())
       | New (ts, _) ->
           (* create dummy ref variable to store object for extent of new expression *)

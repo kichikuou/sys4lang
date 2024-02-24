@@ -28,16 +28,16 @@ class sanity_check_visitor ctx =
           compiler_bug "expression has no type" (Some (ASTExpression expr))
       | _ -> ());
       match expr.node with
-      | Ident (_, None) ->
+      | Ident (_, UnresolvedIdent) ->
           compiler_bug "identifier expression has no ident_type"
             (Some (ASTExpression expr))
-      | Ident (_, Some GlobalConstant) ->
+      | Ident (_, GlobalConstant) ->
           compiler_bug "global constant not eliminated"
             (Some (ASTExpression expr))
-      | Member (_, _, None) ->
+      | Member (_, _, UnresolvedMember) ->
           compiler_bug "member expression has no member_type"
             (Some (ASTExpression expr))
-      | Call (_, _, None) ->
+      | Call (_, _, UnresolvedCall) ->
           compiler_bug "call expression has no call_type"
             (Some (ASTExpression expr))
       | _ -> ()

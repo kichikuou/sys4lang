@@ -306,8 +306,8 @@ class jaf_compiler ain =
 
     method compile_variable_ref (e : expression) =
       match e.node with
-      | Ident (_, Some id_type) -> self#compile_identifier_ref id_type
-      | Member (e, _, Some (ClassVariable (_, member_no))) ->
+      | Ident (_, id_type) -> self#compile_identifier_ref id_type
+      | Member (e, _, ClassVariable (_, member_no)) ->
           self#compile_lvalue e;
           self#write_instruction1 PUSH member_no
       | Subscript (obj, index) ->
@@ -349,15 +349,15 @@ class jaf_compiler ain =
           | _ -> ()
       in
       match e.node with
-      | Ident (_, Some (LocalVariable i)) ->
+      | Ident (_, LocalVariable i) ->
           let v = self#get_local i in
           self#compile_local_ref v.index;
           compile_lvalue_after v.value_type
-      | Ident (_, Some (GlobalVariable i)) ->
+      | Ident (_, GlobalVariable i) ->
           let v = Ain.get_global_by_index ain i in
           self#compile_global_ref v.index;
           compile_lvalue_after v.value_type
-      | Member (obj, _, Some (ClassVariable (_, member_no))) ->
+      | Member (obj, _, ClassVariable (_, member_no)) ->
           self#compile_lvalue obj;
           self#write_instruction1 PUSH member_no;
           compile_lvalue_after (jaf_to_ain_type e.ty)
@@ -464,30 +464,30 @@ class jaf_compiler ain =
       | ConstString s ->
           let no = Ain.add_string ain s in
           self#write_instruction1 S_PUSH no
-      | Ident (_, Some (LocalVariable i)) ->
+      | Ident (_, LocalVariable i) ->
           self#write_instruction0 PUSHLOCALPAGE;
           self#write_instruction1 PUSH i;
           self#compile_dereference (self#get_local i).value_type
-      | Ident (_, Some (GlobalVariable i)) ->
+      | Ident (_, GlobalVariable i) ->
           self#write_instruction0 PUSHGLOBALPAGE;
           self#write_instruction1 PUSH i;
           self#compile_dereference (Ain.get_global_by_index ain i).value_type
-      | Ident (_, Some GlobalConstant) ->
+      | Ident (_, GlobalConstant) ->
           compiler_bug "global constant not eliminated"
             (Some (ASTExpression expr))
-      | Ident (_, Some (FunctionName _)) ->
+      | Ident (_, FunctionName _) ->
           compiler_bug "tried to compile function identifier"
             (Some (ASTExpression expr))
-      | Ident (_, Some (HLLName _)) ->
+      | Ident (_, HLLName _) ->
           compiler_bug "tried to compile HLL identifier"
             (Some (ASTExpression expr))
-      | Ident (_, Some System) ->
+      | Ident (_, System) ->
           compiler_bug "tried to compile system identifier"
             (Some (ASTExpression expr))
-      | Ident (_, Some (BuiltinFunction _)) ->
+      | Ident (_, BuiltinFunction _) ->
           compiler_bug "tried to compile built-in function identifier"
             (Some (ASTExpression expr))
-      | Ident (_, None) ->
+      | Ident (_, UnresolvedIdent) ->
           compiler_bug "identifier type is none" (Some (ASTExpression expr))
       | Unary (UPlus, e) -> self#compile_expression e
       | Unary (UMinus, e) ->
@@ -502,7 +502,7 @@ class jaf_compiler ain =
       | Unary (AddrOf, e) -> (
           match (e.ty, e.node) with
           | TyFunction (_, no), _ -> self#write_instruction1 PUSH no
-          | TyMethod (_, no), Member (e, _, Some (ClassMethod _)) ->
+          | TyMethod (_, no), Member (e, _, ClassMethod _) ->
               self#compile_lvalue e;
               self#write_instruction1 PUSH no
           | _ ->
@@ -744,48 +744,46 @@ class jaf_compiler ain =
           match obj.ty with
           | String -> self#write_instruction0 C_REF
           | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
-      | Member (e, _, Some (ClassVariable (struct_no, member_no))) ->
+      | Member (e, _, ClassVariable (struct_no, member_no)) ->
           let struct_type = Ain.get_struct_by_index ain struct_no in
           self#compile_lvalue e;
           self#write_instruction1 PUSH member_no;
           self#compile_dereference
             (List.nth_exn struct_type.members member_no).value_type
-      | Member (_, _, Some (ClassMethod _)) ->
+      | Member (_, _, ClassMethod _) ->
           compiler_bug "tried to compile method member expression"
             (Some (ASTExpression expr))
-      | Member (_, _, Some (HLLFunction (_, _))) ->
+      | Member (_, _, HLLFunction (_, _)) ->
           compiler_bug "tried to compile HLL member expression"
             (Some (ASTExpression expr))
-      | Member (_, _, Some (SystemFunction _)) ->
+      | Member (_, _, SystemFunction _) ->
           compiler_bug "tried to compile system call member expression"
             (Some (ASTExpression expr))
-      | Member (_, _, Some (BuiltinMethod _)) ->
+      | Member (_, _, BuiltinMethod _) ->
           compiler_bug "tried to compile built-in method member expression"
             (Some (ASTExpression expr))
-      | Member (_, _, None) ->
+      | Member (_, _, UnresolvedMember) ->
           compiler_bug "member expression has no member_type"
             (Some (ASTExpression expr))
       (* regular function call *)
-      | Call (_, args, Some (FunctionCall function_no)) ->
+      | Call (_, args, FunctionCall function_no) ->
           let f = Ain.get_function_by_index ain function_no in
           self#compile_function_arguments args f;
           self#write_instruction1 CALLFUNC function_no
       (* method call *)
-      | Call
-          ( { node = Member (e, _, _); _ },
-            args,
-            Some (MethodCall (_, method_no)) ) ->
+      | Call ({ node = Member (e, _, _); _ }, args, MethodCall (_, method_no))
+        ->
           self#compile_lvalue e;
           self#compile_method_call args method_no
       (* HLL function call *)
-      | Call (_, args, Some (HLLCall (lib_no, fun_no, type_param))) ->
+      | Call (_, args, HLLCall (lib_no, fun_no, type_param)) ->
           let f = Ain.function_of_hll_function_index ain lib_no fun_no in
           self#compile_function_arguments args f;
           if Ain.version_gte ain (11, 0) then
             self#write_instruction3 CALLHLL lib_no fun_no type_param
           else self#write_instruction2 CALLHLL lib_no fun_no
       (* system call *)
-      | Call (_, args, Some (SystemCall sys)) ->
+      | Call (_, args, SystemCall sys) ->
           if Ain.version_gte ain (11, 0) then
             compiler_bug
               "attempted to compile old-style system call in ain v11+"
@@ -795,7 +793,7 @@ class jaf_compiler ain =
             self#compile_function_arguments args f;
             self#write_instruction1 CALLSYS f.index
       (* built-in call *)
-      | Call (lhs, args, Some (BuiltinCall builtin)) -> (
+      | Call (lhs, args, BuiltinCall builtin) -> (
           if Ain.version_gte ain (11, 0) then
             compiler_bug "tried to compile old-style built-in call in ain v11+"
               (Some (ASTExpression expr));
@@ -865,7 +863,7 @@ class jaf_compiler ain =
           | DelegateErase -> self#write_instruction0 DG_ERASE
           | DelegateClear -> self#write_instruction0 DG_CLEAR)
       (* functype call *)
-      | Call (e, args, Some (FuncTypeCall no)) ->
+      | Call (e, args, FuncTypeCall no) ->
           let compile_arg (arg : expression) (var : Ain.Variable.t) =
             self#compile_argument arg var.value_type;
             if var.value_type.is_ref then (
@@ -881,7 +879,7 @@ class jaf_compiler ain =
             ~f:compile_arg;
           self#write_instruction1 PUSH no;
           self#write_instruction0 CALLFUNC2
-      | Call (e, args, Some (DelegateCall no)) ->
+      | Call (e, args, DelegateCall no) ->
           let f = Ain.function_of_delegate_index ain no in
           self#compile_lvalue e;
           self#compile_function_arguments args f;
@@ -1112,7 +1110,7 @@ class jaf_compiler ain =
           | Some e ->
               let lhs =
                 {
-                  node = Ident (decl.name, Some (LocalVariable v.index));
+                  node = Ident (decl.name, LocalVariable v.index);
                   ty = decl.type_spec.ty;
                   loc = decl.location;
                 }
