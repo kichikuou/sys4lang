@@ -73,5 +73,7 @@ int main()
 	obj.a <- NULL;
 	assert(obj.a === NULL);
 
+	ref S rs = new S;
+
 	return 0;
 }

@@ -178,7 +178,7 @@ class const_eval_visitor ctx =
       | Subscript (_, _) -> ()
       | Member (_, _, _) -> ()
       | Call (_, _, _) -> ()
-      | New (_, _, _) -> ()
+      | New _ -> ()
       | This -> ()
       | Null -> ()
 

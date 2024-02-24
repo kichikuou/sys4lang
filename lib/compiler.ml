@@ -365,24 +365,13 @@ class jaf_compiler ain =
           self#compile_lvalue obj;
           self#compile_expression index;
           compile_lvalue_after (jaf_to_ain_type e.ty)
-      | New ({ ty = Struct (_, s_no); _ }, args, Some var_no) ->
-          let s = Ain.get_struct_by_index ain s_no in
-          (* delete dummy variable *)
-          self#write_instruction0 PUSHLOCALPAGE;
-          self#write_instruction1 PUSH var_no;
-          self#write_instruction0 REF;
-          self#write_instruction0 DELETE;
+      | New ({ ty = Struct (_, s_no); _ }, Some var_no) ->
           (* prepare for assign to dummy variable *)
           self#write_instruction0 PUSHLOCALPAGE;
           self#write_instruction1 PUSH var_no;
-          (* call constructor (via NEW) *)
-          if s.constructor >= 0 then
-            self#compile_function_arguments args
-              (Ain.get_function_by_index ain s.constructor);
+          self#write_instruction1 PUSH s_no;
           self#compile_lock_peek;
-          if Ain.version_gte ain (11, 0) then
-            self#write_instruction2 NEW s_no s.constructor
-          else self#write_instruction1 NEW s_no;
+          self#write_instruction0 NEW;
           (* assign to dummy variable *)
           self#write_instruction0 ASSIGN;
           self#compile_unlock_peek
@@ -903,7 +892,7 @@ class jaf_compiler ain =
           self#write_address_at (loop_addr + 6) current_address
       | Call (_, _, _) ->
           compiler_bug "invalid call expression" (Some (ASTExpression expr))
-      | New (_, _, _) ->
+      | New _ ->
           self#compile_lvalue expr;
           self#write_instruction0 A_REF
       | This -> self#write_instruction0 PUSHSTRUCTPAGE

@@ -243,7 +243,7 @@ let%expect_test "RefAssign operator" =
         g_i <- ra;        // error: lhs is not a reference
         false <- NULL;    // error: lhs is not a reference
         undefined <- ra;  // error: undefined is not defined
-        ref S rs = new S(); // ok
+        ref S rs = new S; // ok
       }
     |};
   [%expect

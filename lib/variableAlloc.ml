@@ -167,7 +167,7 @@ class variable_alloc_visitor ctx =
               expr.node <-
                 Ident (name, Some (LocalVariable (self#get_var_no name)))
           | _ -> ())
-      | New (ts, args, _) ->
+      | New (ts, _) ->
           (* create dummy ref variable to store object for extent of new expression *)
           let struct_name =
             match ts.ty with
@@ -188,7 +188,7 @@ class variable_alloc_visitor ctx =
               index = Some (List.length vars);
             }
           in
-          expr.node <- New (ts, args, Some (Option.value_exn v.index));
+          expr.node <- New (ts, Some (Option.value_exn v.index));
           vars <- v :: vars
       | _ -> ()
 

@@ -175,3 +175,28 @@ let%expect_test "jump statement" =
       026: RETURN
       028: ENDFUNC sfunc
   |}]
+
+let%expect_test "new" =
+  compile_test {|
+      struct S {};
+      ref S f(int i) { return new S; }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSHLOCALPAGE
+      008: PUSH 1
+      014: PUSH 0
+      020: CALLSYS LockPeek
+      026: POP
+      028: NEW
+      030: ASSIGN
+      032: CALLSYS UnlockPeek
+      038: POP
+      040: DUP
+      042: SP_INC
+      044: RETURN
+      046: PUSH -1
+      052: RETURN
+      054: ENDFUNC f
+  |}]

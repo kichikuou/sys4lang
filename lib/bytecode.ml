@@ -1503,7 +1503,7 @@ let args_of_opcode = function
   | S_GTE -> []
   | S_LENGTH2 -> []
   | S_LENGTHBYTE2 -> []
-  | NEW -> [ Struct; Int ]
+  | NEW -> []
   | DELETE -> []
   | CHECKUDO -> []
   | A_REF -> []

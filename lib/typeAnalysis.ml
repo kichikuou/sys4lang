@@ -174,8 +174,7 @@ class type_analyze_visitor ctx =
       match e.node with
       | Ident (_, _) -> check_lvalue_type e.ty
       | Member (_, _, _) -> check_lvalue_type e.ty
-      | Subscript (_, _) -> ()
-      | New (_, _, _) -> ()
+      | Subscript _ | New _ -> ()
       | _ -> not_an_lvalue_error e parent
 
     (* A value from which a reference can be made. NULL, reference, this, and lvalue are referenceable. *)
@@ -568,18 +567,9 @@ class type_analyze_visitor ctx =
                 Call (e, args, Some (DelegateCall (Option.value_exn f.index)));
               expr.ty <- f.return.ty
           | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
-      | New ({ ty; _ }, args, _) -> (
+      | New ({ ty; _ }, _) -> (
           match ty with
-          | Struct (st_name, _) ->
-              (* TODO: look up the correct constructor for given arguments *)
-              (match Hashtbl.find ctx.functions (st_name ^ "@0") with
-              | None ->
-                  if not (List.length args = 0) then
-                    (* TODO: signal error properly here *)
-                    compile_error "Arguments provided to default constructor"
-                      (ASTExpression expr)
-              | Some ctor -> check_call ctor.name ctor.params args);
-              expr.ty <- ty
+          | Struct _ -> expr.ty <- Ref ty
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | This -> (
           match environment#current_class with
