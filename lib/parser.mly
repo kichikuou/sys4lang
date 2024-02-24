@@ -440,7 +440,7 @@ external_declaration
     { FuncTypeDef (func $sloc $2 $3 $4 None) }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { DelegateDef (func $sloc $2 $3 $4 None) }
-  | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
+  | struct_or_class IDENTIFIER LBRACE struct_declaration* RBRACE SEMICOLON
     { StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 }) }
   | ENUM enumerator_list SEMICOLON
     { Enum ({ loc=$sloc; name=None; values=$2 }) }
@@ -451,7 +451,7 @@ external_declaration
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list SEMICOLON
     { [Function (func $sloc $1 $2 $3 None)] }
-  | struct_or_class IDENTIFIER LBRACE struct_declaration+ RBRACE SEMICOLON
+  | struct_or_class IDENTIFIER LBRACE struct_declaration* RBRACE SEMICOLON
     { [StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 })] }
   ;
 
