@@ -1,4 +1,6 @@
 int main()
 {
-	return !('a' == 97);
+	assert('a' == 97);
+	assert('あ' == 0x3042);  // FIXME: should be 0x8240, Shift_JIS codepoint
+	return 0;
 }

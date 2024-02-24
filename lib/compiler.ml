@@ -463,10 +463,15 @@ class jaf_compiler ain =
       | ConstInt i -> self#write_instruction1 PUSH i
       | ConstFloat f -> self#write_instruction1_float F_PUSH f
       | ConstChar s ->
-          (* FIXME: need to decode UTF-8 char and convert to JIS code-point *)
-          if not (String.length s = 1) then
-            compile_error "Invalid character constant" (ASTExpression expr)
-          else self#write_instruction1 PUSH (Char.to_int (String.get s 0))
+          Stdlib.Uchar.(
+            let dec = Stdlib.String.get_utf_8_uchar s 0 in
+            (* FIXME: convert to SJIS code-point *)
+            if
+              not
+                (utf_decode_is_valid dec
+                && String.length s = utf_decode_length dec)
+            then compile_error "Invalid character constant" (ASTExpression expr)
+            else self#write_instruction1 PUSH (to_int (utf_decode_uchar dec)))
       | ConstString s ->
           let no = Ain.add_string ain s in
           self#write_instruction1 S_PUSH no
