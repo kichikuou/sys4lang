@@ -357,7 +357,7 @@ class jaf_compiler ain =
               if is_numeric t then self#write_instruction1 PUSH 0
           | ty ->
               compiler_bug
-                ("unimplemented: NULL value of type " ^ jaf_type_to_string ty)
+                ("unimplemented: NULL lvalue of type " ^ jaf_type_to_string ty)
                 (Some (ASTExpression e)))
       | _ ->
           compiler_bug
@@ -837,9 +837,10 @@ class jaf_compiler ain =
       | Null -> (
           match expr.ty with
           | FuncType _ | IMainSystem -> self#write_instruction1 PUSH 0
+          | String -> self#write_instruction1 S_PUSH 0
           | ty ->
               compiler_bug
-                ("unimplemented: NULL value of type " ^ jaf_type_to_string ty)
+                ("unimplemented: NULL rvalue of type " ^ jaf_type_to_string ty)
                 (Some (ASTExpression expr)))
 
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
@@ -992,15 +993,19 @@ class jaf_compiler ain =
           self#compile_delete_ref;
           self#compile_lvalue rhs;
           (match lhs.ty with
-          | Ref (Int | Bool | Float | LongInt | FuncType _) ->
+          | Ref (Int | Bool | Float | LongInt | FuncType _) -> (
               (* NOTE: SDK compiler emits [DUP_U2; SP_INC; R_ASSIGN; POP; POP] here *)
               self#write_instruction0 R_ASSIGN;
               self#write_instruction0 POP;
-              self#write_instruction0 SP_INC
-          | Ref (String | Struct _ | Array _) ->
+              match rhs.node with
+              | Null -> self#write_instruction0 POP
+              | _ -> self#write_instruction0 SP_INC)
+          | Ref (String | Struct _ | Array _) -> (
               (* NOTE: SDK compiler emits [DUP; SP_INC; ASSIGN; POP] here *)
               self#write_instruction0 ASSIGN;
-              self#write_instruction0 SP_INC
+              match rhs.node with
+              | Null -> self#write_instruction0 POP
+              | _ -> self#write_instruction0 SP_INC)
           | _ ->
               compiler_bug "Invalid LHS in reference assignment"
                 (Some (ASTStatement stmt)));
@@ -1026,28 +1031,27 @@ class jaf_compiler ain =
              (Option.value_exn decl.index));
         let v = self#get_local (Option.value_exn decl.index) in
         if v.value_type.is_ref then
-          match decl.initval with
-          | None -> (
-              match v.value_type.data with
-              | Int | Bool | Float | LongInt | FuncType _ ->
-                  self#compile_lock_peek;
-                  self#compile_local_ref v.index;
-                  self#compile_delete_ref;
-                  self#write_instruction1 PUSH (-1);
-                  self#write_instruction1 PUSH 0;
-                  self#write_instruction0 R_ASSIGN;
-                  self#write_instruction0 POP;
-                  self#write_instruction0 POP;
-                  self#compile_unlock_peek
-              | String | Struct _ ->
-                  self#compile_lock_peek;
-                  self#compile_local_delete v.index;
-                  self#compile_unlock_peek
-              | _ ->
-                  compile_error
-                    "This type of reference variable not implemented"
-                    (ASTVariable decl))
-          | Some e ->
+          let lhs =
+            {
+              node = Ident (decl.name, LocalVariable v.index);
+              ty = decl.type_spec.ty;
+              loc = decl.location;
+            }
+          and rhs =
+            match decl.initval with
+            | Some e -> e
+            | None ->
+                { node = Null; ty = decl.type_spec.ty; loc = dummy_location }
+          in
+          self#compile_statement
+            {
+              node = RefAssign (lhs, rhs);
+              delete_vars = [];
+              loc = decl.location;
+            }
+        else
+          match v.value_type.data with
+          | Int | Bool | LongInt | Float | FuncType _ | String ->
               let lhs =
                 {
                   node = Ident (decl.name, LocalVariable v.index);
@@ -1055,59 +1059,30 @@ class jaf_compiler ain =
                   loc = decl.location;
                 }
               in
-              self#compile_statement
+              let rhs =
+                match decl.initval with
+                | Some e -> e
+                | None ->
+                    let value =
+                      match v.value_type.data with
+                      | Int | Bool | LongInt -> ConstInt 0
+                      | Float -> ConstFloat 0.0
+                      | FuncType _ | String -> Null
+                      | _ -> failwith "unreachable"
+                    in
+                    {
+                      node = value;
+                      ty = decl.type_spec.ty;
+                      loc = dummy_location;
+                    }
+              in
+              self#compile_expression
                 {
-                  node = RefAssign (lhs, e);
-                  delete_vars = [];
+                  node = Assign (EqAssign, lhs, rhs);
+                  ty = decl.type_spec.ty;
                   loc = decl.location;
-                }
-        else
-          match v.value_type.data with
-          | Int | Bool ->
-              self#compile_local_ref v.index;
-              (match decl.initval with
-              | Some e -> self#compile_expression e
-              | None -> self#write_instruction1 PUSH 0);
-              self#write_instruction0 ASSIGN;
-              self#write_instruction0 POP
-          | FuncType fi -> (
-              self#compile_local_ref v.index;
-              match decl.initval with
-              | Some ({ ty = String; _ } as e) ->
-                  self#compile_expression e;
-                  self#write_instruction1 PUSH fi;
-                  self#write_instruction0 FT_ASSIGNS;
-                  self#write_instruction0 S_POP
-              | Some e ->
-                  self#compile_expression e;
-                  self#write_instruction0 ASSIGN;
-                  self#write_instruction0 POP
-              | None ->
-                  self#write_instruction1 PUSH 0;
-                  self#write_instruction0 ASSIGN;
-                  self#write_instruction0 POP)
-          | LongInt ->
-              self#compile_local_ref v.index;
-              (match decl.initval with
-              | Some e -> self#compile_expression e
-              | None -> self#write_instruction1 PUSH 0);
-              self#write_instruction0 LI_ASSIGN;
-              self#write_instruction0 POP
-          | Float ->
-              self#compile_local_ref v.index;
-              (match decl.initval with
-              | Some e -> self#compile_expression e
-              | None -> self#write_instruction1 F_PUSH 0);
-              self#write_instruction0 F_ASSIGN;
-              self#write_instruction0 POP
-          | String ->
-              self#compile_local_ref v.index;
-              self#write_instruction0 REF;
-              (match decl.initval with
-              | Some e -> self#compile_expression e
-              | None -> self#write_instruction1 S_PUSH 0);
-              self#write_instruction0 S_ASSIGN;
-              self#write_instruction0 S_POP
+                };
+              self#compile_pop rhs.ty
           | Struct no ->
               (* FIXME: use verbose versions *)
               self#write_instruction1 SH_LOCALDELETE v.index;
