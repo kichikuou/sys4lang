@@ -515,7 +515,7 @@ class type_analyze_visitor ctx =
             Option.value_exn
               (Ain.get_library_function_index ctx.ain lib_no fun_name)
           in
-          expr.node <- Call (e, args, HLLCall (lib_no, fun_no, -1));
+          expr.node <- Call (e, args, HLLCall (lib_no, fun_no));
           expr.ty <- f.return.ty
       (* system call *)
       | Call (({ node = Member (_, _, SystemFunction sys); _ } as e), args, _)
@@ -528,12 +528,7 @@ class type_analyze_visitor ctx =
       | Call
           (({ node = Member (obj, _, BuiltinMethod builtin); _ } as e), args, _)
         ->
-          (* TODO: rewrite to HLL call for 11+ (?) *)
-          if Ain.version_gte ctx.ain (11, 0) then
-            compile_error "ain v11+ built-ins not implemented"
-              (ASTExpression expr);
           let f = Builtin.fundecl_of_builtin builtin obj.ty in
-          (* TODO: properly check type-generic arguments based on object type *)
           check_call f.name f.params args;
           expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
@@ -651,10 +646,6 @@ class type_analyze_visitor ctx =
       in
       let rank = calculate_array_rank var.type_spec.ty in
       let nr_dims = List.length var.array_dim in
-      (* Only one array dimension may be specified in ain v11+ *)
-      if nr_dims > 1 && Ain.version_gte ctx.ain (11, 0) then
-        compile_error "Multiple array dimensions specified for ain v11+"
-          (ASTVariable var);
       (* Check that there is no initializer if array has explicit dimensions *)
       if nr_dims > 0 && Option.is_some var.initval then
         compile_error "Initializer provided for array with explicit dimensions"

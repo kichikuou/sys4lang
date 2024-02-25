@@ -122,7 +122,7 @@ type call_type =
   | UnresolvedCall
   | FunctionCall of int
   | MethodCall of int * int
-  | HLLCall of int * int * int
+  | HLLCall of int * int
   | SystemCall of Bytecode.syscall
   | BuiltinCall of Bytecode.builtin
   | FuncTypeCall of int
@@ -406,9 +406,7 @@ class ivisitor ctx =
                         | None -> UnresolvedName)))
           in
           match name with
-          | "system" when not (Ain.version_gte ctx.ain (11, 0)) ->
-              (* NOTE: on ain v11+, "system" is a library *)
-              ResolvedSystem
+          | "system" -> ResolvedSystem
           | "assert" ->
               ResolvedBuiltin
                 (Option.value_exn

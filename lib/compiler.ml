@@ -178,15 +178,8 @@ class jaf_compiler ain =
       | None -> compile_error "No HLL library found for built-in" parent
 
     method write_instruction0 op =
-      match (Ain.version_gte ain (14, 0), op) with
-      | true, REF -> self#write_instruction1 X_REF 1
-      | true, REFREF -> self#write_instruction1 X_REF 2
-      | true, DUP -> self#write_instruction1 X_DUP 1
-      | true, DUP2 -> self#write_instruction1 X_DUP 2
-      | true, ASSIGN -> self#write_instruction1 X_ASSIGN 1
-      | _ ->
-          CBuffer.write_int16 buffer (int_of_opcode op);
-          current_address <- current_address + 2
+      CBuffer.write_int16 buffer (int_of_opcode op);
+      current_address <- current_address + 2
 
     method write_instruction1 op arg0 =
       match (Ain.version_lt ain (8, 0), op) with
@@ -243,21 +236,9 @@ class jaf_compiler ain =
     method compile_delete_var (v : Ain.Variable.t) =
       match v.value_type.data with
       | Struct _ -> self#compile_local_delete v.index
-      | Array t ->
-          if Ain.version_gte ain (11, 0) then (
-            let type_no = Ain.Type.int_of_data_type (Ain.version ain) t in
-            self#compile_local_ref v.index;
-            self#write_instruction0 REF;
-            self#compile_CALLHLL "Array" "Free" type_no
-              (ASTStatement
-                 {
-                   node = EmptyStatement;
-                   delete_vars = [];
-                   loc = dummy_location;
-                 }))
-          else (
-            self#compile_local_ref v.index;
-            self#write_instruction0 A_FREE)
+      | Array _ ->
+          self#compile_local_ref v.index;
+          self#write_instruction0 A_FREE
       | _ -> ()
 
     (** Emit the code to put the value of a variable onto the stack (including
@@ -268,19 +249,11 @@ class jaf_compiler ain =
       | Int | Float | Bool | LongInt | FuncType _ ->
           if t.is_ref then self#write_instruction0 REFREF;
           self#write_instruction0 REF
-      | String ->
-          if Ain.version_gte ain (11, 0) then (
-            self#write_instruction0 REF;
-            self#write_instruction0 A_REF)
-          else self#write_instruction0 S_REF
+      | String -> self#write_instruction0 S_REF
       | Array _ ->
           self#write_instruction0 REF;
           self#write_instruction0 A_REF
-      | Struct no ->
-          if Ain.version_gte ain (11, 0) then (
-            self#write_instruction0 REF;
-            self#write_instruction0 A_REF)
-          else self#write_instruction1 SR_REF no
+      | Struct no -> self#write_instruction1 SR_REF no
       | Delegate _ ->
           self#write_instruction0 REF;
           self#write_instruction0 DG_COPY
@@ -335,17 +308,12 @@ class jaf_compiler ain =
         if t.is_ref then
           match t.data with
           | Int | Float | Bool | LongInt -> self#write_instruction0 REFREF
-          | String ->
-              if not (Ain.version_gte ain (14, 0)) then
-                self#write_instruction0 REF
-          | Array _ | Struct _ -> self#write_instruction0 REF
+          | String | Array _ | Struct _ -> self#write_instruction0 REF
           | _ -> ()
         else
           match t.data with
-          | String ->
-              if not (Ain.version_gte ain (14, 0)) then
-                self#write_instruction0 REF
-          | Array _ | Struct _ | Delegate _ -> self#write_instruction0 REF
+          | String | Array _ | Struct _ | Delegate _ ->
+              self#write_instruction0 REF
           | _ -> ()
       in
       match e.node with
@@ -402,9 +370,7 @@ class jaf_compiler ain =
       | Void -> ()
       | Int | Float | Bool | LongInt | FuncType _ | Ref (TyFunction _) ->
           self#write_instruction0 POP
-      | String ->
-          if Ain.version_gte ain (11, 0) then self#write_instruction0 DELETE
-          else self#write_instruction0 S_POP
+      | String -> self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
       | Ref _ | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc
@@ -418,15 +384,7 @@ class jaf_compiler ain =
       | { data = Method _; _ } ->
           (* XXX: for delegate builtins *)
           self#compile_expression expr
-      | { data = _; is_ref = true } -> (
-          self#compile_lvalue expr;
-          (* XXX: in 14+ there is a distinction between a string lvalue and a
-                  reference argument (string lvalue is a page+index, reference
-                  argument is just the string page) *)
-          if Ain.version_gte ain (14, 0) then
-            match expr.ty with
-            | String -> self#write_instruction1 X_REF 1
-            | _ -> ())
+      | { data = _; is_ref = true } -> self#compile_lvalue expr
       | { data = Delegate _; _ } ->
           self#compile_expression expr;
           self#write_instruction0 DG_NEW_FROM_METHOD
@@ -442,14 +400,8 @@ class jaf_compiler ain =
       called should already be on the stack before this code is executed. *)
     method compile_method_call args method_no =
       let f = Ain.get_function_by_index ain method_no in
-      if Ain.version_gte ain (11, 0) then (
-        self#write_instruction1 PUSH method_no;
-        self#compile_function_arguments args f;
-        (* TODO: should this be (List.length f.args) or (List.length args)? *)
-        self#write_instruction1 CALLMETHOD (List.length args))
-      else (
-        self#compile_function_arguments args f;
-        self#write_instruction1 CALLMETHOD method_no)
+      self#compile_function_arguments args f;
+      self#write_instruction1 CALLMETHOD method_no
 
     (** Emit the code to compute an expression. Computing an expression produces
       a value (of the expression's value type) on the stack. *)
@@ -525,30 +477,18 @@ class jaf_compiler ain =
           self#write_instruction0 DEC
       | Unary (PostInc, e) ->
           self#compile_lvalue e;
-          if Ain.version_gte ain (14, 0) then (
-            self#write_instruction1 X_DUP 2;
-            self#write_instruction1 X_REF 1;
-            self#write_instruction2 X_MOV 3 1;
-            self#write_instruction0 INC)
-          else (
-            self#write_instruction0 DUP2;
-            self#write_instruction0 REF;
-            self#write_instruction0 DUP_X2;
-            self#write_instruction0 POP;
-            self#write_instruction0 INC)
+          self#write_instruction0 DUP2;
+          self#write_instruction0 REF;
+          self#write_instruction0 DUP_X2;
+          self#write_instruction0 POP;
+          self#write_instruction0 INC
       | Unary (PostDec, e) ->
           self#compile_lvalue e;
-          if Ain.version_gte ain (14, 0) then (
-            self#write_instruction1 X_DUP 2;
-            self#write_instruction1 X_REF 1;
-            self#write_instruction2 X_MOV 3 1;
-            self#write_instruction0 DEC)
-          else (
-            self#write_instruction0 DUP2;
-            self#write_instruction0 REF;
-            self#write_instruction0 DUP_X2;
-            self#write_instruction0 POP;
-            self#write_instruction0 DEC)
+          self#write_instruction0 DUP2;
+          self#write_instruction0 REF;
+          self#write_instruction0 DUP_X2;
+          self#write_instruction0 POP;
+          self#write_instruction0 DEC
       | Binary (LogOr, a, b) ->
           self#compile_expression a;
           let lhs_true_addr = current_address + 2 in
@@ -785,27 +725,17 @@ class jaf_compiler ain =
           self#compile_lvalue e;
           self#compile_method_call args method_no
       (* HLL function call *)
-      | Call (_, args, HLLCall (lib_no, fun_no, type_param)) ->
+      | Call (_, args, HLLCall (lib_no, fun_no)) ->
           let f = Ain.function_of_hll_function_index ain lib_no fun_no in
           self#compile_function_arguments args f;
-          if Ain.version_gte ain (11, 0) then
-            self#write_instruction3 CALLHLL lib_no fun_no type_param
-          else self#write_instruction2 CALLHLL lib_no fun_no
+          self#write_instruction2 CALLHLL lib_no fun_no
       (* system call *)
       | Call (_, args, SystemCall sys) ->
-          if Ain.version_gte ain (11, 0) then
-            compiler_bug
-              "attempted to compile old-style system call in ain v11+"
-              (Some (ASTExpression expr))
-          else
-            let f = Builtin.function_of_syscall sys in
-            self#compile_function_arguments args f;
-            self#write_instruction1 CALLSYS f.index
+          let f = Builtin.function_of_syscall sys in
+          self#compile_function_arguments args f;
+          self#write_instruction1 CALLSYS f.index
       (* built-in call *)
       | Call (lhs, args, BuiltinCall builtin) -> (
-          if Ain.version_gte ain (11, 0) then
-            compiler_bug "tried to compile old-style built-in call in ain v11+"
-              (Some (ASTExpression expr));
           let receiver_ty = ref Void in
           (match lhs with
           | { node = Member (e, _, _); _ } -> (
@@ -1172,72 +1102,20 @@ class jaf_compiler ain =
               self#write_instruction0 POP
           | String ->
               self#compile_local_ref v.index;
-              if Ain.version_gte ain (14, 0) then (
-                self#write_instruction1 X_DUP 2;
-                self#write_instruction1 X_REF 1;
-                self#write_instruction0 DELETE;
-                (match decl.initval with
-                | Some e -> self#compile_expression e
-                | None -> self#write_instruction1 S_PUSH 0);
-                self#write_instruction1 X_ASSIGN 1;
-                self#write_instruction0 POP)
-              else (
-                self#write_instruction0 REF;
-                (match decl.initval with
-                | Some e -> self#compile_expression e
-                | None -> self#write_instruction1 S_PUSH 0);
-                self#write_instruction0 S_ASSIGN;
-                if Ain.version_gte ain (11, 0) then
-                  self#write_instruction0 DELETE
-                else self#write_instruction0 S_POP)
+              self#write_instruction0 REF;
+              (match decl.initval with
+              | Some e -> self#compile_expression e
+              | None -> self#write_instruction1 S_PUSH 0);
+              self#write_instruction0 S_ASSIGN;
+              self#write_instruction0 S_POP
           | Struct no ->
               (* FIXME: use verbose versions *)
               self#write_instruction1 SH_LOCALDELETE v.index;
               self#write_instruction2 SH_LOCALCREATE v.index no
-          | Array t ->
+          | Array _ ->
               let has_dims = List.length decl.array_dim > 0 in
               self#compile_local_ref v.index;
-              if Ain.version_gte ain (14, 0) then (
-                self#write_instruction1 X_DUP 2;
-                self#write_instruction1 X_REF 1;
-                self#write_instruction0 DELETE;
-                match decl.initval with
-                | Some e ->
-                    self#compile_expression e;
-                    self#write_instruction1 X_ASSIGN 1;
-                    self#write_instruction0 POP
-                | None ->
-                    self#write_instruction1 PUSH 0;
-                    self#write_instruction1 X_A_INIT 0;
-                    self#write_instruction0 POP;
-                    if has_dims then (
-                      self#compile_local_ref v.index;
-                      self#write_instruction0 REF;
-                      self#compile_expression (List.hd_exn decl.array_dim);
-                      self#compile_CALLHLL "Array" "Alloc" 1 (ASTVariable decl)))
-              else if Ain.version_gte ain (11, 0) then (
-                self#write_instruction0 REF;
-                match decl.initval with
-                | Some e ->
-                    self#compile_expression e;
-                    self#write_instruction0 X_SET;
-                    self#write_instruction0 DELETE
-                | None ->
-                    let type_no =
-                      Ain.Type.int_of_data_type (Ain.version ain) t
-                    in
-                    if has_dims then (
-                      self#write_instruction0 DUP;
-                      self#compile_expression (List.hd_exn decl.array_dim);
-                      self#write_instruction1 PUSH (-1);
-                      self#write_instruction1 PUSH (-1);
-                      self#write_instruction1 PUSH (-1);
-                      self#compile_CALLHLL "Array" "Alloc" type_no
-                        (ASTVariable decl))
-                    else
-                      self#compile_CALLHLL "Array" "Free" type_no
-                        (ASTVariable decl))
-              else if has_dims then (
+              if has_dims then (
                 List.iter decl.array_dim ~f:self#compile_expression;
                 self#write_instruction1 PUSH (List.length decl.array_dim);
                 self#write_instruction0 A_ALLOC)
