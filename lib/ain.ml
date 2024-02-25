@@ -1635,6 +1635,9 @@ let add_message ain str =
   ain.messages <- Array.append ain.messages [| str |];
   index
 
+let get_file ain no =
+  if no >= Array.length ain.filenames then None else Some ain.filenames.(no)
+
 let add_file ain name =
   let index = Array.length ain.filenames in
   ain.filenames <- Array.append ain.filenames [| name |];

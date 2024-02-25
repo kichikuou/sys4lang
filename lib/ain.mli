@@ -199,6 +199,7 @@ val add_string : t -> string -> int
 val get_string_no : t -> string -> int option
 val get_message : t -> int -> string option
 val add_message : t -> string -> int
+val get_file : t -> int -> string option
 val add_file : t -> string -> int
 val get_code : t -> bytes
 val append_bytecode : t -> CBuffer.t -> unit

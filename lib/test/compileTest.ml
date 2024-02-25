@@ -45,7 +45,7 @@ let arg_to_string ain (argtype : Bytecode.argtype) arg =
         (Bytecode.syscall_of_int (Int32.to_int_exn arg))
   | Library -> sprintf "library(%ld)" arg
   | LibraryFunction -> sprintf "library_function(%ld)" arg
-  | File -> sprintf "file(%ld)" arg
+  | File -> Ain.get_file ain (Int32.to_int_exn arg) |> Option.value_exn
   | Delegate -> sprintf "delegate(%ld)" arg
   | Switch -> sprintf "switch(%ld)" arg
 
@@ -73,7 +73,7 @@ let compile_test input =
     ConstEval.evaluate_constant_expressions ctx jaf;
     VariableAlloc.allocate_variables ctx jaf;
     SanityCheck.check_invariants ctx jaf;
-    Compiler.compile ctx jaf;
+    Compiler.compile ctx "test.jaf" jaf;
     print_disassemble ctx.ain
   with CompileError.CompileError e -> CompileError.print_error e
 
@@ -81,10 +81,12 @@ let%expect_test "empty function" =
   compile_test {|
     void f() {}
   |};
-  [%expect {|
+  [%expect
+    {|
       000: FUNC f
       006: RETURN
       008: ENDFUNC f
+      014: EOF test.jaf
     |}]
 
 let%expect_test "return" =
@@ -101,6 +103,7 @@ let%expect_test "return" =
       014: PUSH 0
       020: RETURN
       022: ENDFUNC f
+      028: EOF test.jaf
     |}]
 
 let%expect_test "local ref int" =
@@ -128,6 +131,7 @@ let%expect_test "local ref int" =
       052: POP
       054: RETURN
       056: ENDFUNC f
+      062: EOF test.jaf
     |}]
 
 let%expect_test "local ref string" =
@@ -153,6 +157,7 @@ let%expect_test "local ref string" =
       044: POP
       046: RETURN
       048: ENDFUNC f
+      054: EOF test.jaf
   |}]
 
 let%expect_test "jump statement" =
@@ -174,6 +179,7 @@ let%expect_test "jump statement" =
       024: SJUMP
       026: RETURN
       028: ENDFUNC sfunc
+      034: EOF test.jaf
   |}]
 
 let%expect_test "new" =
@@ -199,6 +205,7 @@ let%expect_test "new" =
       046: PUSH -1
       052: RETURN
       054: ENDFUNC f
+      060: EOF test.jaf
   |}]
 
 let%expect_test "function returning ref" =
@@ -219,6 +226,7 @@ let%expect_test "function returning ref" =
       028: PUSH -1
       034: RETURN
       036: ENDFUNC f
+      042: EOF test.jaf
   |}]
 
 let%expect_test "syscall" =
@@ -232,4 +240,5 @@ let%expect_test "syscall" =
       012: CALLSYS Exit
       018: RETURN
       020: ENDFUNC f
+      026: EOF test.jaf
   |}]

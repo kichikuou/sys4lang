@@ -18,7 +18,10 @@ open Core
 open Sys4cLib
 open Jaf
 
-type source = Jaf of declaration list | Hll of string * declaration list
+type source =
+  | Jaf of string * declaration list
+  | Hll of string * declaration list
+
 type program = source list
 
 let parse_file parse_func file =
@@ -39,7 +42,7 @@ let pass_one ctx sources =
       if Filename.check_suffix f ".jaf" || String.equal f "-" then (
         let jaf = parse_file Parser.jaf f in
         Declarations.register_type_declarations ctx jaf;
-        Jaf jaf)
+        Jaf (f, jaf))
       else if Filename.check_suffix f ".hll" then
         let hll = parse_file Parser.hll f in
         let lib_name = Filename.chop_extension (Filename.basename f) in
@@ -49,7 +52,7 @@ let pass_one ctx sources =
 (* pass 2: Resolve type specifiers *)
 let pass_two ctx program =
   List.iter program ~f:(function
-    | Jaf jaf ->
+    | Jaf (_, jaf) ->
         Declarations.resolve_types ctx jaf false;
         Declarations.define_types ctx jaf
     | Hll (lib_name, hll) ->
@@ -59,13 +62,13 @@ let pass_two ctx program =
 (* pass 3: Type checking and code generation *)
 let pass_three ctx program =
   List.iter program ~f:(function
-    | Jaf jaf ->
+    | Jaf (jaf_name, jaf) ->
         TypeAnalysis.check_types ctx jaf;
         ConstEval.evaluate_constant_expressions ctx jaf;
         VariableAlloc.allocate_variables ctx jaf;
         (* TODO: disable in release builds *)
         SanityCheck.check_invariants ctx jaf;
-        Compiler.compile ctx jaf
+        Compiler.compile ctx jaf_name jaf
     | Hll _ -> ())
 
 let do_compile sources output major minor =

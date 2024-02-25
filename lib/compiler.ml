@@ -1155,7 +1155,7 @@ class jaf_compiler ain =
       current_function <- None
 
     (** Compile a list of declarations. *)
-    method compile (decls : declaration list) =
+    method compile jaf_name (decls : declaration list) =
       start_address <- Ain.code_size ain;
       current_address <- start_address;
       let compile_decl = function
@@ -1175,7 +1175,10 @@ class jaf_compiler ain =
             compile_error "Enums not implemented" (ASTDeclaration (Enum e))
       in
       List.iter decls ~f:compile_decl;
+      let jaf_name = String.tr ~target:'/' ~replacement:'\\' jaf_name in
+      self#write_instruction1 EOF (Ain.add_file ain jaf_name);
       self#write_buffer
   end
 
-let compile ctx decls = (new jaf_compiler ctx.ain)#compile decls
+let compile ctx jaf_name decls =
+  (new jaf_compiler ctx.ain)#compile jaf_name decls
