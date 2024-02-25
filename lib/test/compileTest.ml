@@ -220,3 +220,16 @@ let%expect_test "function returning ref" =
       034: RETURN
       036: ENDFUNC f
   |}]
+
+let%expect_test "syscall" =
+  compile_test {|
+      void f() { system.Exit(42); }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSH 42
+      012: CALLSYS Exit
+      018: RETURN
+      020: ENDFUNC f
+  |}]
