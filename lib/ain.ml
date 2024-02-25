@@ -1098,7 +1098,7 @@ module BinBuffer = struct
     Buffer.add_string buf (if b then "\x01\x00\x00\x00" else "\x00\x00\x00\x00")
 
   let add_cstring buf s =
-    Buffer.add_string buf s;
+    Buffer.add_string buf (Sjis.from_utf8 s);
     Buffer.add_char buf '\x00'
 end
 
