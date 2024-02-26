@@ -13,6 +13,19 @@ void addone(ref int i)
 	i = i+1;
 }
 
+class WithoutCtor {
+public:
+	array@int a[3];
+};
+
+class WithCtor {
+public:
+	WithCtor() {}
+	array@int a[4];
+};
+
+array@int g_array[5];
+
 int main()
 {
 	array@int ia[1];
@@ -44,6 +57,12 @@ int main()
 	array@int@2 a[1][2];
 	a[0][1] = 1;
 	assert(a[0][1] == 1);
+
+	assert(g_array.Numof() == 5);
+	WithoutCtor o1;
+	assert(o1.a.Numof() == 3);
+	WithCtor o2;
+	assert(o2.a.Numof() == 4);
 
 	return 0;
 }

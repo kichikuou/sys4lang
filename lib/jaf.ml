@@ -207,12 +207,15 @@ type fundecl = {
   loc : location;
   return : type_specifier;
   params : variable list;
-  body : statement list option;
+  mutable body : statement list option;
   is_label : bool;
   mutable index : int option;
   mutable class_name : string option;
   mutable class_index : int option;
 }
+
+let is_constructor (f : fundecl) =
+  match f.class_name with Some s -> String.equal f.name s | _ -> false
 
 let fundecl_compatible (f : fundecl) (g : fundecl) =
   jaf_type_equal f.return.ty g.return.ty
