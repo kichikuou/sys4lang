@@ -775,8 +775,7 @@ class jaf_compiler ain =
           | StringPopBack -> self#write_instruction0 S_POPBACK2
           | StringErase -> self#write_instruction0 S_ERASE2
           | ArrayAlloc ->
-              (* FIXME: this built-in should be variadic *)
-              self#write_instruction1 PUSH 1;
+              self#write_instruction1 PUSH (List.length args);
               self#write_instruction0 A_ALLOC
           | ArrayRealloc ->
               (* FIXME: this built-in should be variadic *)

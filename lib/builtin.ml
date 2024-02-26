@@ -78,6 +78,10 @@ let fundecl_of_syscall sys =
 
 let fundecl_of_builtin builtin receiver_ty =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
+  let rec alloc_params = function
+    | Array t -> Int :: alloc_params t
+    | _ -> []
+  in
   let t_func = Ref (TyFunction ("", 0)) in
   let t_method = Ref (TyMethod ("", 0)) in
   let make return_type name (arg_types : jaf_type list) =
@@ -106,7 +110,7 @@ let fundecl_of_builtin builtin receiver_ty =
   | StringPushBack -> make Void "PushBack" [ Int ]
   | StringPopBack -> make Void "PopBack" []
   | StringErase -> make Void "Erase" [ Int ]
-  | ArrayAlloc -> make Void "Alloc" [ Int ]
+  | ArrayAlloc -> make Void "Alloc" (alloc_params receiver_ty)
   | ArrayRealloc -> make Void "Realloc" [ Int ]
   | ArrayFree -> make Void "Free" []
   | ArrayNumof -> make Int "Numof" []

@@ -21,7 +21,7 @@ public:
 class WithCtor {
 public:
 	WithCtor() {}
-	array@int a[4];
+	array@int@2 a[4][3];
 };
 
 array@int g_array[5];
@@ -57,6 +57,9 @@ int main()
 	array@int@2 a[1][2];
 	a[0][1] = 1;
 	assert(a[0][1] == 1);
+	a.Alloc(2, 3);
+	a[1][2] = 2;
+	assert(a[1][2] == 2);
 
 	assert(g_array.Numof() == 5);
 	WithoutCtor o1;
