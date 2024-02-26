@@ -1147,9 +1147,10 @@ class jaf_compiler ain =
       current_function <- Some func;
       self#write_instruction1 FUNC index;
       self#compile_block (Option.value_exn decl.body);
-      self#compile_default_return func.return_type
-        (ASTDeclaration (Function decl));
-      self#write_instruction0 RETURN;
+      if not func.is_label then (
+        self#compile_default_return func.return_type
+          (ASTDeclaration (Function decl));
+        self#write_instruction0 RETURN);
       self#write_instruction1 ENDFUNC index;
       Ain.write_function ain func;
       current_function <- None

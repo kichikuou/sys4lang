@@ -378,20 +378,24 @@ let%expect_test "label_is_a_statement" =
 let%expect_test "jump statement" =
   type_test
     {|
-      #sf() {}
       void f() {
         jump sf;  // ok
         jump f;   // error : f is not a scenario function
         jumps sf; // error: jumps expects a string
       }
+      #sf() {
+        return;   // error: return from a scenario function
+      }
     |};
   [%expect
     {|
-      -:5:9-16: f is not a scenario function
+      -:4:9-16: f is not a scenario function
       	in: jump f;
-      -:6:15-17: Type error: expected string; got typeof(sf)
+      -:5:15-17: Type error: expected string; got typeof(sf)
       	at: sf
-      	in: sf |}]
+      	in: sf
+      -:8:9-16: cannot return from scenario function
+      	in: return; |}]
 
 let%expect_test "functype assignment" =
   type_test

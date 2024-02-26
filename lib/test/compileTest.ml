@@ -180,9 +180,8 @@ let%expect_test "jump statement" =
       016: S_PUSH "sfunc"
       022: CALLONJUMP
       024: SJUMP
-      026: RETURN
-      028: ENDFUNC sfunc
-      034: EOF test.jaf
+      026: ENDFUNC sfunc
+      032: EOF test.jaf
   |}]
 
 let%expect_test "new" =

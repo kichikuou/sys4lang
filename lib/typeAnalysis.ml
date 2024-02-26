@@ -619,6 +619,9 @@ class type_analyze_visitor ctx =
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
               | Some f -> (
+                  if f.is_label then
+                    compile_error "cannot return from scenario function"
+                      (ASTStatement stmt);
                   match f.return.ty with
                   | Ref ty ->
                       self#check_referenceable e (ASTExpression e);
@@ -630,6 +633,9 @@ class type_analyze_visitor ctx =
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
               | Some f -> (
+                  if f.is_label then
+                    compile_error "cannot return from scenario function"
+                      (ASTStatement stmt);
                   match f.return.ty with
                   | Void -> ()
                   | _ -> type_error f.return.ty None (ASTStatement stmt)))
