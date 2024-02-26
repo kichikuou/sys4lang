@@ -8,18 +8,18 @@ private:
 };
 
 C::set() {
-	// m = 42;
-	this.m = 42;
+	m = 42;
 }
 
 class C2 {
 public:
 	int m;
 	C2();
+	void set() { this.m = 2; }
 };
 
 C2::C2() {
-	this.m = 2;
+	set();
 }
 
 int main()

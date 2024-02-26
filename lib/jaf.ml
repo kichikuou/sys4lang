@@ -333,6 +333,8 @@ type resolved_name =
   | ResolvedConstant of variable
   | ResolvedGlobal of variable
   | ResolvedFunction of fundecl
+  | ResolvedMember of jaf_struct * variable
+  | ResolvedMethod of jaf_struct * fundecl
   | ResolvedLibrary of library
   | ResolvedSystem
   | ResolvedBuiltin of Bytecode.builtin
@@ -414,7 +416,19 @@ class ivisitor ctx =
           | _ -> (
               match self#get_local name with
               | Some v -> ResolvedLocal v
-              | None -> ctx_resolve ctx)
+              | None -> (
+                  match self#current_class with
+                  | Some (Struct (s_name, _)) -> (
+                      let s = Hashtbl.find_exn ctx.structs s_name in
+                      match Hashtbl.find s.members name with
+                      | Some v -> ResolvedMember (s, v)
+                      | None -> (
+                          match
+                            Hashtbl.find ctx.functions (s_name ^ "@" ^ name)
+                          with
+                          | Some f -> ResolvedMethod (s, f)
+                          | None -> ctx_resolve ctx))
+                  | _ -> ctx_resolve ctx))
       end
 
     method visit_expression (e : expression) =

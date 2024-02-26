@@ -290,6 +290,29 @@ class type_analyze_visitor ctx =
           | ResolvedFunction f ->
               expr.node <- Ident (name, FunctionName name);
               expr.ty <- TyFunction (name, Option.value_exn f.index)
+          | ResolvedMember (s, v) ->
+              expr.node <-
+                Member
+                  ( {
+                      node = This;
+                      ty = Struct (s.name, s.index);
+                      loc = dummy_location;
+                    },
+                    name,
+                    ClassVariable (s.index, Option.value_exn v.index) );
+              expr.ty <- v.type_spec.ty
+          | ResolvedMethod (s, f) ->
+              let fun_name = mangled_name f in
+              expr.node <-
+                Member
+                  ( {
+                      node = This;
+                      ty = Struct (s.name, s.index);
+                      loc = dummy_location;
+                    },
+                    name,
+                    ClassMethod fun_name );
+              expr.ty <- TyMethod (fun_name, Option.value_exn f.index)
           | ResolvedLibrary _ ->
               expr.node <- Ident (name, HLLName name);
               expr.ty <- Void
