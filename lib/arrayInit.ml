@@ -94,7 +94,22 @@ class visitor ctx =
       | _ -> ()
 
     method generate_initializers () =
-      let funcs = List.rev initializer_funcs in
+      let null_func =
+        Function
+          {
+            name = "NULL";
+            loc = dummy_location;
+            return = { ty = Void; location = dummy_location };
+            params = [];
+            body = Some [];
+            (* not to generate default return *)
+            is_label = true;
+            index = Some 0;
+            class_name = None;
+            class_index = None;
+          }
+      in
+      let funcs = List.rev (null_func :: initializer_funcs) in
       if List.is_empty global_init_stmts then funcs
       else
         let global_init =

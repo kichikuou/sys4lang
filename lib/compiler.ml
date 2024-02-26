@@ -1151,7 +1151,13 @@ class jaf_compiler ain =
         self#compile_default_return func.return_type
           (ASTDeclaration (Function decl));
         self#write_instruction0 RETURN);
-      self#write_instruction1 ENDFUNC index;
+      (* ENDFUNC is not generated for the "NULL" function and methods except
+         auto-generated array initializers. *)
+      (match decl with
+      | { name = "NULL"; _ } -> ()
+      | { class_name = None; _ } | { name = "2"; _ } ->
+          self#write_instruction1 ENDFUNC index
+      | _ -> ());
       Ain.write_function ain func;
       current_function <- None
 

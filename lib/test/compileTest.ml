@@ -89,7 +89,8 @@ let%expect_test "empty function" =
       000: FUNC f
       006: RETURN
       008: ENDFUNC f
-      014: EOF test.jaf
+      014: FUNC NULL
+      020: EOF test.jaf
     |}]
 
 let%expect_test "return" =
@@ -106,7 +107,8 @@ let%expect_test "return" =
       014: PUSH 0
       020: RETURN
       022: ENDFUNC f
-      028: EOF test.jaf
+      028: FUNC NULL
+      034: EOF test.jaf
     |}]
 
 let%expect_test "local ref int" =
@@ -134,7 +136,8 @@ let%expect_test "local ref int" =
       052: POP
       054: RETURN
       056: ENDFUNC f
-      062: EOF test.jaf
+      062: FUNC NULL
+      068: EOF test.jaf
     |}]
 
 let%expect_test "local ref string" =
@@ -160,7 +163,8 @@ let%expect_test "local ref string" =
       044: POP
       046: RETURN
       048: ENDFUNC f
-      054: EOF test.jaf
+      054: FUNC NULL
+      060: EOF test.jaf
   |}]
 
 let%expect_test "jump statement" =
@@ -181,7 +185,8 @@ let%expect_test "jump statement" =
       022: CALLONJUMP
       024: SJUMP
       026: ENDFUNC sfunc
-      032: EOF test.jaf
+      032: FUNC NULL
+      038: EOF test.jaf
   |}]
 
 let%expect_test "new" =
@@ -207,7 +212,8 @@ let%expect_test "new" =
       046: PUSH -1
       052: RETURN
       054: ENDFUNC f
-      060: EOF test.jaf
+      060: FUNC NULL
+      066: EOF test.jaf
   |}]
 
 let%expect_test "function returning ref" =
@@ -228,7 +234,8 @@ let%expect_test "function returning ref" =
       028: PUSH -1
       034: RETURN
       036: ENDFUNC f
-      042: EOF test.jaf
+      042: FUNC NULL
+      048: EOF test.jaf
   |}]
 
 let%expect_test "syscall" =
@@ -242,7 +249,8 @@ let%expect_test "syscall" =
       012: CALLSYS Exit
       018: RETURN
       020: ENDFUNC f
-      026: EOF test.jaf
+      026: FUNC NULL
+      032: EOF test.jaf
   |}]
 
 let%expect_test "global array initializer" =
@@ -263,5 +271,6 @@ let%expect_test "global array initializer" =
       040: A_ALLOC
       042: RETURN
       044: ENDFUNC 0
-      050: EOF test.jaf
+      050: FUNC NULL
+      056: EOF test.jaf
     |}]
