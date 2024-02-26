@@ -51,13 +51,17 @@ let pass_one ctx sources =
 
 (* pass 2: Resolve type specifiers *)
 let pass_two ctx program =
+  let array_init_visitor = new ArrayInit.visitor ctx in
   List.iter program ~f:(function
     | Jaf (_, jaf) ->
         Declarations.resolve_types ctx jaf false;
-        Declarations.define_types ctx jaf
+        Declarations.define_types ctx jaf;
+        List.iter ~f:array_init_visitor#visit_declaration jaf
     | Hll (lib_name, hll) ->
         Declarations.resolve_types ctx hll false;
-        Declarations.define_library ctx hll lib_name)
+        Declarations.define_library ctx hll lib_name);
+  let initializers = array_init_visitor#generate_initializers () in
+  program @ [ Jaf ("", initializers) ]
 
 (* pass 3: Type checking and code generation *)
 let pass_three ctx program =
@@ -75,7 +79,7 @@ let do_compile sources output major minor =
   try
     let ctx = context_from_ain (Ain.create major minor) in
     let program = pass_one ctx sources in
-    pass_two ctx program;
+    let program = pass_two ctx program in
     pass_three ctx program;
     (* final check for undefined functions *)
     SanityCheck.check_undefined ctx.ain;

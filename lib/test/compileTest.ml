@@ -69,6 +69,9 @@ let compile_test input =
     Declarations.register_type_declarations ctx jaf;
     Declarations.resolve_types ctx jaf false;
     Declarations.define_types ctx jaf;
+    let array_init = new ArrayInit.visitor ctx in
+    List.iter ~f:array_init#visit_declaration jaf;
+    let jaf = jaf @ array_init#generate_initializers () in
     TypeAnalysis.check_types ctx jaf;
     ConstEval.evaluate_constant_expressions ctx jaf;
     VariableAlloc.allocate_variables ctx jaf;
@@ -242,3 +245,24 @@ let%expect_test "syscall" =
       020: ENDFUNC f
       026: EOF test.jaf
   |}]
+
+let%expect_test "global array initializer" =
+  compile_test {|
+      array@int a[10];
+      void f() {}
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: RETURN
+      008: ENDFUNC f
+      014: FUNC 0
+      020: PUSHGLOBALPAGE
+      022: PUSH 0
+      028: PUSH 10
+      034: PUSH 1
+      040: A_ALLOC
+      042: RETURN
+      044: ENDFUNC 0
+      050: EOF test.jaf
+    |}]
