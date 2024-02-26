@@ -471,10 +471,14 @@ class jaf_compiler ain =
                 (Some (ASTExpression expr)))
       | Unary (PreInc, e) ->
           self#compile_lvalue e;
-          self#write_instruction0 INC
+          self#write_instruction0 DUP2;
+          self#write_instruction0 INC;
+          self#write_instruction0 REF
       | Unary (PreDec, e) ->
           self#compile_lvalue e;
-          self#write_instruction0 DEC
+          self#write_instruction0 DUP2;
+          self#write_instruction0 DEC;
+          self#write_instruction0 REF
       | Unary (PostInc, e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
