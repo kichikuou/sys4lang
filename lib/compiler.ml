@@ -952,6 +952,8 @@ class jaf_compiler ain =
       | Switch (expr, stmts) ->
           self#compile_expression expr;
           self#write_instruction1 SWITCH self#start_switch;
+          self#push_break_addr (current_address + 2) (ASTStatement stmt);
+          self#write_instruction1 JUMP 0;
           List.iter stmts ~f:self#compile_statement;
           self#end_switch
       | Case { node = ConstInt i; _ } ->

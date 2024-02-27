@@ -90,6 +90,17 @@ void test_switch_default()
 	assert(i == 42);
 }
 
+void test_switch_no_default()
+{
+	int i = 42;
+	switch (i) {
+	case 0:
+		i = 0;
+		break;
+	}
+	assert(i == 42);
+}
+
 void test_ternary()
 {
 	int zero = 0;
@@ -186,6 +197,7 @@ int main()
 	test_for();
 	test_switch();
 	test_switch_default();
+	test_switch_no_default();
 	test_ternary();
 	test_goto();
 	test_break_nested();
