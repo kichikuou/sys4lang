@@ -619,6 +619,7 @@ class jaf_compiler ain =
           | AndAssign, (Int | Bool) -> self#write_instruction0 ANDA
           | LShiftAssign, (Int | Bool) -> self#write_instruction0 LSHIFTA
           | RShiftAssign, (Int | Bool) -> self#write_instruction0 RSHIFTA
+          | CharAssign, Int -> self#write_instruction0 C_ASSIGN
           | EqAssign, LongInt -> self#write_instruction0 LI_ASSIGN
           | PlusAssign, LongInt -> self#write_instruction0 LI_PLUSA
           | MinusAssign, LongInt -> self#write_instruction0 LI_MINUSA

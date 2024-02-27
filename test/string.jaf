@@ -11,6 +11,7 @@ int main()
 	string s;
 	s = "a"; assert((s += "b") == "ab");
 	assert(s[0] == 97);
+	s[1] = 'c'; assert(s == "ac");
 
 	string concatenated = "asdf\n" "\nfdsa";
 	assert(concatenated == "asdf\n\nfdsa");

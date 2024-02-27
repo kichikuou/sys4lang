@@ -66,6 +66,7 @@ type assign_op =
   | AndAssign
   | LShiftAssign
   | RShiftAssign
+  | CharAssign
 
 type jaf_type =
   | Untyped
@@ -593,7 +594,7 @@ let binary_op_to_string op =
 
 let assign_op_to_string op =
   match op with
-  | EqAssign -> "="
+  | EqAssign | CharAssign -> "="
   | PlusAssign -> "+="
   | MinusAssign -> "-="
   | TimesAssign -> "*="

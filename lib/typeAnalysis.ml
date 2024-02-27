@@ -408,7 +408,13 @@ class type_analyze_visitor ctx =
           maybe_deref lhs;
           maybe_deref rhs;
           (match (lhs.ty, op) with
-          | _, EqAssign -> self#check_assign (ASTExpression expr) lhs.ty rhs
+          | _, EqAssign -> (
+              self#check_assign (ASTExpression expr) lhs.ty rhs;
+              (* If lhs is a string subscript access, change the operator to CharAssign *)
+              match lhs.node with
+              | Subscript ({ ty = String; _ }, _) ->
+                  expr.node <- Assign (CharAssign, lhs, rhs)
+              | _ -> ())
           | String, PlusAssign -> check String rhs
           | Delegate (dn, di), (PlusAssign | MinusAssign) ->
               self#check_delegate_compatible (ASTExpression expr) dn di rhs
@@ -421,7 +427,9 @@ class type_analyze_visitor ctx =
               ( ModuloAssign | OrAssign | XorAssign | AndAssign | LShiftAssign
               | RShiftAssign ) ) ->
               check Int lhs;
-              check Int rhs);
+              check Int rhs
+          | _, CharAssign ->
+              compiler_bug "unexpected CharAssign" (Some (ASTExpression expr)));
           (* XXX: Nothing is left on stack after assigning method to delegate *)
           match (lhs.ty, rhs.ty) with
           | Delegate _, Ref (TyMethod _) -> expr.ty <- Void
