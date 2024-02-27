@@ -862,22 +862,16 @@ class jaf_compiler ain =
           self#compile_pop e.ty
       | Compound stmts -> self#compile_block stmts
       | Label name -> self#scope_add_label name
-      | If (test, con, alt) -> (
+      | If (test, con, alt) ->
           self#compile_expression test;
-          let ifnz_addr = current_address + 2 in
-          let jump_addr = current_address + 8 in
-          self#write_instruction1 IFNZ 0;
-          self#write_instruction1 JUMP 0;
-          self#write_address_at ifnz_addr current_address;
+          let ifz_addr = current_address + 2 in
+          self#write_instruction1 IFZ 0;
           self#compile_statement con;
-          match alt.node with
-          | EmptyStatement -> self#write_address_at jump_addr current_address
-          | _ ->
-              let skip_addr = current_address + 2 in
-              self#write_instruction1 JUMP 0;
-              self#write_address_at jump_addr current_address;
-              self#compile_statement alt;
-              self#write_address_at skip_addr current_address)
+          let jump_addr = current_address + 2 in
+          self#write_instruction1 JUMP 0;
+          self#write_address_at ifz_addr current_address;
+          self#compile_statement alt;
+          self#write_address_at jump_addr current_address
       | While (test, body) ->
           (* loop test *)
           let loop_addr = current_address in

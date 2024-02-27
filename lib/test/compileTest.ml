@@ -274,3 +274,78 @@ let%expect_test "global array initializer" =
       050: FUNC NULL
       056: EOF test.jaf
     |}]
+
+let%expect_test "if" =
+  compile_test
+    {|
+      void f() {
+        int i = 1;
+        if (i) {
+          i = 2;
+        }
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSHLOCALPAGE
+      008: PUSH 0
+      014: PUSH 1
+      020: ASSIGN
+      022: POP
+      024: PUSHLOCALPAGE
+      026: PUSH 0
+      032: REF
+      034: IFZ 64
+      040: PUSHLOCALPAGE
+      042: PUSH 0
+      048: PUSH 2
+      054: ASSIGN
+      056: POP
+      058: JUMP 64
+      064: RETURN
+      066: ENDFUNC f
+      072: FUNC NULL
+      078: EOF test.jaf
+    |}]
+
+let%expect_test "if-else" =
+  compile_test
+    {|
+      void f() {
+        int i = 1;
+        if (i) {
+          i = 2;
+        } else {
+          i = 3;
+        }
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSHLOCALPAGE
+      008: PUSH 0
+      014: PUSH 1
+      020: ASSIGN
+      022: POP
+      024: PUSHLOCALPAGE
+      026: PUSH 0
+      032: REF
+      034: IFZ 64
+      040: PUSHLOCALPAGE
+      042: PUSH 0
+      048: PUSH 2
+      054: ASSIGN
+      056: POP
+      058: JUMP 82
+      064: PUSHLOCALPAGE
+      066: PUSH 0
+      072: PUSH 3
+      078: ASSIGN
+      080: POP
+      082: RETURN
+      084: ENDFUNC f
+      090: FUNC NULL
+      096: EOF test.jaf
+    |}]
