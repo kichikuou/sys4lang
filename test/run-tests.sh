@@ -17,5 +17,6 @@ cd $(dirname "$0")
 ./test-runner.sh message.jaf
 ./test-runner.sh char-constant.jaf
 ./test-runner.sh const.jaf
+./test-runner.sh global.jaf
 ./test-runner.sh unicode.jaf
 ./test-runner.sh hllcall.jaf Math.hll

@@ -1,0 +1,9 @@
+int g_int = 42;
+array@int g_array[5];
+
+int main()
+{
+	assert(g_int == 42);
+	assert(g_array.Numof() == 5);
+	return 0;
+}

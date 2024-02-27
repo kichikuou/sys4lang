@@ -209,6 +209,16 @@ class const_eval_visitor ctx =
             | ConstString _ -> ()
             | _ -> const_error v)
         | None -> const_error v
+      else
+        match (v.kind, v.initval) with
+        | GlobalVar, Some e ->
+            Ain.set_global_initval ctx.ain v.name
+              (match e.node with
+              | ConstInt i -> Ain.Variable.Int (Int32.of_int_exn i)
+              | ConstFloat f -> Ain.Variable.Float f
+              | ConstString s -> Ain.Variable.String s
+              | _ -> const_error v)
+        | _ -> ()
   end
 
 let evaluate_constant_expressions ctx decls =

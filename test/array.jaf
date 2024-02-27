@@ -24,8 +24,6 @@ public:
 	array@int@2 a[4][3];
 };
 
-array@int g_array[5];
-
 int main()
 {
 	array@int ia[1];
@@ -61,7 +59,6 @@ int main()
 	a[1][2] = 2;
 	assert(a[1][2] == 2);
 
-	assert(g_array.Numof() == 5);
 	WithoutCtor o1;
 	assert(o1.a.Numof() == 3);
 	WithCtor o2;

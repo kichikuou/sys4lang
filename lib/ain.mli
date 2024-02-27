@@ -158,6 +158,7 @@ val write_file : t -> string -> unit
 val get_global : t -> string -> Variable.t option
 val get_global_by_index : t -> int -> Variable.t
 val set_global_type : t -> string -> Type.t -> unit
+val set_global_initval : t -> string -> Variable.initval -> unit
 val write_new_global : t -> Variable.t -> int
 val add_global : t -> string -> int
 val get_function : t -> string -> Function.t option

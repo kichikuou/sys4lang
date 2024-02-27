@@ -1390,6 +1390,13 @@ let set_global_type ain name t =
         { g with variable = { g.variable with value_type = t } }
   | None -> failwith (sprintf "No global named '%s' in ain object" name)
 
+let set_global_initval ain name initval =
+  match get_globali ain name with
+  | Some (i, g) ->
+      Array.set ain.globals i
+        { g with variable = { g.variable with initval = Some initval } }
+  | None -> failwith (sprintf "No global named '%s' in ain object" name)
+
 (* FIXME: this sucks *)
 (*        keep a list of added globals/etc. and append to array only when lookup is OOB *)
 (* FIXME? should probably create copy of `g` so that mutations don't alter original *)
