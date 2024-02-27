@@ -9,6 +9,7 @@ cd $(dirname "$0")
 ./test-runner.sh struct.jaf
 ./test-runner.sh class.jaf
 ./test-runner.sh delegate.jaf
+./test-runner.sh scope.jaf
 ./test-runner.sh control.jaf
 ./test-runner.sh ref.jaf
 ./test-runner.sh functype.jaf

@@ -41,7 +41,7 @@ class variable_alloc_visitor ctx =
     inherit ivisitor ctx as super
     val mutable vars : variable list = []
     val scopes = Stack.create ()
-    val dummy_var_seqno = ref 0
+    val mutable dummy_var_seqno = 0
 
     method start_scope =
       let initial_vars = Set.of_list (module Int) environment#var_id_list in
@@ -131,12 +131,9 @@ class variable_alloc_visitor ctx =
       scope.gotos <- (stmt, self#current_var_set) :: scope.gotos
 
     method get_var_no name =
-      let rec search i (vars : variable list) =
-        match vars with
-        | hd :: tl -> if String.equal hd.name name then i else search (i + 1) tl
-        | [] -> compiler_bug ("Undefined variable: " ^ name) None
-      in
-      search 0 (List.rev vars)
+      match environment#get_local name with
+      | Some v -> Option.value_exn v.index
+      | None -> compiler_bug ("Undefined variable: " ^ name) None
 
     method add_var (v : variable) =
       let i = List.length vars in
@@ -163,7 +160,7 @@ class variable_alloc_visitor ctx =
       let index = List.length vars in
       vars <-
         {
-          name = Printf.sprintf "<dummy : %s : %d>" name !dummy_var_seqno;
+          name = Printf.sprintf "<dummy : %s : %d>" name dummy_var_seqno;
           location = dummy_location;
           array_dim = [];
           is_const = false;
@@ -173,7 +170,7 @@ class variable_alloc_visitor ctx =
           index = Some index;
         }
         :: vars;
-      dummy_var_seqno := !dummy_var_seqno + 1;
+      dummy_var_seqno <- dummy_var_seqno + 1;
       index
 
     method! visit_expression expr =

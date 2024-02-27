@@ -387,14 +387,7 @@ class ivisitor ctx =
           | _ -> None
 
         method get_local name =
-          let var_eq _ (v : variable) = String.equal v.name name in
-          let rec search vars rest =
-            match List.findi vars ~f:var_eq with
-            | Some (_, v) -> Some v
-            | None -> (
-                match rest with [] -> None | prev :: rest -> search prev rest)
-          in
-          search variables stack
+          List.find variables ~f:(fun v -> String.equal v.name name)
 
         method resolve name =
           let ctx_resolve ctx =
