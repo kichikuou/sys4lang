@@ -238,6 +238,95 @@ let%expect_test "function returning ref" =
       048: EOF test.jaf
   |}]
 
+let%expect_test "ref struct assign" =
+  compile_test
+    {|
+      struct S {};
+      ref S f() {
+        ref S r = f();
+        return r;
+      }
+    |};
+  [%expect
+    {|
+      000: FUNC f
+      006: CALLSYS LockPeek
+      012: POP
+      014: PUSHLOCALPAGE
+      016: PUSH 0
+      022: DUP2
+      024: REF
+      026: DELETE
+      028: DUP2
+      030: PUSHLOCALPAGE
+      032: PUSH 1
+      038: CALLFUNC f
+      044: ASSIGN
+      046: ASSIGN
+      048: DUP_X2
+      050: POP
+      052: REF
+      054: SP_INC
+      056: POP
+      058: CALLSYS UnlockPeek
+      064: POP
+      066: PUSHLOCALPAGE
+      068: PUSH 0
+      074: REF
+      076: DUP
+      078: SP_INC
+      080: RETURN
+      082: PUSH -1
+      088: RETURN
+      090: ENDFUNC f
+      096: FUNC NULL
+      102: EOF test.jaf
+  |}]
+
+let%expect_test "ref int assign" =
+  compile_test
+    {|
+      ref int f() {
+        ref int r = f();
+        return r;
+      }
+    |};
+  [%expect
+    {|
+      000: FUNC f
+      006: CALLSYS LockPeek
+      012: POP
+      014: PUSHLOCALPAGE
+      016: PUSH 0
+      022: DUP2
+      024: REF
+      026: DELETE
+      028: DUP2
+      030: PUSHLOCALPAGE
+      032: PUSH 2
+      038: CALLFUNC f
+      044: R_ASSIGN
+      046: R_ASSIGN
+      048: POP
+      050: POP
+      052: REF
+      054: SP_INC
+      056: CALLSYS UnlockPeek
+      062: POP
+      064: PUSHLOCALPAGE
+      066: PUSH 0
+      072: REFREF
+      074: DUP_U2
+      076: SP_INC
+      078: RETURN
+      080: PUSH -1
+      086: PUSH 0
+      092: RETURN
+      094: ENDFUNC f
+      100: FUNC NULL
+      106: EOF test.jaf
+  |}]
+
 let%expect_test "syscall" =
   compile_test {|
       void f() { system.Exit(42); }

@@ -338,14 +338,17 @@ class jaf_compiler ain =
           (* prepare for assign to dummy variable *)
           self#write_instruction0 PUSHLOCALPAGE;
           self#write_instruction1 PUSH var_no;
-          match ref_expr.node with
-          | New { ty = Struct (_, s_no); _ } ->
+          match ref_expr with
+          | { node = New { ty = Struct (_, s_no); _ }; _ } ->
               self#write_instruction1 PUSH s_no;
               self#compile_lock_peek;
               self#write_instruction0 NEW;
               (* assign to dummy variable *)
               self#write_instruction0 ASSIGN;
               self#compile_unlock_peek
+          | { ty = Ref (Int | Bool | Float | LongInt | FuncType _); _ } ->
+              self#compile_expression ref_expr;
+              self#write_instruction0 R_ASSIGN
           | _ ->
               self#compile_expression ref_expr;
               self#write_instruction0 ASSIGN)
@@ -991,6 +994,9 @@ class jaf_compiler ain =
           self#compile_lock_peek;
           self#compile_variable_ref lhs;
           self#compile_delete_ref;
+          (match (lhs.ty, rhs.node) with
+          | _, Null -> ()
+          | _ -> self#write_instruction0 DUP2);
           self#compile_lvalue rhs;
           (match lhs.ty with
           | Ref (Int | Bool | Float | LongInt | FuncType _) -> (
@@ -999,13 +1005,21 @@ class jaf_compiler ain =
               self#write_instruction0 POP;
               match rhs.node with
               | Null -> self#write_instruction0 POP
-              | _ -> self#write_instruction0 SP_INC)
+              | _ ->
+                  self#write_instruction0 POP;
+                  self#write_instruction0 REF;
+                  self#write_instruction0 SP_INC)
           | Ref (String | Struct _ | Array _) -> (
               (* NOTE: SDK compiler emits [DUP; SP_INC; ASSIGN; POP] here *)
               self#write_instruction0 ASSIGN;
               match rhs.node with
               | Null -> self#write_instruction0 POP
-              | _ -> self#write_instruction0 SP_INC)
+              | _ ->
+                  self#write_instruction0 DUP_X2;
+                  self#write_instruction0 POP;
+                  self#write_instruction0 REF;
+                  self#write_instruction0 SP_INC;
+                  self#write_instruction0 POP)
           | _ ->
               compiler_bug "Invalid LHS in reference assignment"
                 (Some (ASTStatement stmt)));
