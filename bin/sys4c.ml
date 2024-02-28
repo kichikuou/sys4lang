@@ -81,8 +81,6 @@ let do_compile sources output major minor =
     let program = pass_one ctx sources in
     let program = pass_two ctx program in
     pass_three ctx program;
-    (* final check for undefined functions *)
-    SanityCheck.check_undefined ctx.ain;
     (* write output .ain file to disk *)
     Ain.write_file ctx.ain output
   with CompileError.CompileError e ->

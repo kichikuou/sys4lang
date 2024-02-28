@@ -201,13 +201,26 @@ let%expect_test "variable declarations" =
   [%expect {| ok |}]
 
 let%expect_test "class declarations" =
-  type_test {|
+  type_test
+    {|
       class C {
         C(void);
         ~C();
       };
+      C::C(void) {}
+      C::~C() {}
     |};
   [%expect {| ok |}]
+
+let%expect_test "undefined method" =
+  type_test {|
+      class C {
+        int f();
+      };
+    |};
+  [%expect {|
+    -:3:9-17: No definition of C::f found
+    	in: int f(); |}]
 
 let%expect_test "RefAssign operator" =
   type_test

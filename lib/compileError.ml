@@ -29,7 +29,6 @@ type compile_error =
   | Const_error of variable
   | CompileError of string * ast_node
   | CompilerBug of string * ast_node option
-  | LinkError of string
   | ErrorList of compile_error list
 
 exception CompileError of compile_error
@@ -54,7 +53,6 @@ let not_an_lvalue_error expr parent =
 let const_error v = raise_error (Const_error v)
 let compile_error str node = raise_error (CompileError (str, node))
 let compiler_bug str node = raise_error (CompilerBug (str, node))
-let link_error str = raise_error (LinkError str)
 
 let format_location (s, e) =
   Lexing.(
@@ -104,7 +102,6 @@ let rec print_error = function
   | CompileError (msg, node) ->
       printf "%s: %s\n" (format_node_location node) msg;
       printf "\tin: %s\n" (ast_to_string node)
-  | LinkError msg -> printf "Error: %s\n" msg
   | CompilerBug (msg, node) ->
       (match node with
       | Some n ->

@@ -27,6 +27,8 @@ class type_declare_visitor ctx =
 
     method declare_function decl =
       let name = mangled_name decl in
+      if Option.is_some decl.body then
+        decl.index <- Some (Ain.add_function ctx.ain name).index;
       Hashtbl.update ctx.functions name ~f:(function
         | Some prev_decl ->
             if not (fundecl_compatible decl prev_decl) then
@@ -36,11 +38,9 @@ class type_declare_visitor ctx =
               compile_error "Duplicate function definition"
                 (ASTDeclaration (Function decl))
             else (
-              decl.index <- prev_decl.index;
+              prev_decl.index <- decl.index;
               decl)
-        | None ->
-            decl.index <- Some (Ain.add_function ctx.ain name).index;
-            decl)
+        | None -> decl)
 
     method! visit_declaration decl =
       match decl with
@@ -199,6 +199,15 @@ class type_define_visitor ctx =
       | FuncTypeDef f -> jaf_to_ain_functype f |> Ain.write_functype ctx.ain
       | DelegateDef f -> jaf_to_ain_functype f |> Ain.write_delegate ctx.ain
       | StructDef s -> (
+          (* check for undefined methods *)
+          List.iter s.decls ~f:(function
+            | Method f | Constructor f | Destructor f ->
+                if Option.is_none f.index then
+                  compile_error
+                    (Printf.sprintf "No definition of %s::%s found" s.name
+                       f.name)
+                    (ASTDeclaration (Function f))
+            | _ -> ());
           match Ain.get_struct ctx.ain s.name with
           | Some obj -> obj |> jaf_to_ain_struct s |> Ain.write_struct ctx.ain
           | None -> compiler_bug "undefined struct" (Some (ASTDeclaration decl))

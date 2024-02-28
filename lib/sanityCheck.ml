@@ -62,10 +62,3 @@ class sanity_check_visitor ctx =
 
 let check_invariants ctx decls =
   (new sanity_check_visitor ctx)#visit_toplevel decls
-
-let check_undefined ain =
-  let check_function (f : Ain.Function.t) =
-    if not (Ain.Function.is_defined f) then
-      link_error (Printf.sprintf "Undefined function: %s" f.name)
-  in
-  Ain.function_iter ain ~f:check_function ~from:1
