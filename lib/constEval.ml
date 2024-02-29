@@ -89,7 +89,7 @@ class const_eval_visitor ctx =
       | ConstString _ -> ()
       | Ident (name, _) -> (
           match environment#resolve name with
-          | ResolvedLocal v | ResolvedConstant v | ResolvedMember (_, v) -> (
+          | ResolvedLocal v | ResolvedGlobal v | ResolvedMember (_, v) -> (
               if v.is_const then
                 match v.initval with
                 | Some e -> const_replace expr e.node
@@ -190,13 +190,12 @@ class const_eval_visitor ctx =
       | Null -> ()
 
     method! visit_toplevel decls =
-      let eval_global g =
-        match g.initval with
-        | Some expr -> self#eval_expression expr
-        | None -> const_error g
-      in
       (* XXX: evaluate all global constants first *)
-      Hashtbl.iter ctx.consts ~f:eval_global;
+      Hashtbl.iter ctx.globals ~f:(fun g ->
+          if g.is_const then
+            match g.initval with
+            | Some expr -> self#eval_expression expr
+            | None -> const_error g);
       super#visit_toplevel decls
 
     method! visit_expression expr =

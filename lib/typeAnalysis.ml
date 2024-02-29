@@ -280,12 +280,12 @@ class type_analyze_visitor ctx =
           | ResolvedLocal v ->
               expr.node <- Ident (name, LocalVariable (-1));
               expr.ty <- v.type_spec.ty
-          | ResolvedConstant v ->
-              expr.node <- Ident (name, GlobalConstant);
-              expr.ty <- v.type_spec.ty
           | ResolvedGlobal g ->
-              expr.node <-
-                Ident (name, GlobalVariable (Option.value_exn g.index));
+              let ident_type =
+                if g.is_const then GlobalConstant
+                else GlobalVariable (Option.value_exn g.index)
+              in
+              expr.node <- Ident (name, ident_type);
               expr.ty <- g.type_spec.ty
           | ResolvedFunction f ->
               expr.node <- Ident (name, FunctionName name);

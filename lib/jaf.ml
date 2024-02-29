@@ -310,7 +310,6 @@ type context = {
   files : (string, string) Hashtbl.t;
   ain : Ain.t;
   globals : (string, variable) Hashtbl.t;
-  consts : (string, variable) Hashtbl.t;
   structs : (string, jaf_struct) Hashtbl.t;
   functions : (string, fundecl) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
@@ -323,7 +322,6 @@ let context_from_ain ain =
     files = Hashtbl.create (module String);
     ain;
     globals = Hashtbl.create (module String);
-    consts = Hashtbl.create (module String);
     structs = Hashtbl.create (module String);
     functions = Hashtbl.create (module String);
     functypes = Hashtbl.create (module String);
@@ -338,7 +336,6 @@ let find_hll_function ctx lib func =
 
 type resolved_name =
   | ResolvedLocal of variable
-  | ResolvedConstant of variable
   | ResolvedGlobal of variable
   | ResolvedFunction of fundecl
   | ResolvedMember of jaf_struct * variable
@@ -395,18 +392,15 @@ class ivisitor ctx =
 
         method resolve name =
           let ctx_resolve ctx =
-            match Hashtbl.find ctx.consts name with
-            | Some v -> ResolvedConstant v
+            match Hashtbl.find ctx.globals name with
+            | Some g -> ResolvedGlobal g
             | None -> (
-                match Hashtbl.find ctx.globals name with
-                | Some g -> ResolvedGlobal g
+                match Hashtbl.find ctx.functions name with
+                | Some f -> ResolvedFunction f
                 | None -> (
-                    match Hashtbl.find ctx.functions name with
-                    | Some f -> ResolvedFunction f
-                    | None -> (
-                        match Hashtbl.find ctx.libraries name with
-                        | Some l -> ResolvedLibrary l
-                        | None -> UnresolvedName)))
+                    match Hashtbl.find ctx.libraries name with
+                    | Some l -> ResolvedLibrary l
+                    | None -> UnresolvedName))
           in
           match name with
           | "system" -> ResolvedSystem
