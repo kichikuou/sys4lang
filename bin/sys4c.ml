@@ -24,9 +24,14 @@ type source =
 
 type program = source list
 
-let parse_file parse_func file =
+let parse_file parse_func file input_encoding =
   let do_parse ch =
-    let lexbuf = Lexing.from_channel ch in
+    let lexbuf =
+      match input_encoding with
+      | "utf8" -> Lexing.from_channel ch
+      | "sjis" -> In_channel.input_all ch |> Sjis.to_utf8 |> Lexing.from_string
+      | _ -> failwith "unsupported encoding"
+    in
     Lexing.set_filename lexbuf file;
     try parse_func Lexer.token lexbuf with
     | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
@@ -37,14 +42,14 @@ let parse_file parse_func file =
   | path -> In_channel.with_file path ~f:(fun file -> do_parse file)
 
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
-let pass_one ctx sources =
+let pass_one ctx sources input_encoding =
   List.map sources ~f:(fun f ->
       if Filename.check_suffix f ".jaf" || String.equal f "-" then (
-        let jaf = parse_file Parser.jaf f in
+        let jaf = parse_file Parser.jaf f input_encoding in
         Declarations.register_type_declarations ctx jaf;
         Jaf (f, jaf))
       else if Filename.check_suffix f ".hll" then
-        let hll = parse_file Parser.hll f in
+        let hll = parse_file Parser.hll f input_encoding in
         let lib_name = Filename.chop_extension (Filename.basename f) in
         Hll (lib_name, hll)
       else failwith "unsupported file type")
@@ -75,10 +80,10 @@ let pass_three ctx program =
         Compiler.compile ctx jaf_name jaf
     | Hll _ -> ())
 
-let do_compile sources output major minor =
+let do_compile sources output major minor input_encoding =
   try
     let ctx = context_from_ain (Ain.create major minor) in
-    let program = pass_one ctx sources in
+    let program = pass_one ctx sources input_encoding in
     let program = pass_two ctx program in
     pass_three ctx program;
     (* write output .ain file to disk *)
@@ -106,6 +111,10 @@ let cmd_compile_jaf =
         flag "-ain-minor-version"
           (optional_with_default 0 int)
           ~doc:"version The output .ain file minor version (default: 0)"
+      and input_encoding =
+        flag "-input-encoding"
+          (optional_with_default "utf8" string)
+          ~doc:"encoding The input file encoding. sjis or utf8 (default)"
       and test =
         flag "-test" (optional Filename_unix.arg_type) ~doc:" Testing"
       in
@@ -113,6 +122,6 @@ let cmd_compile_jaf =
         if Option.is_some test then
           let ain = Ain.load (Option.value_exn test) in
           Ain.write_file ain output
-        else do_compile sources output major minor)
+        else do_compile sources output major minor input_encoding)
 
 let () = Command_unix.run ~version:"0.1" cmd_compile_jaf
