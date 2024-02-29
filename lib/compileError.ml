@@ -21,38 +21,52 @@ open Printf
 let printf = Stdio.printf
 
 type compile_error =
-  | Syntax_error of location
-  | Type_error of jaf_type * expression option * ast_node
-  | Undefined_variable of string * ast_node
-  | Arity_error of string * int * expression list * ast_node
-  | Not_lvalue_error of expression * ast_node
-  | Const_error of variable
-  | CompileError of string * ast_node
-  | CompilerBug of string * ast_node option
+  | Error of string * location
   | ErrorList of compile_error list
 
 exception CompileError of compile_error
 
-let raise_error e = raise (CompileError e)
+let raise msg loc = Base.raise (CompileError (Error (msg, loc)))
+let raise_list es = Base.raise (CompileError (ErrorList es))
 
 let syntax_error lexbuf =
-  raise_error
-    (Syntax_error (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf))
+  raise "Syntax error" (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf)
 
-let type_error ty expr parent = raise_error (Type_error (ty, expr, parent))
+let type_error expected actual parent =
+  let s_expected = jaf_type_to_string expected in
+  let s_actual =
+    match actual with None -> "void" | Some expr -> jaf_type_to_string expr.ty
+  in
+  raise
+    (sprintf "Type error: expected %s; got %s" s_expected s_actual)
+    (ast_node_pos
+       (match actual with Some e -> ASTExpression e | None -> parent))
 
 let undefined_variable_error name parent =
-  raise_error (Undefined_variable (name, parent))
+  raise ("Undefined variable: " ^ name) (ast_node_pos parent)
 
 let arity_error name nr_params args parent =
-  raise_error (Arity_error (name, nr_params, args, parent))
+  raise
+    (sprintf "Wrong number of arguments to function %s (expected %d; got %d)"
+       name nr_params (List.length args))
+    (ast_node_pos parent)
 
 let not_an_lvalue_error expr parent =
-  raise_error (Not_lvalue_error (expr, parent))
+  raise ("Not an lvalue: " ^ expr_to_string expr) (ast_node_pos parent)
 
-let const_error v = raise_error (Const_error v)
-let compile_error str node = raise_error (CompileError (str, node))
-let compiler_bug str node = raise_error (CompilerBug (str, node))
+let const_error v =
+  raise
+    (match v.initval with
+    | Some _ -> "Value of const variable is not constant"
+    | None -> "Const variable lacks initializer")
+    v.location
+
+let compile_error str node = raise str (ast_node_pos node)
+
+let compiler_bug str node =
+  raise
+    (str ^ " (This is a compiler bug!)")
+    (match node with Some n -> ast_node_pos n | None -> dummy_location)
 
 let format_location (s, e) =
   Lexing.(
@@ -62,50 +76,34 @@ let format_location (s, e) =
       sprintf "%s:%d:%d-%d" s.pos_fname s.pos_lnum scol ecol
     else sprintf "%s:%d:%d-%d:%d" s.pos_fname s.pos_lnum scol e.pos_lnum ecol)
 
-let format_node_location node = format_location (ast_node_pos node)
+let detab = String.substr_replace_all ~pattern:"\t" ~with_:"    "
 
-let rec print_error = function
-  | ErrorList es -> List.iter es ~f:print_error
-  | Syntax_error (s, e) -> printf "%s: Syntax error\n" (format_location (s, e))
-  | Type_error (expected, actual, parent) ->
-      let s_expected = jaf_type_to_string expected in
-      let s_actual =
-        match actual with
-        | None -> "void"
-        | Some expr -> jaf_type_to_string expr.ty
-      in
-      printf "%s: Type error: expected %s; got %s\n"
-        (format_node_location parent)
-        s_expected s_actual;
-      Option.iter actual ~f:(fun e -> printf "\tat: %s\n" (expr_to_string e));
-      printf "\tin: %s\n" (ast_to_string parent)
-  | Undefined_variable (name, node) ->
-      printf "%s: Undefined variable: %s\n" (format_node_location node) name
-  | Arity_error (name, nr_params, args, parent) ->
-      printf
-        "%s: wrong number of arguments to function %s (expected %d; got %d)\n"
-        (format_node_location parent)
-        name nr_params (List.length args);
-      printf "\tin: %s\n" (ast_to_string parent)
-  | Not_lvalue_error (expr, parent) ->
-      printf "%s: not an lvalue: %s\n"
-        (format_node_location parent)
-        (expr_to_string expr);
-      printf "\tin: %s\n" (ast_to_string parent)
-  | Const_error var ->
-      printf "%s: %s\n"
-        (format_location var.location)
-        (match var.initval with
-        | Some _ -> "value of const variable is not constant"
-        | None -> "const variable lacks initializer");
-      printf "\tin: %s\n" (var_to_string var)
-  | CompileError (msg, node) ->
-      printf "%s: %s\n" (format_node_location node) msg;
-      printf "\tin: %s\n" (ast_to_string node)
-  | CompilerBug (msg, node) ->
-      (match node with
-      | Some n ->
-          printf "%s: %s\n\tin: %s\n" (format_node_location n) msg
-            (ast_to_string n)
-      | None -> printf "Error: %s\n" msg);
-      printf "(This is a compiler bug!)\n"
+let print_underline c s =
+  let len = String.length (Sjis.from_utf8 (detab s)) in
+  Stdio.print_string (String.make len c)
+
+let rec print_error err get_source_text =
+  match err with
+  | ErrorList es -> List.iter es ~f:(fun e -> print_error e get_source_text)
+  | Error (msg, (s, e)) -> (
+      printf "%s: %s\n" (format_location (s, e)) msg;
+      match get_source_text s.pos_fname with
+      | None -> ()
+      | Some src ->
+          let lines = String.split_lines src in
+          if s.pos_lnum = e.pos_lnum then (
+            let line = List.nth_exn lines (s.pos_lnum - 1) in
+            printf "%5d | %s\n        " s.pos_lnum (detab line);
+            print_underline ' '
+              (String.sub line ~pos:0 ~len:(s.pos_cnum - s.pos_bol));
+            print_underline '^'
+              (String.sub line ~pos:(s.pos_cnum - s.pos_bol)
+                 ~len:(e.pos_cnum - s.pos_cnum));
+            Stdio.print_endline "")
+          else
+            let error_lines =
+              List.sub lines ~pos:(s.pos_lnum - 1)
+                ~len:(e.pos_lnum - s.pos_lnum + 1)
+            in
+            List.iteri error_lines ~f:(fun i line ->
+                printf "%5d | %s\n" (i + s.pos_lnum) line))

@@ -24,32 +24,34 @@ type source =
 
 type program = source list
 
-let parse_file parse_func file input_encoding =
-  let do_parse ch =
-    let lexbuf =
-      match input_encoding with
-      | "utf8" -> Lexing.from_channel ch
-      | "sjis" -> In_channel.input_all ch |> Sjis.to_utf8 |> Lexing.from_string
-      | _ -> failwith "unsupported encoding"
-    in
-    Lexing.set_filename lexbuf file;
-    try parse_func Lexer.token lexbuf with
-    | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
-    | e -> raise e
+let parse_file ctx parse_func file input_encoding =
+  let content =
+    match file with
+    | "-" -> In_channel.input_all In_channel.stdin
+    | _ -> In_channel.read_all file
   in
-  match file with
-  | "-" -> do_parse In_channel.stdin
-  | path -> In_channel.with_file path ~f:(fun file -> do_parse file)
+  let source =
+    match input_encoding with
+    | "utf8" -> content
+    | "sjis" -> Sjis.to_utf8 content
+    | _ -> failwith ("unsupported character encoding: " ^ input_encoding)
+  in
+  Hashtbl.add_exn ctx.files ~key:file ~data:source;
+  let lexbuf = Lexing.from_string source in
+  Lexing.set_filename lexbuf file;
+  try parse_func Lexer.token lexbuf with
+  | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
+  | e -> raise e
 
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
 let pass_one ctx sources input_encoding =
   List.map sources ~f:(fun f ->
       if Filename.check_suffix f ".jaf" || String.equal f "-" then (
-        let jaf = parse_file Parser.jaf f input_encoding in
+        let jaf = parse_file ctx Parser.jaf f input_encoding in
         Declarations.register_type_declarations ctx jaf;
         Jaf (f, jaf))
       else if Filename.check_suffix f ".hll" then
-        let hll = parse_file Parser.hll f input_encoding in
+        let hll = parse_file ctx Parser.hll f input_encoding in
         let lib_name = Filename.chop_extension (Filename.basename f) in
         Hll (lib_name, hll)
       else failwith "unsupported file type")
@@ -81,15 +83,15 @@ let pass_three ctx program =
     | Hll _ -> ())
 
 let do_compile sources output major minor input_encoding =
+  let ctx = context_from_ain (Ain.create major minor) in
   try
-    let ctx = context_from_ain (Ain.create major minor) in
     let program = pass_one ctx sources input_encoding in
     let program = pass_two ctx program in
     pass_three ctx program;
     (* write output .ain file to disk *)
     Ain.write_file ctx.ain output
   with CompileError.CompileError e ->
-    CompileError.print_error e;
+    CompileError.print_error e (fun file -> Hashtbl.find ctx.files file);
     exit 1
 
 let cmd_compile_jaf =

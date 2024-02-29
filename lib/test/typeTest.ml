@@ -32,7 +32,8 @@ let type_test input =
     Declarations.define_types ctx jaf;
     TypeAnalysis.check_types ctx jaf;
     Stdio.print_endline "ok"
-  with CompileError.CompileError e -> CompileError.print_error e
+  with CompileError.CompileError e ->
+    CompileError.print_error e (fun _ -> Some input)
 
 let%expect_test "empty jaf" =
   type_test {||};
@@ -48,13 +49,21 @@ let%expect_test "syntax error" =
   type_test {|
     int c = ;
   |};
-  [%expect {| -:2:13-14: Syntax error |}]
+  [%expect
+    {|
+    -:2:13-14: Syntax error
+        2 |     int c = ;
+                        ^ |}]
 
 let%expect_test "undefined variable" =
   type_test {|
     int c = foo;
   |};
-  [%expect {| -:2:13-16: Undefined variable: foo |}]
+  [%expect
+    {|
+    -:2:13-16: Undefined variable: foo
+        2 |     int c = foo;
+                        ^^^ |}]
 
 let%expect_test "arity error" =
   type_test {|
@@ -62,16 +71,32 @@ let%expect_test "arity error" =
   |};
   [%expect
     {|
-      -:2:13-26: wrong number of arguments to function Exit (expected 1; got 0)
-      	in: system.Exit() |}]
+      -:2:13-26: Wrong number of arguments to function Exit (expected 1; got 0)
+          2 |     int c = system.Exit();
+                          ^^^^^^^^^^^^^ |}]
+
+let%expect_test "multiline error" =
+  type_test {|
+      void f(int x) {
+        f(3,
+          4);
+      }
+    |};
+  [%expect
+    {|
+    -:3:9-4:13: Wrong number of arguments to function f (expected 1; got 2)
+        3 |         f(3,
+        4 |           4); |}]
 
 let%expect_test "not lvalue error" =
   type_test {|
     ref int c = 3;
   |};
-  [%expect {|
-    -:2:13-18: not an lvalue: 3
-    	in: ref int c = 3; |}]
+  [%expect
+    {|
+    -:2:13-18: Not an lvalue: 3
+        2 |     ref int c = 3;
+                        ^^^^^ |}]
 
 let%expect_test "undefined type error" =
   type_test {|
@@ -80,7 +105,8 @@ let%expect_test "undefined type error" =
   [%expect
     {|
     -:2:5-12: Undefined type: undef_t
-    	in: Unresolved<undef_t> |}]
+        2 |     undef_t c;
+                ^^^^^^^ |}]
 
 let%expect_test "type error" =
   type_test {|
@@ -91,12 +117,12 @@ let%expect_test "type error" =
   |};
   [%expect
     {|
-      -:3:11-18: Type error: expected int; got string
-      	at: "s"
-      	in: int x = "s";
-      -:4:7-16: Type error: expected void; got int
-      	at: 1
-      	in: return 1; |}]
+      -:3:15-18: Type error: expected int; got string
+          3 |       int x = "s";
+                            ^^^
+      -:4:14-15: Type error: expected void; got int
+          4 |       return 1;
+                           ^ |}]
 
 let%expect_test "function call" =
   type_test
@@ -131,19 +157,21 @@ let%expect_test "function call" =
     |};
   [%expect
     {|
-      -:19:19-20: not an lvalue: 3
-      	in: 3
-      -:22:21-22: not an lvalue: 3
-      	in: 3
+      -:19:19-20: Not an lvalue: 3
+         19 |         f_ref_int(3);     // error
+                                ^
+      -:22:21-22: Not an lvalue: 3
+         22 |         f_ref_float(3);   // error
+                                  ^
       -:23:21-22: Type error: expected ref float; got int
-      	at: i
-      	in: i
+         23 |         f_ref_float(i);   // error
+                                  ^
       -:24:21-23: Type error: expected ref float; got ref int
-      	at: ri
-      	in: ri
+         24 |         f_ref_float(ri);  // error
+                                  ^^
       -:26:16-24: Type error: expected func; got ref typeof(f_float)
-      	at: &f_float
-      	in: &f_float |}]
+         26 |         f_func(&f_float); // error
+                             ^^^^^^^^ |}]
 
 let%expect_test "return statement" =
   type_test
@@ -176,20 +204,21 @@ let%expect_test "return statement" =
     |};
   [%expect
     {|
-      -:5:9-18: Type error: expected void; got int
-      	at: 3
-      	in: return 3;
+      -:5:16-17: Type error: expected void; got int
+          5 |         return 3;  // error
+                             ^
       -:8:9-16: Type error: expected int; got void
-      	in: return;
-      -:11:9-20: Type error: expected int; got string
-      	at: "s"
-      	in: return "s";
-      -:20:9-19: Type error: expected ref int; got ref float
-      	at: rf
-      	in: return rf;
-      -:25:9-23: Type error: expected func; got ref typeof(f_int)
-      	at: &f_int
-      	in: return &f_int; |}]
+          8 |         return;      // error
+                      ^^^^^^^
+      -:11:16-19: Type error: expected int; got string
+         11 |         return "s";  // error
+                             ^^^
+      -:20:16-18: Type error: expected ref int; got ref float
+         20 |         return rf;    // error
+                             ^^
+      -:25:16-22: Type error: expected func; got ref typeof(f_int)
+         25 |         return &f_int;   // error
+                             ^^^^^^ |}]
 
 let%expect_test "variable declarations" =
   type_test
@@ -218,9 +247,11 @@ let%expect_test "undefined method" =
         int f();
       };
     |};
-  [%expect {|
+  [%expect
+    {|
     -:3:9-17: No definition of C::f found
-    	in: int f(); |}]
+        3 |         int f();
+                    ^^^^^^^^ |}]
 
 let%expect_test "RefAssign operator" =
   type_test
@@ -261,33 +292,36 @@ let%expect_test "RefAssign operator" =
     |};
   [%expect
     {|
-      -:18:9-17: Type error: expected ref int; got int
-      	at: a
-      	in: a <- ra;
-      -:19:9-20: Type error: expected ref int; got null
-      	at: NULL
-      	in: NULL <- ra;
-      -:22:9-23: Type error: expected ref int; got ref S
-      	at: ref_S()
-      	in: ra <- ref_S();
-      -:23:9-17: not an lvalue: 3
-      	in: ra <- 3;
-      -:24:9-25: Type error: expected ref int; got ref int
-      	at: ref_val()
-      	in: ref_val() <- ra;
-      -:26:9-19: Type error: expected ref int; got int
-      	at: s.f
-      	in: s.f <- ra;
-      -:28:9-23: Type error: expected ref S; got S
-      	at: this
-      	in: this <- other;
-      -:30:9-19: Type error: expected ref int; got int
-      	at: g_i
-      	in: g_i <- ra;
-      -:31:9-23: Type error: expected ref null; got int
-      	at: false
-      	in: false <- NULL;
-      -:32:9-18: Undefined variable: undefined |}]
+      -:18:9-10: Type error: expected ref int; got int
+         18 |         a <- ra;          // error: lhs is not a reference
+                      ^
+      -:19:9-13: Type error: expected ref int; got null
+         19 |         NULL <- ra;       // error: lhs can't be the NULL keyword
+                      ^^^^
+      -:22:15-22: Type error: expected ref int; got ref S
+         22 |         ra <- ref_S();    // error: referenced type mismatch
+                            ^^^^^^^
+      -:23:9-17: Not an lvalue: 3
+         23 |         ra <- 3;          // error: rhs is not a lvalue
+                      ^^^^^^^^
+      -:24:9-18: Type error: expected ref int; got ref int
+         24 |         ref_val() <- ra;  // error: lhs is not a variable
+                      ^^^^^^^^^
+      -:26:9-12: Type error: expected ref int; got int
+         26 |         s.f <- ra;        // error: lhs is not a reference
+                      ^^^
+      -:28:9-13: Type error: expected ref S; got S
+         28 |         this <- other;    // error: lhs is not a reference
+                      ^^^^
+      -:30:9-12: Type error: expected ref int; got int
+         30 |         g_i <- ra;        // error: lhs is not a reference
+                      ^^^
+      -:31:9-14: Type error: expected ref null; got int
+         31 |         false <- NULL;    // error: lhs is not a reference
+                      ^^^^^
+      -:32:9-18: Undefined variable: undefined
+         32 |         undefined <- ra;  // error: undefined is not defined
+                      ^^^^^^^^^ |}]
 
 let%expect_test "RefEqual operator" =
   type_test
@@ -330,31 +364,36 @@ let%expect_test "RefEqual operator" =
     |};
   [%expect
     {|
-      -:18:9-17: Type error: expected ref int; got int
-      	at: a
-      	in: a === ra
-      -:19:9-20: not an lvalue: NULL
-      	in: NULL === ra
-      -:22:9-23: Type error: expected ref int; got ref S
-      	at: ref_S()
-      	in: ra === ref_S()
-      -:23:9-23: Type error: expected ref S; got ref int
-      	at: ra
-      	in: ref_S() === ra
-      -:24:9-17: not an lvalue: 3
-      	in: ra === 3
-      -:27:9-19: Type error: expected ref int; got int
-      	at: s.f
-      	in: s.f === ra
-      -:29:9-23: not an lvalue: this
-      	in: this === other
-      -:33:9-19: Type error: expected ref int; got int
-      	at: g_i
-      	in: g_i === ra
-      -:34:9-23: Type error: expected ref null; got int
-      	at: false
-      	in: false === NULL
-      -:35:9-18: Undefined variable: undefined |}]
+      -:18:9-10: Type error: expected ref int; got int
+         18 |         a === ra;          // error: lhs is not a reference
+                      ^
+      -:19:9-20: Not an lvalue: NULL
+         19 |         NULL === ra;       // error: lhs can't be the NULL keyword
+                      ^^^^^^^^^^^
+      -:22:16-23: Type error: expected ref int; got ref S
+         22 |         ra === ref_S();    // error: referenced type mismatch
+                             ^^^^^^^
+      -:23:21-23: Type error: expected ref S; got ref int
+         23 |         ref_S() === ra;    // error: referenced type mismatch
+                                  ^^
+      -:24:9-17: Not an lvalue: 3
+         24 |         ra === 3;          // error: rhs is not a lvalue
+                      ^^^^^^^^
+      -:27:9-12: Type error: expected ref int; got int
+         27 |         s.f === ra;        // error: lhs is not a reference
+                      ^^^
+      -:29:9-23: Not an lvalue: this
+         29 |         this === other;    // error: lhs is not a reference
+                      ^^^^^^^^^^^^^^
+      -:33:9-12: Type error: expected ref int; got int
+         33 |         g_i === ra;        // error: lhs is not a reference
+                      ^^^
+      -:34:9-14: Type error: expected ref null; got int
+         34 |         false === NULL;    // error: lhs is not a reference
+                      ^^^^^
+      -:35:9-18: Undefined variable: undefined
+         35 |         undefined === ra;  // error: undefined is not defined
+                      ^^^^^^^^^ |}]
 
 let%expect_test "implicit dereference" =
   type_test
@@ -403,12 +442,14 @@ let%expect_test "jump statement" =
   [%expect
     {|
       -:4:9-16: f is not a scenario function
-      	in: jump f;
+          4 |         jump f;   // error : f is not a scenario function
+                      ^^^^^^^
       -:5:15-17: Type error: expected string; got typeof(sf)
-      	at: sf
-      	in: sf
+          5 |         jumps sf; // error: jumps expects a string
+                            ^^
       -:8:9-16: cannot return from scenario function
-      	in: return; |}]
+          8 |         return;   // error: return from a scenario function
+                      ^^^^^^^ |}]
 
 let%expect_test "functype assignment" =
   type_test
@@ -423,9 +464,9 @@ let%expect_test "functype assignment" =
     |};
   [%expect
     {|
-      -:7:13-19: Type error: expected ft3; got ft
-      	at: f
-      	in: ft3 f3 = f; |}]
+      -:7:18-19: Type error: expected ft3; got ft
+          7 |         ft3 f3 = f;  // error
+                               ^ |}]
 
 let%expect_test "boolean ops" =
   type_test
@@ -443,9 +484,11 @@ let%expect_test "boolean ops" =
   [%expect
     {|
       -:6:9-16: invalid operation on boolean type
-      	in: b1 + b2
+          6 |         b1 + b2;         // error
+                      ^^^^^^^
       -:9:9-16: invalid operation on boolean type
-      	in: b1 < b2 |}]
+          9 |         b1 < b2;         // error
+                      ^^^^^^^ |}]
 
 let%expect_test "method declaration mismatch" =
   type_test
@@ -458,7 +501,8 @@ let%expect_test "method declaration mismatch" =
   [%expect
     {|
       -:5:7-21: Function signature mismatch
-      	in: void f() {  } |}]
+          5 |       void C::f() {}
+                    ^^^^^^^^^^^^^^ |}]
 
 let%expect_test "duplicated function definition" =
   type_test
@@ -471,7 +515,8 @@ let%expect_test "duplicated function definition" =
   [%expect
     {|
       -:5:7-21: Duplicate function definition
-      	in: void f() {  } |}]
+          5 |       void C::f() {}
+                    ^^^^^^^^^^^^^^ |}]
 
 let%expect_test "undeclared method" =
   type_test {|
@@ -481,7 +526,8 @@ let%expect_test "undeclared method" =
   [%expect
     {|
       -:3:7-21: f is not declared in class C
-      	in: void f() {  } |}]
+          3 |       void C::f() {}
+                    ^^^^^^^^^^^^^^ |}]
 
 let%expect_test "wrong constructor name" =
   type_test {|
@@ -492,4 +538,5 @@ let%expect_test "wrong constructor name" =
   [%expect
     {|
       -:3:9-13: constructor name doesn't match struct name
-      	in: void X(); |}]
+          3 |         X();
+                      ^^^^ |}]

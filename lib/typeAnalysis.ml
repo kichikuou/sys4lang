@@ -733,4 +733,4 @@ let check_types ctx decls =
   let visitor = new type_analyze_visitor ctx in
   visitor#visit_toplevel decls;
   let errors = visitor#errors in
-  if not (List.is_empty errors) then raise_error (CompileError.ErrorList errors)
+  if not (List.is_empty errors) then raise_list errors

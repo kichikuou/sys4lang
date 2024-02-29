@@ -78,7 +78,8 @@ let compile_test input =
     SanityCheck.check_invariants ctx jaf;
     Compiler.compile ctx "test.jaf" jaf;
     print_disassemble ctx.ain
-  with CompileError.CompileError e -> CompileError.print_error e
+  with CompileError.CompileError e ->
+    CompileError.print_error e (fun _ -> Some input)
 
 let%expect_test "empty function" =
   compile_test {|
