@@ -89,7 +89,7 @@ class const_eval_visitor ctx =
       | ConstString _ -> ()
       | Ident (name, _) -> (
           match environment#resolve name with
-          | ResolvedLocal v | ResolvedConstant v -> (
+          | ResolvedLocal v | ResolvedConstant v | ResolvedMember (_, v) -> (
               if v.is_const then
                 match v.initval with
                 | Some e -> const_replace expr e.node
@@ -176,6 +176,12 @@ class const_eval_visitor ctx =
               | _ -> ())
           | _ -> ())
       | Subscript (_, _) -> ()
+      | Member (_, name, ClassConst struct_name) -> (
+          let struc = Hashtbl.find_exn ctx.structs struct_name in
+          let v = Hashtbl.find_exn struc.members name in
+          match v.initval with
+          | Some e -> const_replace expr e.node
+          | None -> const_error v)
       | Member (_, _, _) -> ()
       | Call (_, _, _) -> ()
       | New _ -> ()

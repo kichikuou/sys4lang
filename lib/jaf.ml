@@ -112,6 +112,7 @@ type ident_type =
 type member_type =
   | UnresolvedMember
   | ClassVariable of int * int
+  | ClassConst of string
   | ClassMethod of string
   | HLLFunction of string * string
   | SystemFunction of Bytecode.syscall
@@ -199,6 +200,7 @@ and variable = {
 
 and vardecls = {
   decl_loc : location;
+  is_const_decls : bool;
   typespec : type_specifier;
   vars : variable list;
 }
@@ -891,7 +893,7 @@ let jaf_to_ain_function j_f (a_f : Ain.Function.t) =
 let jaf_to_ain_struct j_s (a_s : Ain.Struct.t) =
   let members =
     List.filter_map j_s.decls ~f:(function
-      | MemberDecl ds -> Some ds.vars
+      | MemberDecl ds when not ds.is_const_decls -> Some ds.vars
       | _ -> None)
     |> List.concat |> jaf_to_ain_variables
   in

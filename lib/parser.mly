@@ -401,9 +401,9 @@ assert_statement
 
 declaration
   : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { { decl_loc = $sloc; typespec = $2; vars = decls true $2 $3 } }
+    { { decl_loc = $sloc; typespec = $2; is_const_decls = true; vars = decls true $2 $3 } }
   | declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { { decl_loc = $sloc; typespec = $1; vars = decls false $1 $2 } }
+    { { decl_loc = $sloc; typespec = $1; is_const_decls = false; vars = decls false $1 $2 } }
   ;
 
 declaration_specifiers
@@ -490,9 +490,12 @@ functype_parameter_list
 struct_declaration
   : access_specifier COLON
     { AccessSpecifier $1 }
+  | CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
+    { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls true $2 $3) in
+      MemberDecl { decl_loc=$sloc; typespec=$2; is_const_decls = true; vars } }
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
     { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls false $1 $2) in
-      MemberDecl { decl_loc=$sloc; typespec=$1; vars } }
+      MemberDecl { decl_loc=$sloc; typespec=$1; is_const_decls = false; vars } }
   | declaration_specifiers IDENTIFIER parameter_list opt_body
     { Method (func $sloc $1 $2 $3 $4) }
   | IDENTIFIER LPAREN VOID? RPAREN opt_body

@@ -3,12 +3,14 @@ public:
 	C() { this.m = 1; }
 	void set();
 	int m;
+	const int k = 10;
 private:
 	int n;
 };
 
 C::set() {
 	m = 42;
+	assert(k == 10);
 }
 
 class C2 {
@@ -25,6 +27,7 @@ C2::C2() {
 int main()
 {
 	C f;
+	assert(f.k == 10);
 	assert(f.m == 1);
 	f.set();
 	assert(f.m == 42);

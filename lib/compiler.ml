@@ -707,6 +707,9 @@ class jaf_compiler ain =
           self#write_instruction1 PUSH member_no;
           self#compile_dereference
             (List.nth_exn struct_type.members member_no).value_type
+      | Member (_, _, ClassConst _) ->
+          compiler_bug "class constant not eliminated"
+            (Some (ASTExpression expr))
       | Member (_, _, ClassMethod _) ->
           compiler_bug "tried to compile method member expression"
             (Some (ASTExpression expr))

@@ -299,7 +299,8 @@ class type_analyze_visitor ctx =
                       loc = dummy_location;
                     },
                     name,
-                    ClassVariable (s.index, Option.value_exn v.index) );
+                    if v.is_const then ClassConst s.name
+                    else ClassVariable (s.index, Option.value_exn v.index) );
               expr.ty <- v.type_spec.ty
           | ResolvedMethod (s, f) ->
               let fun_name = mangled_name f in
@@ -495,7 +496,9 @@ class type_analyze_visitor ctx =
                 Member
                   ( obj,
                     member_name,
-                    ClassVariable (struc.index, Option.value_exn member.index)
+                    if member.is_const then ClassConst struc.name
+                    else
+                      ClassVariable (struc.index, Option.value_exn member.index)
                   );
               expr.ty <- member.type_spec.ty
           | None -> (
