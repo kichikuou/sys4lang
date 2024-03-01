@@ -36,7 +36,7 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | Float, Float -> true
   | String, String -> true
   | Struct (_, a), Struct (_, b) -> a = b
-  | IMainSystem, IMainSystem -> true
+  | IMainSystem, (IMainSystem | Int) -> true
   | FuncType (_, a), FuncType (_, b) -> a = b
   | Delegate (_, a), Delegate (_, b) -> a = b
   | NullType, (FuncType _ | Delegate _ | IMainSystem | NullType) -> true
