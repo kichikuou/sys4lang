@@ -16,6 +16,9 @@ int main()
 	string concatenated = "asdf\n" "\nfdsa";
 	assert(concatenated == "asdf\n\nfdsa");
 
+	const string concatenated_const = "abc" + "def";
+	assert(concatenated_const == "abcdef");
+
 	assert(string(42) == "42");
 	assert(string(42.5) == "42.500000");
 

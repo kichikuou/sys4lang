@@ -35,22 +35,20 @@ let const_replace (dst : expression) const_expr =
              (ASTExpression { node = const_expr; ty = Untyped; loc = dst.loc })));
   dst.node <- const_expr
 
-let const_binary dst a b int_op float_op =
-  match a with
-  | ConstInt i_a -> (
-      match b with
-      | ConstInt i_b -> (
-          match int_op with
-          | Some iop -> const_replace dst (ConstInt (iop i_a i_b))
-          | None -> ())
-      | _ -> ())
-  | ConstFloat f_a -> (
-      match b with
-      | ConstFloat f_b -> (
-          match float_op with
-          | Some fop -> const_replace dst (ConstFloat (fop f_a f_b))
-          | None -> ())
-      | _ -> ())
+let const_binary dst a b int_op float_op string_op =
+  match (a, b) with
+  | ConstInt i_a, ConstInt i_b -> (
+      match int_op with
+      | Some iop -> const_replace dst (ConstInt (iop i_a i_b))
+      | None -> ())
+  | ConstFloat f_a, ConstFloat f_b -> (
+      match float_op with
+      | Some fop -> const_replace dst (ConstFloat (fop f_a f_b))
+      | None -> ())
+  | ConstString s_a, ConstString s_b -> (
+      match string_op with
+      | Some sop -> const_replace dst (ConstString (sop s_a s_b))
+      | None -> ())
   | _ -> ()
 
 let const_compare dst a b int_op float_op =
@@ -129,24 +127,32 @@ class const_eval_visitor ctx =
             if not (a = 0) then if not (b = 0) then 1 else 0 else 0
           in
           match op with
-          | Plus -> const_binary expr a.node b.node (Some ( + )) (Some ( +. ))
-          | Minus -> const_binary expr a.node b.node (Some ( - )) (Some ( -. ))
-          | Times -> const_binary expr a.node b.node (Some ( * )) (Some ( *. ))
-          | Divide -> const_binary expr a.node b.node (Some ( / )) (Some ( /. ))
-          | Modulo -> const_binary expr a.node b.node (Some Stdlib.( mod )) None
+          | Plus ->
+              const_binary expr a.node b.node (Some ( + )) (Some ( +. ))
+                (Some ( ^ ))
+          | Minus ->
+              const_binary expr a.node b.node (Some ( - )) (Some ( -. )) None
+          | Times ->
+              const_binary expr a.node b.node (Some ( * )) (Some ( *. )) None
+          | Divide ->
+              const_binary expr a.node b.node (Some ( / )) (Some ( /. )) None
+          | Modulo ->
+              const_binary expr a.node b.node (Some Stdlib.( mod )) None None
           | Equal -> const_compare expr a.node b.node const_eq const_feq
           | NEqual -> const_compare expr a.node b.node const_neq const_fneq
           | LT -> const_compare expr a.node b.node const_lt const_flt
           | GT -> const_compare expr a.node b.node const_gt const_fgt
           | LTE -> const_compare expr a.node b.node const_lte const_flte
           | GTE -> const_compare expr a.node b.node const_gte const_fgte
-          | LogOr -> const_binary expr a.node b.node (Some const_logor) None
-          | LogAnd -> const_binary expr a.node b.node (Some const_logand) None
-          | BitOr -> const_binary expr a.node b.node (Some ( lor )) None
-          | BitXor -> const_binary expr a.node b.node (Some ( lxor )) None
-          | BitAnd -> const_binary expr a.node b.node (Some ( land )) None
-          | LShift -> const_binary expr a.node b.node (Some ( lsl )) None
-          | RShift -> const_binary expr a.node b.node (Some ( lsr )) None
+          | LogOr ->
+              const_binary expr a.node b.node (Some const_logor) None None
+          | LogAnd ->
+              const_binary expr a.node b.node (Some const_logand) None None
+          | BitOr -> const_binary expr a.node b.node (Some ( lor )) None None
+          | BitXor -> const_binary expr a.node b.node (Some ( lxor )) None None
+          | BitAnd -> const_binary expr a.node b.node (Some ( land )) None None
+          | LShift -> const_binary expr a.node b.node (Some ( lsl )) None None
+          | RShift -> const_binary expr a.node b.node (Some ( lsr )) None None
           | RefEqual | RefNEqual -> ())
       | Assign (_, _, _) -> ()
       | Seq (_, _) -> ()
