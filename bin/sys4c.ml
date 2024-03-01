@@ -44,7 +44,7 @@ let parse_file ctx parse_func file input_encoding =
   | e -> raise e
 
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
-let pass_one ctx sources input_encoding =
+let parse_pass ctx sources input_encoding =
   List.map sources ~f:(fun f ->
       let f_lower = String.lowercase f in
       if Filename.check_suffix f_lower ".jaf" || String.equal f "-" then (
@@ -58,7 +58,7 @@ let pass_one ctx sources input_encoding =
       else failwith "unsupported file type")
 
 (* pass 2: Resolve type specifiers *)
-let pass_two ctx program =
+let type_resolve_pass ctx program =
   let array_init_visitor = new ArrayInit.visitor ctx in
   List.iter program ~f:(function
     | Jaf (_, jaf) ->
@@ -72,13 +72,19 @@ let pass_two ctx program =
   let initializers = array_init_visitor#generate_initializers () in
   program @ [ Jaf ("", initializers) ]
 
-(* pass 3: Type checking and code generation *)
-let pass_three ctx program =
+(* pass 3: Type checking *)
+let type_check_pass ctx program =
   List.iter program ~f:(function
-    | Jaf (jaf_name, jaf) ->
+    | Jaf (_, jaf) ->
         TypeAnalysis.check_types ctx jaf;
         ConstEval.evaluate_constant_expressions ctx jaf;
-        VariableAlloc.allocate_variables ctx jaf;
+        VariableAlloc.allocate_variables ctx jaf
+    | Hll _ -> ())
+
+(* pass 4: Code generation *)
+let codegen_pass ctx program =
+  List.iter program ~f:(function
+    | Jaf (jaf_name, jaf) ->
         (* TODO: disable in release builds *)
         SanityCheck.check_invariants ctx jaf;
         Compiler.compile ctx jaf_name jaf
@@ -87,9 +93,10 @@ let pass_three ctx program =
 let do_compile sources output major minor input_encoding =
   let ctx = context_from_ain (Ain.create major minor) in
   try
-    let program = pass_one ctx sources input_encoding in
-    let program = pass_two ctx program in
-    pass_three ctx program;
+    let program = parse_pass ctx sources input_encoding in
+    let program = type_resolve_pass ctx program in
+    type_check_pass ctx program;
+    codegen_pass ctx program;
     (* write output .ain file to disk *)
     Ain.write_file ctx.ain output
   with CompileError.CompileError e ->

@@ -272,7 +272,9 @@ class type_analyze_visitor ctx =
                   ref_type_check (ASTExpression a) ty a
               | _ -> self#check_assign (ASTExpression a) v.type_spec.ty a);
               Some a
-          | None, Some _ -> v.initval
+          | None, Some e ->
+              (* NOTE: `e` may be from another file that has not yet been type-checked. *)
+              Some e
           | None, None ->
               if i < nr_args then
                 compile_error
