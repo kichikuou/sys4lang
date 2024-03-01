@@ -293,6 +293,33 @@ let%expect_test "undefined method" =
         3 |         int f();
                     ^^^^^^^^ |}]
 
+let%expect_test "private members" =
+  type_test
+    {|
+      class C {
+        int priv_func() {}
+        int priv_memb;
+      public:
+        int pub_func() {}
+        int pub_memb;
+      };
+      void test() {
+        C c;
+        c.pub_func();
+        c.priv_func();  // error
+        c.pub_memb;
+        c.priv_memb;    // error
+      }
+    |};
+  [%expect
+    {|
+    -:12:9-20: C::priv_func is not public
+       12 |         c.priv_func();  // error
+                    ^^^^^^^^^^^
+    -:14:9-20: C::priv_memb is not public
+       14 |         c.priv_memb;    // error
+                    ^^^^^^^^^^^ |}]
+
 let%expect_test "RefAssign operator" =
   type_test
     {|

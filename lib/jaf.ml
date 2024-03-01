@@ -192,6 +192,7 @@ and variable = {
   location : location;
   array_dim : expression list;
   is_const : bool;
+  mutable is_private : bool;
   kind : variable_type;
   type_spec : type_specifier;
   initval : expression option;
@@ -212,6 +213,7 @@ type fundecl = {
   mutable params : variable list;
   mutable body : statement list option;
   is_label : bool;
+  mutable is_private : bool;
   mutable index : int option;
   mutable class_name : string option;
   mutable class_index : int option;

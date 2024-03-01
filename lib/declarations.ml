@@ -86,14 +86,17 @@ class type_declare_visitor ctx =
           let ain_s = Ain.add_struct ctx.ain s.name in
           let jaf_s = new_jaf_struct s.name ain_s.index in
           let next_index = ref 0 in
+          let in_private = ref s.is_class in
           let visit_decl = function
-            | AccessSpecifier _ -> ()
+            | AccessSpecifier Public -> in_private := false
+            | AccessSpecifier Private -> in_private := true
             | Constructor f ->
                 if not (String.equal f.name s.name) then
                   compile_error "constructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
+                f.is_private <- !in_private;
                 self#declare_function f
             | Destructor f ->
                 if not (String.equal f.name ("~" ^ s.name)) then
@@ -101,13 +104,16 @@ class type_declare_visitor ctx =
                     (ASTDeclaration (Function f));
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
+                f.is_private <- !in_private;
                 self#declare_function f
             | Method f ->
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
+                f.is_private <- !in_private;
                 self#declare_function f
             | MemberDecl ds ->
                 List.iter ds.vars ~f:(fun v ->
+                    v.is_private <- !in_private;
                     if not v.is_const then (
                       v.index <- Some !next_index;
                       next_index := !next_index + type_size v.type_spec.ty);

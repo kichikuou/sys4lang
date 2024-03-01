@@ -146,6 +146,7 @@ class variable_alloc_visitor ctx =
               location = v.location;
               array_dim = [];
               is_const = false;
+              is_private = false;
               kind = v.kind;
               type_spec = { ty = Void; location = v.type_spec.location };
               initval = None;
@@ -164,6 +165,7 @@ class variable_alloc_visitor ctx =
           location = dummy_location;
           array_dim = [];
           is_const = false;
+          is_private = false;
           kind = LocalVar;
           type_spec = { ty; location = dummy_location };
           initval = None;

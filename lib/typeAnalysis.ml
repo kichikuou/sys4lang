@@ -18,6 +18,8 @@ open Base
 open Jaf
 open CompileError
 
+let sprintf = Printf.sprintf
+
 (* Implicit dereference of variables and members. *)
 let maybe_deref (e : expression) =
   match e with
@@ -274,7 +276,7 @@ class type_analyze_visitor ctx =
           | None, None ->
               if i < nr_args then
                 compile_error
-                  (Printf.sprintf "Missing argument #%d" i)
+                  (sprintf "Missing argument #%d" i)
                   (ASTExpression expr)
               else arity_error name nr_params args (ASTExpression expr)
         in
@@ -503,8 +505,17 @@ class type_analyze_visitor ctx =
       (* member variable OR method *)
       | Member (obj, member_name, _) -> (
           let struc = Hashtbl.find_exn ctx.structs (check_struct obj) in
+          let access_check () =
+            match environment#current_class with
+            | Some (Struct (_, i)) when i = struc.index -> ()
+            | _ ->
+                compile_error
+                  (sprintf "%s::%s is not public" struc.name member_name)
+                  (ASTExpression expr)
+          in
           match Hashtbl.find struc.members member_name with
           | Some member ->
+              if member.is_private then access_check ();
               expr.node <-
                 Member
                   ( obj,
@@ -518,6 +529,7 @@ class type_analyze_visitor ctx =
               let fun_name = struc.name ^ "@" ^ member_name in
               match Hashtbl.find ctx.functions fun_name with
               | Some f ->
+                  if f.is_private then access_check ();
                   expr.node <- Member (obj, member_name, ClassMethod fun_name);
                   expr.ty <- TyMethod (fun_name, Option.value_exn f.index)
               | None ->

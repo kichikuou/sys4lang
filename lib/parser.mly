@@ -39,6 +39,7 @@ let vardecl kind is_const type_spec vi =
     location = vi.loc;
     array_dim = List.rev vi.dims;
     is_const;
+    is_private = false;
     kind;
     type_spec;
     initval = vi.initval;
@@ -62,6 +63,7 @@ let func loc typespec name params body =
     params = plist;
     body;
     is_label = false;
+    is_private = false;
     index = None;
     class_name = None;
     class_index = None;

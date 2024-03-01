@@ -4,8 +4,6 @@ public:
 	void set(int x = 42);
 	int m;
 	const int k = 10;
-private:
-	int n;
 };
 
 C::set(int x) {
@@ -31,7 +29,6 @@ int main()
 	assert(f.m == 1);
 	f.set();
 	assert(f.m == 42);
-	f.n = 42;  // FIXME: should cause a compile error
 
 	C2 c2;
 	assert(c2.m == 2);
