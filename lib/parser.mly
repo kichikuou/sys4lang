@@ -436,8 +436,8 @@ external_declaration
     { Function (func $sloc $1 $2 $3 (Some $4)) }
   | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list(declarator) block
     { Function (member_func $sloc $1 $2 $4 $5 $6 (Some $7)) }
-  | HASH IDENTIFIER parameter_list(declarator) block
-    { Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 (Some $4)) with is_label=true } }
+  | HASH IDENTIFIER LPAREN VOID? RPAREN block
+    { Function { (func $sloc (implicit_void $symbolstartpos) $2 [] (Some $6)) with is_label=true } }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { FuncTypeDef (func $sloc $2 $3 $4 None) }
   | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
