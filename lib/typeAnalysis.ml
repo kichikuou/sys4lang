@@ -632,6 +632,17 @@ class type_analyze_visitor ctx =
           match stmt.node with
           | EmptyStatement -> ()
           | Declarations _ -> ()
+          | Expression ({ node = Ident (_, FunctionName _); _ } as e) ->
+              (* rewrite bare function names at statement-level as function calls *)
+              let expr =
+                {
+                  node = Call (e, [], UnresolvedCall);
+                  ty = Untyped;
+                  loc = e.loc;
+                }
+              in
+              self#visit_expression expr;
+              stmt.node <- Expression expr
           | Expression _ -> ()
           | Compound _ -> ()
           | Label _ -> ()
