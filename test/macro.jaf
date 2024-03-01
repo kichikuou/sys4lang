@@ -1,0 +1,7 @@
+int main()
+{
+	assert(__FILE__ == "macro.jaf");
+	assert(__LINE__ == "4");
+	system.Output("Current time: %s %s " % __DATE__ % __TIME__);
+	return 0;
+}

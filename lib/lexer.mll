@@ -115,6 +115,10 @@ let () =
               "private",      PRIVATE;
               "public",       PUBLIC;
               "enum",         ENUM;
+              "__FILE__",     FILE_MACRO;
+              "__LINE__",     LINE_MACRO;
+              "__DATE__",     DATE_MACRO;
+              "__TIME__",     TIME_MACRO;
             ]
 }
 

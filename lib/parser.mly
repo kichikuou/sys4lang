@@ -121,6 +121,7 @@ let rec multidim_array dims t =
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN JUMP JUMPS ASSERT
 %token CONST REF ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
+%token FILE_MACRO LINE_MACRO DATE_MACRO TIME_MACRO
 
 %token EOF
 
@@ -161,11 +162,17 @@ constant
 
 string
   : S_CONSTANT { ConstString ($1) }
-  (* FILE_MACRO *)
-  (* LINE_MACRO *)
+  | FILE_MACRO { ConstString $startpos.Lexing.pos_fname }
+  | LINE_MACRO { ConstString (Int.to_string $startpos.Lexing.pos_lnum) }
   (* FUNC_MACRO *)
-  (* DATE_MACRO *)
-  (* TIME_MACRO *)
+  | DATE_MACRO {
+      let tm = Unix.localtime (Unix.time ()) in
+      ConstString (Printf.sprintf "%04d/%02d/%02d" (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday)
+    }
+  | TIME_MACRO {
+      let tm = Unix.localtime (Unix.time ()) in
+      ConstString (Printf.sprintf "%02d:%02d:%02d" tm.tm_hour tm.tm_min tm.tm_sec)
+    }
   ;
 
 postfix_expression
