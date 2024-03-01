@@ -225,7 +225,8 @@ class const_eval_visitor ctx =
               | _ -> const_error v)
         | Parameter, Some e -> (
             match e.node with
-            | ConstInt _ | ConstFloat _ | ConstChar _ | ConstString _ -> ()
+            | ConstInt _ | ConstFloat _ | ConstChar _ | ConstString _ | Null ->
+                ()
             | _ -> const_error v)
         | _ -> ()
   end

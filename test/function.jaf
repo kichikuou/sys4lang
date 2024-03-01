@@ -3,6 +3,11 @@ int default_params(int a = 2, int b = 3, int c = 5)
 	return a * b * c;
 }
 
+functype int ft(void);
+void default_functype(ft func = NULL) {
+	assert(func == NULL);
+}
+
 int main()
 {
 	assert(default_params() == 30);
@@ -15,5 +20,7 @@ int main()
 	assert(default_params(1, , 1) == 3);
 	assert(default_params(1, 1, ) == 5);
 	assert(default_params(1, 1, 1) == 1);
+
+	default_functype();
 	return 0;
 }
