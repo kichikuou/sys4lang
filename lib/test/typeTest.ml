@@ -115,6 +115,18 @@ let%expect_test "type error" =
           4 |       return 1;
                            ^ |}]
 
+let%expect_test "uninitialized constant" =
+  type_test {|
+    const int c;    // ok
+    const string s; // error
+  |};
+  [%expect
+    {|
+      -:3:18-19: Const variable lacks initializer
+          3 |     const string s; // error
+                               ^
+    |}]
+
 let%expect_test "function call" =
   type_test
     {|

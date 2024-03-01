@@ -46,8 +46,20 @@ let vardecl kind is_const type_spec vi =
     index = None;
   }
 
-let vardecls kind is_const ty var_list =
-  List.map (vardecl kind is_const ty) var_list
+let vardecls kind is_const type_spec var_list =
+  let vars = List.map (vardecl kind is_const type_spec) var_list in
+  match is_const, type_spec.ty with
+  | true, Int ->
+    (* If initval is omitted, set it to 0 (for the first constant) or the
+       previous value + 1 (for subsequent constants). *)
+    let expr node = expr dummy_location node in
+    Base.List.folding_map vars ~init:(expr (ConstInt 0), 0) ~f:(fun (base, delta) v ->
+        match v.initval with
+        | Some e -> ((e, 1), v)
+        | None ->
+            let value = expr (Binary (Plus, base, expr (ConstInt delta))) in
+            ((base, delta + 1), { v with initval = Some value }))
+  | _ -> vars
 
 let func loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)

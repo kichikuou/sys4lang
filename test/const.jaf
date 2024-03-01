@@ -1,11 +1,29 @@
 const int g_two = 2;
 
+const int
+	c0,
+	c1,
+	c5 = 5,
+	c6,
+	c2 = g_two,
+	c3,
+	c4;
+
 int main()
 {
-   	const int l_two = 2;
+	const int l_two = 2, l_three;
 	int three = 3;
 	assert(g_two + three == 5);
 	assert(l_two + three == 5);
+	assert(l_three + three == 6);
+
+	assert(c0 == 0);
+	assert(c1 == 1);
+	assert(c2 == 2);
+	assert(c3 == 3);
+	assert(c4 == 4);
+	assert(c5 == 5);
+	assert(c6 == 6);
 
 	return 0;
 }
