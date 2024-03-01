@@ -146,7 +146,7 @@ class variable_alloc_visitor ctx =
               location = v.location;
               array_dim = [];
               is_const = false;
-              kind = LocalVar;
+              kind = v.kind;
               type_spec = { ty = Void; location = v.type_spec.location };
               initval = None;
               index = Some (i + 1);
@@ -228,7 +228,7 @@ class variable_alloc_visitor ctx =
       | _ -> ()
 
     method! visit_variable v =
-      (match v.kind with LocalVar -> self#add_var v | _ -> ());
+      (match v.kind with Parameter | LocalVar -> self#add_var v | _ -> ());
       super#visit_variable v
 
     method! visit_fundecl f =

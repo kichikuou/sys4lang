@@ -45,7 +45,7 @@ class sanity_check_visitor ctx =
     method! visit_variable v =
       super#visit_variable v;
       match v.kind with
-      | LocalVar | GlobalVar ->
+      | Parameter | LocalVar | GlobalVar ->
           if Option.is_none v.index && not v.is_const then
             compiler_bug "variable index not set" (Some (ASTVariable v))
       | _ -> ()

@@ -118,7 +118,7 @@ type member_type =
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
 
-type variable_type = LocalVar | GlobalVar | ClassVar
+type variable_type = Parameter | LocalVar | GlobalVar | ClassVar
 
 type call_type =
   | UnresolvedCall

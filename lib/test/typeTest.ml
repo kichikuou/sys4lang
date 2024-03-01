@@ -31,6 +31,7 @@ let type_test input =
     Declarations.resolve_types ctx jaf false;
     Declarations.define_types ctx jaf;
     TypeAnalysis.check_types ctx jaf;
+    ConstEval.evaluate_constant_expressions ctx jaf;
     Stdio.print_endline "ok"
   with CompileError.CompileError e ->
     CompileError.print_error e (fun _ -> Some input)
@@ -168,8 +169,7 @@ let%expect_test "default parameter" =
     {|
       int g;
       void f(int required, int optional = 0) {}
-      void err1(int x = "") {}
-      void err2(int x = g) {}  // FIXME: should be an error
+      void err(int x = "") {}
       void test() {
         f();  // arity error
         f(3);
@@ -182,21 +182,36 @@ let%expect_test "default parameter" =
     |};
   [%expect
     {|
-      -:4:25-27: Type error: expected int; got string
-          4 |       void err1(int x = "") {}
-                                      ^^
-      -:7:9-12: Wrong number of arguments to function f (expected 2; got 0)
-          7 |         f();  // arity error
+      -:4:24-26: Type error: expected int; got string
+          4 |       void err(int x = "") {}
+                                     ^^
+      -:6:9-12: Wrong number of arguments to function f (expected 2; got 0)
+          6 |         f();  // arity error
                       ^^^
-      -:11:9-15: Missing argument #0
-         11 |         f(, 2);  // missing argument
+      -:10:9-15: Missing argument #0
+         10 |         f(, 2);  // missing argument
                       ^^^^^^
-      -:12:9-19: Wrong number of arguments to function f (expected 2; got 3)
-         12 |         f(1, 2, 3);  // arity error
+      -:11:9-19: Wrong number of arguments to function f (expected 2; got 3)
+         11 |         f(1, 2, 3);  // arity error
                       ^^^^^^^^^^
-      -:13:9-17: Wrong number of arguments to function f (expected 2; got 3)
-         13 |         f(1, 2,);  // arity error
+      -:12:9-17: Wrong number of arguments to function f (expected 2; got 3)
+         12 |         f(1, 2,);  // arity error
                       ^^^^^^^^ |}]
+
+let%expect_test "non-constant default parameter" =
+  type_test
+    {|
+      int g;
+      class C {
+        void f(int x = g);
+      };
+      void C::f(int x) {}
+    |};
+  [%expect
+    {|
+    -:4:16-25: Value of const variable is not constant
+        4 |         void f(int x = g);
+                           ^^^^^^^^^ |}]
 
 let%expect_test "return statement" =
   type_test

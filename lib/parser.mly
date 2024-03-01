@@ -33,20 +33,20 @@ type varinit = {
   initval: expression option;
 }
 
-let decl is_const type_spec vi =
+let vardecl kind is_const type_spec vi =
   {
     name = vi.name;
     location = vi.loc;
     array_dim = List.rev vi.dims;
     is_const;
-    kind = LocalVar;
+    kind;
     type_spec;
     initval = vi.initval;
     index = None;
   }
 
-let decls is_const ty var_list =
-  List.map (decl is_const ty) var_list
+let vardecls kind is_const ty var_list =
+  List.map (vardecl kind is_const ty) var_list
 
 let func loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)
@@ -403,9 +403,9 @@ assert_statement
 
 declaration
   : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { { decl_loc = $sloc; typespec = $2; is_const_decls = true; vars = decls true $2 $3 } }
+    { { decl_loc = $sloc; typespec = $2; is_const_decls = true; vars = vardecls LocalVar true $2 $3 } }
   | declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { { decl_loc = $sloc; typespec = $1; is_const_decls = false; vars = decls false $1 $2 } }
+    { { decl_loc = $sloc; typespec = $1; is_const_decls = false; vars = vardecls LocalVar false $1 $2 } }
   ;
 
 declaration_specifiers
@@ -472,7 +472,7 @@ enumerator
   ;
 
 parameter_declaration(X)
-  : declaration_specifiers X { decl false $1 { $2 with loc=$sloc } }
+  : declaration_specifiers X { vardecl Parameter false $1 { $2 with loc=$sloc } }
   ;
 
 parameter_list(X)
@@ -481,7 +481,7 @@ parameter_list(X)
   ;
 
 functype_parameter_declaration
-  : declaration_specifiers { decl false $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
+  : declaration_specifiers { vardecl Parameter false $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
   | parameter_declaration(declarator) { $1 }
   ;
 
@@ -493,10 +493,10 @@ struct_declaration
   : access_specifier COLON
     { AccessSpecifier $1 }
   | CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
-    { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls true $2 $3) in
+    { let vars = vardecls ClassVar true $2 $3 in
       MemberDecl { decl_loc=$sloc; typespec=$2; is_const_decls = true; vars } }
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
-    { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls false $1 $2) in
+    { let vars = vardecls ClassVar false $1 $2 in
       MemberDecl { decl_loc=$sloc; typespec=$1; is_const_decls = false; vars } }
   | declaration_specifiers IDENTIFIER parameter_list(init_declarator) opt_body
     { Method (func $sloc $1 $2 $3 $4) }

@@ -18,14 +18,14 @@ open Base
 open Bytecode
 open Jaf
 
-let make_vars (types : jaf_type list) =
+let make_params (types : jaf_type list) =
   List.mapi types ~f:(fun i t ->
       {
         name = "";
         location = dummy_location;
         array_dim = [];
         is_const = false;
-        kind = LocalVar;
+        kind = Parameter;
         type_spec = { ty = t; location = dummy_location };
         initval = None;
         index = Some i;
@@ -37,7 +37,7 @@ let fundecl_of_syscall sys =
       name = string_of_syscall sys;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
-      params = make_vars arg_types;
+      params = make_params arg_types;
       body = None;
       is_label = false;
       index = Some (int_of_syscall sys);
@@ -89,7 +89,7 @@ let fundecl_of_builtin builtin receiver_ty =
       name;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
-      params = make_vars arg_types;
+      params = make_params arg_types;
       body = None;
       is_label = false;
       index = None;

@@ -223,6 +223,10 @@ class const_eval_visitor ctx =
               | ConstFloat f -> Ain.Variable.Float f
               | ConstString s -> Ain.Variable.String s
               | _ -> const_error v)
+        | Parameter, Some e -> (
+            match e.node with
+            | ConstInt _ | ConstFloat _ | ConstChar _ | ConstString _ -> ()
+            | _ -> const_error v)
         | _ -> ()
   end
 
