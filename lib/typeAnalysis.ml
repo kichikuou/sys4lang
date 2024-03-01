@@ -258,17 +258,30 @@ class type_analyze_visitor ctx =
       (* check function call arguments *)
       let check_call name params args =
         let nr_params = List.length params in
-        if not (nr_params = List.length args) then
-          arity_error name nr_params args (ASTExpression expr)
-        else if nr_params > 0 then
-          let check_arg a v =
-            match v.type_spec.ty with
-            | Ref ty ->
-                self#check_referenceable a (ASTExpression a);
-                ref_type_check (ASTExpression a) ty a
-            | _ -> self#check_assign (ASTExpression a) v.type_spec.ty a
-          in
-          List.iter2_exn args params ~f:check_arg
+        let nr_args = List.length args in
+        if nr_args > nr_params then
+          arity_error name nr_params args (ASTExpression expr);
+        let check_arg i a v =
+          match (a, v.initval) with
+          | Some a, _ ->
+              (match v.type_spec.ty with
+              | Ref ty ->
+                  self#check_referenceable a (ASTExpression a);
+                  ref_type_check (ASTExpression a) ty a
+              | _ -> self#check_assign (ASTExpression a) v.type_spec.ty a);
+              Some a
+          | None, Some _ -> v.initval
+          | None, None ->
+              if i < nr_args then
+                compile_error
+                  (Printf.sprintf "Missing argument #%d" i)
+                  (ASTExpression expr)
+              else arity_error name nr_params args (ASTExpression expr)
+        in
+        let args = args @ List.init (nr_params - nr_args) ~f:(fun _ -> None) in
+        List.map3_exn
+          (List.init nr_params ~f:(fun i -> i))
+          args params ~f:check_arg
       in
       match expr.node with
       | ConstInt _ -> expr.ty <- Int
@@ -516,20 +529,20 @@ class type_analyze_visitor ctx =
       | Call (({ node = Ident (_, FunctionName name); _ } as e), args, _) ->
           let f = Hashtbl.find_exn ctx.functions name in
           let fno = Option.value_exn f.index in
-          check_call f.name f.params args;
+          let args = check_call f.name f.params args in
           expr.node <- Call (e, args, FunctionCall fno);
           expr.ty <- f.return.ty
       (* built-in function call *)
       | Call (({ node = Ident (_, BuiltinFunction builtin); _ } as e), args, _)
         ->
           let f = Builtin.fundecl_of_builtin builtin Void in
-          check_call f.name f.params args;
+          let args = check_call f.name f.params args in
           expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
       (* method call *)
       | Call (({ node = Member (_, _, ClassMethod name); _ } as e), args, _) ->
           let f = Hashtbl.find_exn ctx.functions name in
-          check_call f.name f.params args;
+          let args = check_call f.name f.params args in
           let mcall =
             MethodCall (Option.value_exn f.class_index, Option.value_exn f.index)
           in
@@ -541,7 +554,7 @@ class type_analyze_visitor ctx =
             args,
             _ ) ->
           let f = Option.value_exn (find_hll_function ctx lib_name fun_name) in
-          check_call f.name f.params args;
+          let args = check_call f.name f.params args in
           let lib_no =
             Option.value_exn (Ain.get_library_index ctx.ain lib_name)
           in
@@ -555,7 +568,7 @@ class type_analyze_visitor ctx =
       | Call (({ node = Member (_, _, SystemFunction sys); _ } as e), args, _)
         ->
           let f = Builtin.fundecl_of_syscall sys in
-          check_call f.name f.params args;
+          let args = check_call f.name f.params args in
           expr.node <- Call (e, args, SystemCall sys);
           expr.ty <- f.return.ty
       (* built-in method call *)
@@ -563,7 +576,7 @@ class type_analyze_visitor ctx =
           (({ node = Member (obj, _, BuiltinMethod builtin); _ } as e), args, _)
         ->
           let f = Builtin.fundecl_of_builtin builtin obj.ty in
-          check_call f.name f.params args;
+          let args = check_call f.name f.params args in
           expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
       (* functype/delegate call *)
@@ -571,13 +584,13 @@ class type_analyze_visitor ctx =
           match e.ty with
           | FuncType (name, _) ->
               let f = Hashtbl.find_exn ctx.functypes name in
-              check_call f.name f.params args;
+              let args = check_call f.name f.params args in
               expr.node <-
                 Call (e, args, FuncTypeCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
           | Delegate (name, _) ->
               let f = Hashtbl.find_exn ctx.delegates name in
-              check_call f.name f.params args;
+              let args = check_call f.name f.params args in
               expr.node <-
                 Call (e, args, DelegateCall (Option.value_exn f.index));
               expr.ty <- f.return.ty

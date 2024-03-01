@@ -150,7 +150,7 @@ and ast_expression =
   | Cast of jaf_type * expression
   | Subscript of expression * expression
   | Member of expression * string * member_type
-  | Call of expression * expression list * call_type
+  | Call of expression * expression option list * call_type
   | New of type_specifier
   | DummyRef of int * expression
   | This
@@ -209,7 +209,7 @@ type fundecl = {
   mutable name : string;
   loc : location;
   return : type_specifier;
-  params : variable list;
+  mutable params : variable list;
   mutable body : statement list option;
   is_label : bool;
   mutable index : int option;
@@ -454,7 +454,7 @@ class ivisitor ctx =
       | Member (obj, _, _) -> self#visit_expression obj
       | Call (f, args, _) ->
           self#visit_expression f;
-          List.iter args ~f:self#visit_expression
+          List.iter args ~f:(Option.iter ~f:self#visit_expression)
       | New t -> self#visit_type_specifier t
       | DummyRef (_, e) -> self#visit_expression e
       | This -> ()
@@ -619,15 +619,9 @@ let rec jaf_type_to_string = function
   | TyFunction (name, _) | TyMethod (name, _) -> "typeof(" ^ name ^ ")"
 
 let rec expr_to_string (e : expression) =
-  let arglist_to_string = function
-    | [] -> "()"
-    | arg :: args ->
-        let rec loop result = function
-          | [] -> result
-          | arg :: args ->
-              loop (sprintf "%s, %s" result (expr_to_string arg)) args
-        in
-        sprintf "(%s)" (loop (expr_to_string arg) args)
+  let arglist_to_string args =
+    let arg_to_string = Option.value_map ~default:"" ~f:expr_to_string in
+    "(" ^ String.concat ~sep:", " (List.map ~f:arg_to_string args) ^ ")"
   in
   match e.node with
   | ConstInt i -> Int.to_string i

@@ -382,16 +382,19 @@ class jaf_compiler ain =
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             None
 
-    method compile_argument (expr : expression) (t : Ain.Type.t) =
-      match t with
-      | { data = Method _; _ } ->
-          (* XXX: for delegate builtins *)
-          self#compile_expression expr
-      | { data = _; is_ref = true } -> self#compile_lvalue expr
-      | { data = Delegate _; _ } ->
-          self#compile_expression expr;
-          self#write_instruction0 DG_NEW_FROM_METHOD
-      | _ -> self#compile_expression expr
+    method compile_argument (expr : expression option) (t : Ain.Type.t) =
+      match expr with
+      | None -> compiler_bug "missing argument" None
+      | Some expr -> (
+          match t with
+          | { data = Method _; _ } ->
+              (* XXX: for delegate builtins *)
+              self#compile_expression expr
+          | { data = _; is_ref = true } -> self#compile_lvalue expr
+          | { data = Delegate _; _ } ->
+              self#compile_expression expr;
+              self#write_instruction0 DG_NEW_FROM_METHOD
+          | _ -> self#compile_expression expr)
 
     method compile_function_arguments args (f : Ain.Function.t) =
       let compile_arg arg (var : Ain.Variable.t) =
@@ -813,7 +816,7 @@ class jaf_compiler ain =
           | DelegateClear -> self#write_instruction0 DG_CLEAR)
       (* functype call *)
       | Call (e, args, FuncTypeCall no) ->
-          let compile_arg (arg : expression) (var : Ain.Variable.t) =
+          let compile_arg arg (var : Ain.Variable.t) =
             self#compile_argument arg var.value_type;
             if var.value_type.is_ref then (
               self#write_instruction0 DUP2_X1;

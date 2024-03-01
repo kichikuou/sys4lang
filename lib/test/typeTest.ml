@@ -65,16 +65,6 @@ let%expect_test "undefined variable" =
         2 |     int c = foo;
                         ^^^ |}]
 
-let%expect_test "arity error" =
-  type_test {|
-    int c = system.Exit();
-  |};
-  [%expect
-    {|
-      -:2:13-26: Wrong number of arguments to function Exit (expected 1; got 0)
-          2 |     int c = system.Exit();
-                          ^^^^^^^^^^^^^ |}]
-
 let%expect_test "multiline error" =
   type_test {|
       void f(int x) {
@@ -172,6 +162,41 @@ let%expect_test "function call" =
       -:26:16-24: Type error: expected func; got ref typeof(f_float)
          26 |         f_func(&f_float); // error
                              ^^^^^^^^ |}]
+
+let%expect_test "default parameter" =
+  type_test
+    {|
+      int g;
+      void f(int required, int optional = 0) {}
+      void err1(int x = "") {}
+      void err2(int x = g) {}  // FIXME: should be an error
+      void test() {
+        f();  // arity error
+        f(3);
+        f(1, 2);
+        f(3,);
+        f(, 2);  // missing argument
+        f(1, 2, 3);  // arity error
+        f(1, 2,);  // arity error
+      }
+    |};
+  [%expect
+    {|
+      -:4:25-27: Type error: expected int; got string
+          4 |       void err1(int x = "") {}
+                                      ^^
+      -:7:9-12: Wrong number of arguments to function f (expected 2; got 0)
+          7 |         f();  // arity error
+                      ^^^
+      -:11:9-15: Missing argument #0
+         11 |         f(, 2);  // missing argument
+                      ^^^^^^
+      -:12:9-19: Wrong number of arguments to function f (expected 2; got 3)
+         12 |         f(1, 2, 3);  // arity error
+                      ^^^^^^^^^^
+      -:13:9-17: Wrong number of arguments to function f (expected 2; got 3)
+         13 |         f(1, 2,);  // arity error
+                      ^^^^^^^^ |}]
 
 let%expect_test "return statement" =
   type_test

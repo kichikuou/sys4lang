@@ -24,7 +24,11 @@ let array_alloc_stmt (v : variable) =
   let var = make_expr (Ident (v.name, UnresolvedIdent)) in
   let func = make_expr (Member (var, "Alloc", UnresolvedMember)) in
   let call =
-    make_expr (Call (func, v.array_dim, BuiltinCall Bytecode.ArrayAlloc))
+    make_expr
+      (Call
+         ( func,
+           List.map ~f:Option.some v.array_dim,
+           BuiltinCall Bytecode.ArrayAlloc ))
   in
   make_stmt (Expression call)
 

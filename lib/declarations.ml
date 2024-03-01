@@ -39,6 +39,10 @@ class type_declare_visitor ctx =
                 (ASTDeclaration (Function decl))
             else (
               prev_decl.index <- decl.index;
+              (* Make sure the declaration has the default parameters specified
+                 in the method declaration (default values cannot be specified
+                 in method definition) *)
+              if Option.is_some decl.body then decl.params <- prev_decl.params;
               decl)
         | None -> decl)
 

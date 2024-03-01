@@ -165,7 +165,9 @@ postfix_expression
   | postfix_expression DEC { expr $sloc (Unary (PostDec, $1)) }
   ;
 
-arglist: LPAREN separated_list(COMMA, assign_expression) RPAREN { $2 }
+arglist
+  : LPAREN separated_nonempty_list(COMMA, option(assign_expression)) RPAREN
+    { match $2 with [None] -> [] | _ -> $2 }
 
 unary_expression
   : postfix_expression { $1 }
@@ -393,10 +395,10 @@ objswap_statement
 
 assert_statement
   : ASSERT LPAREN expression RPAREN SEMICOLON
-    { let args = [$3;
-                  expr $loc($3) (ConstString (expr_to_string $3));
-                  expr $loc($1) (ConstString $startpos.Lexing.pos_fname);
-                  expr $loc($1) (ConstInt $startpos.pos_lnum)] in
+    { let args = [Some $3;
+                  Some (expr $loc($3) (ConstString (expr_to_string $3)));
+                  Some (expr $loc($1) (ConstString $startpos.Lexing.pos_fname));
+                  Some (expr $loc($1) (ConstInt $startpos.pos_lnum))] in
       Expression (expr $sloc (Call (expr $loc($1) (Ident ("assert", UnresolvedIdent)), args, UnresolvedCall))) }
 
 declaration
@@ -430,11 +432,11 @@ array_allocation
 external_declaration
   : declaration
     { Global { $1 with vars = (List.map (fun d -> { d with kind = GlobalVar }) $1.vars) } }
-  | declaration_specifiers IDENTIFIER parameter_list block
+  | declaration_specifiers IDENTIFIER parameter_list(init_declarator) block
     { Function (func $sloc $1 $2 $3 (Some $4)) }
-  | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list block
+  | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list(declarator) block
     { Function (member_func $sloc $1 $2 $4 $5 $6 (Some $7)) }
-  | HASH IDENTIFIER parameter_list block
+  | HASH IDENTIFIER parameter_list(declarator) block
     { Function { (func $sloc (implicit_void $symbolstartpos) $2 $3 (Some $4)) with is_label=true } }
   | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
     { FuncTypeDef (func $sloc $2 $3 $4 None) }
@@ -449,7 +451,7 @@ external_declaration
   ;
 
 hll_declaration
-  : declaration_specifiers IDENTIFIER parameter_list SEMICOLON
+  : declaration_specifiers IDENTIFIER parameter_list(declarator) SEMICOLON
     { [Function (func $sloc $1 $2 $3 None)] }
   | struct_or_class IDENTIFIER LBRACE struct_declaration* RBRACE SEMICOLON
     { [StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 })] }
@@ -469,18 +471,18 @@ enumerator
   | IDENTIFIER { ($1, None) }
   ;
 
-parameter_declaration
-  : declaration_specifiers declarator { decl false $1 { $2 with loc=$sloc } }
+parameter_declaration(X)
+  : declaration_specifiers X { decl false $1 { $2 with loc=$sloc } }
   ;
 
-parameter_list
-  : LPAREN separated_list(COMMA, parameter_declaration) RPAREN { $2 }
+parameter_list(X)
+  : LPAREN separated_list(COMMA, parameter_declaration(X)) RPAREN { $2 }
   | LPAREN VOID RPAREN { [] }
   ;
 
 functype_parameter_declaration
   : declaration_specifiers { decl false $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
-  | parameter_declaration { $1 }
+  | parameter_declaration(declarator) { $1 }
   ;
 
 functype_parameter_list
@@ -496,7 +498,7 @@ struct_declaration
   | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
     { let vars = List.map (fun v -> { v with kind = ClassVar }) (decls false $1 $2) in
       MemberDecl { decl_loc=$sloc; typespec=$1; is_const_decls = false; vars } }
-  | declaration_specifiers IDENTIFIER parameter_list opt_body
+  | declaration_specifiers IDENTIFIER parameter_list(init_declarator) opt_body
     { Method (func $sloc $1 $2 $3 $4) }
   | IDENTIFIER LPAREN VOID? RPAREN opt_body
     { Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5) }

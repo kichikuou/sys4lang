@@ -11,6 +11,7 @@ cd $(dirname "$0")
 ./test-runner.sh delegate.jaf
 ./test-runner.sh scope.jaf
 ./test-runner.sh control.jaf
+./test-runner.sh function.jaf
 ./test-runner.sh ref.jaf
 ./test-runner.sh functype.jaf
 ./test-runner.sh objswap.jaf

@@ -1,15 +1,15 @@
 class C {
 public:
 	C() { this.m = 1; }
-	void set();
+	void set(int x = 42);
 	int m;
 	const int k = 10;
 private:
 	int n;
 };
 
-C::set() {
-	m = 42;
+C::set(int x) {
+	m = x;
 	assert(k == 10);
 }
 
