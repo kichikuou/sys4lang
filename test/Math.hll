@@ -1,1 +1,2 @@
 float Sqrt(float f);
+void Swap(intp x, intp y);

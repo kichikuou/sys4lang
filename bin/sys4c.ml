@@ -66,6 +66,7 @@ let pass_two ctx program =
         Declarations.define_types ctx jaf;
         List.iter ~f:array_init_visitor#visit_declaration jaf
     | Hll (lib_name, hll) ->
+        Declarations.resolve_hll_types ctx hll;
         Declarations.resolve_types ctx hll false;
         Declarations.define_library ctx hll lib_name);
   let initializers = array_init_visitor#generate_initializers () in

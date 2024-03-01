@@ -136,6 +136,25 @@ let register_type_declarations ctx decls =
   (new type_declare_visitor ctx)#visit_toplevel decls
 
 (*
+ * AST pass to resolve HLL-specific type aliases.
+ *)
+class hll_type_resolve_visitor ctx =
+  object
+    inherit ivisitor ctx
+
+    method! visit_type_specifier ts =
+      match ts.ty with
+      | Unresolved "intp" -> ts.ty <- Ref Int
+      | Unresolved "floatp" -> ts.ty <- Ref Float
+      | Unresolved "stringp" -> ts.ty <- Ref String
+      | Unresolved "boolp" -> ts.ty <- Ref Bool
+      | _ -> ()
+  end
+
+let resolve_hll_types ctx decls =
+  (new hll_type_resolve_visitor ctx)#visit_toplevel decls
+
+(*
  * AST pass to resolve user-defined types (struct/enum/function types).
  *)
 class type_resolve_visitor ctx decl_only =
