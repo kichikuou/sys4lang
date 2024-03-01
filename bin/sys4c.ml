@@ -46,11 +46,12 @@ let parse_file ctx parse_func file input_encoding =
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
 let pass_one ctx sources input_encoding =
   List.map sources ~f:(fun f ->
-      if Filename.check_suffix f ".jaf" || String.equal f "-" then (
+      let f_lower = String.lowercase f in
+      if Filename.check_suffix f_lower ".jaf" || String.equal f "-" then (
         let jaf = parse_file ctx Parser.jaf f input_encoding in
         Declarations.register_type_declarations ctx jaf;
         Jaf (f, jaf))
-      else if Filename.check_suffix f ".hll" then
+      else if Filename.check_suffix f_lower ".hll" then
         let hll = parse_file ctx Parser.hll f input_encoding in
         let lib_name = Filename.chop_extension (Filename.basename f) in
         Hll (lib_name, hll)
