@@ -37,6 +37,10 @@ class type_declare_visitor ctx =
             else if Option.is_some prev_decl.body then
               compile_error "Duplicate function definition"
                 (ASTDeclaration (Function decl))
+            else if Option.is_none decl.body then (
+              (* Duplicate method declaration. Ignore the later one. *)
+              decl.index <- Some (-1);
+              prev_decl)
             else (
               prev_decl.index <- decl.index;
               (* Make sure the declaration has the default parameters specified
