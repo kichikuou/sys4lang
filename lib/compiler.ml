@@ -1100,10 +1100,23 @@ class jaf_compiler ain =
                   loc = decl.location;
                 };
               self#compile_pop rhs.ty
-          | Struct no ->
+          | Struct sno -> (
               (* FIXME: use verbose versions *)
               self#write_instruction1 SH_LOCALDELETE v.index;
-              self#write_instruction2 SH_LOCALCREATE v.index no
+              self#write_instruction2 SH_LOCALCREATE v.index sno;
+              match decl.initval with
+              | Some e ->
+                  self#compile_lvalue
+                    {
+                      node = Ident (decl.name, LocalVariable v.index);
+                      ty = decl.type_spec.ty;
+                      loc = decl.location;
+                    };
+                  self#compile_expression e;
+                  self#write_instruction1 PUSH sno;
+                  self#write_instruction0 SR_ASSIGN;
+                  self#compile_pop decl.type_spec.ty
+              | None -> ())
           | Array _ ->
               let has_dims = List.length decl.array_dim > 0 in
               self#compile_local_ref v.index;

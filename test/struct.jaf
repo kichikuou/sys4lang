@@ -25,6 +25,8 @@ int main()
 
 	a = b;
 	assert(a.i == 1);
+	foo c = b;
+	assert(c.i == 1);
 
 	foo c;
 	ref foo r1;
