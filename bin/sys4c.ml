@@ -53,22 +53,27 @@ let parse_pass ctx sources input_encoding =
         Jaf (f, jaf))
       else if Filename.check_suffix f_lower ".hll" then
         let hll = parse_file ctx Parser.hll f input_encoding in
-        let lib_name = Filename.chop_extension (Filename.basename f) in
-        Hll (lib_name, hll)
+        let hll_name = Filename.chop_extension (Filename.basename f) in
+        Hll (hll_name, hll)
       else failwith "unsupported file type")
 
 (* pass 2: Resolve type specifiers *)
-let type_resolve_pass ctx program =
+let type_resolve_pass ctx program import_as =
   let array_init_visitor = new ArrayInit.visitor ctx in
   List.iter program ~f:(function
     | Jaf (_, jaf) ->
         Declarations.resolve_types ctx jaf false;
         Declarations.define_types ctx jaf;
         List.iter ~f:array_init_visitor#visit_declaration jaf
-    | Hll (lib_name, hll) ->
+    | Hll (hll_name, hll) ->
         Declarations.resolve_hll_types ctx hll;
         Declarations.resolve_types ctx hll false;
-        Declarations.define_library ctx hll lib_name);
+        let import_name =
+          match List.Assoc.find import_as ~equal:String.equal hll_name with
+          | Some name -> name
+          | None -> hll_name
+        in
+        Declarations.define_library ctx hll hll_name import_name);
   let initializers = array_init_visitor#generate_initializers () in
   program @ [ Jaf ("", initializers) ]
 
@@ -90,11 +95,11 @@ let codegen_pass ctx program =
         Compiler.compile ctx jaf_name jaf
     | Hll _ -> ())
 
-let do_compile sources output major minor input_encoding =
+let do_compile sources output major minor input_encoding import_as =
   let ctx = context_from_ain (Ain.create major minor) in
   try
     let program = parse_pass ctx sources input_encoding in
-    let program = type_resolve_pass ctx program in
+    let program = type_resolve_pass ctx program import_as in
     type_check_pass ctx program;
     codegen_pass ctx program;
     (* write output .ain file to disk *)
@@ -122,6 +127,9 @@ let cmd_compile_jaf =
         flag "-ain-minor-version"
           (optional_with_default 0 int)
           ~doc:"version The output .ain file minor version (default: 0)"
+      and import_as =
+        flag "-import-as" (listed string)
+          ~doc:"hll_name=name Import hll_name as name"
       and input_encoding =
         flag "-input-encoding"
           (optional_with_default "utf8" string)
@@ -133,6 +141,13 @@ let cmd_compile_jaf =
         if Option.is_some test then
           let ain = Ain.load (Option.value_exn test) in
           Ain.write_file ain output
-        else do_compile sources output major minor input_encoding)
+        else
+          let import_as =
+            List.map import_as ~f:(fun s ->
+                match String.split s ~on:'=' with
+                | [ hll_name; name ] -> (hll_name, name)
+                | _ -> failwith "invalid import-as format")
+          in
+          do_compile sources output major minor input_encoding import_as)
 
 let () = Command_unix.run ~version:"0.1" cmd_compile_jaf

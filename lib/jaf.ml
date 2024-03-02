@@ -105,7 +105,7 @@ type ident_type =
   | GlobalVariable of int
   | GlobalConstant
   | FunctionName of string
-  | HLLName of string
+  | HLLName
   | System
   | BuiltinFunction of Bytecode.builtin
 
@@ -306,7 +306,7 @@ type jaf_struct = {
 let new_jaf_struct name index =
   { name; index; members = Hashtbl.create (module String) }
 
-type library = (string, fundecl) Hashtbl.t
+type library = { hll_name : string; functions : (string, fundecl) Hashtbl.t }
 
 type context = {
   files : (string, string) Hashtbl.t;
@@ -333,7 +333,7 @@ let context_from_ain ain =
 
 let find_hll_function ctx lib func =
   match Hashtbl.find ctx.libraries lib with
-  | Some l -> Hashtbl.find l func
+  | Some l -> Hashtbl.find l.functions func
   | None -> None
 
 type resolved_name =

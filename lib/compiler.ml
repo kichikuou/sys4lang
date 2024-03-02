@@ -445,7 +445,7 @@ class jaf_compiler ain =
       | Ident (_, FunctionName _) ->
           compiler_bug "tried to compile function identifier"
             (Some (ASTExpression expr))
-      | Ident (_, HLLName _) ->
+      | Ident (_, HLLName) ->
           compiler_bug "tried to compile HLL identifier"
             (Some (ASTExpression expr))
       | Ident (_, System) ->

@@ -332,7 +332,7 @@ class type_analyze_visitor ctx =
                     ClassMethod fun_name );
               expr.ty <- TyMethod (fun_name, Option.value_exn f.index)
           | ResolvedLibrary _ ->
-              expr.node <- Ident (name, HLLName name);
+              expr.node <- Ident (name, HLLName);
               expr.ty <- Void
           | ResolvedSystem ->
               expr.node <- Ident ("system", System);
@@ -483,7 +483,7 @@ class type_analyze_visitor ctx =
               undefined_variable_error ("system." ^ syscall_name)
                 (ASTExpression expr))
       (* HLL function *)
-      | Member (({ node = Ident (lib_name, HLLName _); _ } as e), fun_name, _)
+      | Member (({ node = Ident (lib_name, HLLName); _ } as e), fun_name, _)
         -> (
           match find_hll_function ctx lib_name fun_name with
           | Some _ ->
@@ -564,13 +564,15 @@ class type_analyze_visitor ctx =
           expr.ty <- f.return.ty
       (* HLL call *)
       | Call
-          ( ({ node = Member (_, _, HLLFunction (lib_name, fun_name)); _ } as e),
+          ( ({ node = Member (_, _, HLLFunction (import_name, fun_name)); _ } as
+             e),
             args,
             _ ) ->
-          let f = Option.value_exn (find_hll_function ctx lib_name fun_name) in
+          let lib = Hashtbl.find_exn ctx.libraries import_name in
+          let f = Hashtbl.find_exn lib.functions fun_name in
           let args = check_call f.name f.params args in
           let lib_no =
-            Option.value_exn (Ain.get_library_index ctx.ain lib_name)
+            Option.value_exn (Ain.get_library_index ctx.ain lib.hll_name)
           in
           let fun_no =
             Option.value_exn

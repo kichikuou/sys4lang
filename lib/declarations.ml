@@ -243,7 +243,7 @@ class type_define_visitor ctx =
 
 let define_types ctx decls = (new type_define_visitor ctx)#visit_toplevel decls
 
-let define_library ctx decls name =
+let define_library ctx decls hll_name import_name =
   let is_struct_def decl = match decl with StructDef _ -> true | _ -> false in
   let struct_defs, fun_decls = List.partition_tf decls ~f:is_struct_def in
   (* handle struct definitions *)
@@ -260,12 +260,12 @@ let define_library ctx decls name =
   in
   Ain.write_library ctx.ain
     {
-      (Ain.add_library ctx.ain name) with
+      (Ain.add_library ctx.ain hll_name) with
       functions = List.map ~f:jaf_to_ain_hll_function functions;
     };
-  let lib =
+  let functions =
     Hashtbl.of_alist_exn
       (module String)
       (List.map ~f:(fun d -> (d.name, d)) functions)
   in
-  Hashtbl.add_exn ctx.libraries ~key:name ~data:lib
+  Hashtbl.add_exn ctx.libraries ~key:import_name ~data:{ hll_name; functions }
