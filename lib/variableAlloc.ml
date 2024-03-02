@@ -44,9 +44,14 @@ class variable_alloc_visitor ctx =
     val mutable dummy_var_seqno = 0
 
     method start_scope =
-      let initial_vars = Set.of_list (module Int) environment#var_id_list in
       Stack.push scopes
-        { initial_vars; labels = []; gotos = []; breaks = []; continues = [] }
+        {
+          initial_vars = self#current_var_set;
+          labels = [];
+          gotos = [];
+          breaks = [];
+          continues = [];
+        }
 
     method end_scope kind =
       let scope = Stack.pop_exn scopes in
@@ -112,7 +117,10 @@ class variable_alloc_visitor ctx =
           carry_breaks ();
           carry_continues ()
 
-    method current_var_set = Set.of_list (module Int) environment#var_id_list
+    method current_var_set =
+      Set.of_list
+        (module Int)
+        (List.filter_map environment#var_list ~f:(fun v -> v.index))
 
     method add_continue stmt =
       let scope = Stack.top_exn scopes in
@@ -230,7 +238,9 @@ class variable_alloc_visitor ctx =
       | _ -> ()
 
     method! visit_variable v =
-      (match v.kind with Parameter | LocalVar -> self#add_var v | _ -> ());
+      (match v.kind with
+      | (Parameter | LocalVar) when not v.is_const -> self#add_var v
+      | _ -> ());
       super#visit_variable v
 
     method! visit_fundecl f =

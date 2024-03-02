@@ -368,10 +368,6 @@ class ivisitor ctx =
         method var_list =
           List.append variables (List.fold stack ~init:[] ~f:List.append)
 
-        method var_id_list =
-          List.map self#var_list ~f:(fun (v : variable) ->
-              Option.value_exn v.index)
-
         method enter_function decl =
           self#push;
           current_function <- Some decl;
