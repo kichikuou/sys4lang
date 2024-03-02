@@ -13,7 +13,17 @@ void A(void)
 
 int main()
 {
+	'This is not a character constant.';
+
 	'test' A;
 	assert(result == 1);
 	assert(a_called == 1);
+
+	result = 0;
+	if (0)
+		'foo'
+	else
+		'test'
+	assert(result == 1);
+	return 0;
 }

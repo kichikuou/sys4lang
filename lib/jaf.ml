@@ -183,7 +183,7 @@ and ast_statement =
   | Return of expression option
   | Jump of string
   | Jumps of expression
-  | MessageCall of string * string option * int option
+  | Message of string
   | RefAssign of expression * expression
   | ObjSwap of expression * expression
 
@@ -506,7 +506,7 @@ class ivisitor ctx =
       | Return e -> Option.iter e ~f:self#visit_expression
       | Jump _ -> ()
       | Jumps e -> self#visit_expression e
-      | MessageCall (_, _, _) -> ()
+      | Message _ -> ()
       | RefAssign (a, b) ->
           self#visit_expression a;
           self#visit_expression b
@@ -694,10 +694,7 @@ let rec stmt_to_string (stmt : statement) =
   | Return (Some e) -> sprintf "return %s;" (expr_to_string e)
   | Jump func -> sprintf "jump %s;" func
   | Jumps e -> sprintf "jumps %s;" (expr_to_string e)
-  | MessageCall (msg, f, _) -> (
-      match f with
-      | Some name -> sprintf "'%s' %s;" msg name
-      | None -> sprintf "'%s';" msg)
+  | Message msg -> sprintf "'%s'" msg
   | RefAssign (dst, src) ->
       sprintf "%s <- %s;" (expr_to_string dst) (expr_to_string src)
   | ObjSwap (a, b) -> sprintf "%s <=> %s;" (expr_to_string a) (expr_to_string b)

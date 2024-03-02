@@ -626,11 +626,6 @@ class type_analyze_visitor ctx =
       | Null -> expr.ty <- NullType
 
     method! visit_statement stmt =
-      (* rewrite character constants at statement-level as messages *)
-      (match stmt.node with
-      | Expression { node = ConstChar msg; _ } ->
-          stmt.node <- MessageCall (msg, None, None)
-      | _ -> ());
       self#catch_errors (fun () ->
           super#visit_statement stmt;
           match stmt.node with
@@ -698,19 +693,7 @@ class type_analyze_visitor ctx =
                     (name ^ " is not a scenario function")
                     (ASTStatement stmt))
           | Jumps e -> type_check (ASTExpression e) String e
-          | MessageCall (msg, f_name, _) -> (
-              match f_name with
-              | Some name -> (
-                  match Hashtbl.find ctx.functions name with
-                  | Some f ->
-                      if not (List.is_empty f.params) then
-                        arity_error f.name (List.length f.params) []
-                          (ASTStatement stmt);
-                      stmt.node <-
-                        MessageCall
-                          (msg, f_name, Some (Option.value_exn f.index))
-                  | None -> undefined_variable_error name (ASTStatement stmt))
-              | None -> ())
+          | Message _ -> ()
           | RefAssign (lhs, rhs) ->
               self#check_ref_assign (ASTStatement stmt) lhs rhs
           | ObjSwap (lhs, rhs) ->

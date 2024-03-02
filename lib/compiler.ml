@@ -990,12 +990,9 @@ class jaf_compiler ain =
           self#compile_expression e;
           self#write_instruction0 CALLONJUMP;
           self#write_instruction0 SJUMP
-      | MessageCall (msg, _, fno) -> (
+      | Message msg ->
           let msg_no = Ain.add_message ain msg in
-          self#write_instruction1 MSG msg_no;
-          match fno with
-          | Some no -> self#write_instruction1 CALLFUNC no
-          | None -> ())
+          self#write_instruction1 MSG msg_no
       | RefAssign (lhs, rhs) ->
           self#compile_lock_peek;
           self#compile_variable_ref lhs;

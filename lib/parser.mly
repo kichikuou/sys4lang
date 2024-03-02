@@ -14,6 +14,11 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+(* Expect the following menhir warnings when compiling this grammar:
+ *
+ *  Warning: one state has reduce/reduce conflicts.
+ *  Warning: 7 reduce/reduce conflicts were arbitrarily resolved.
+ *)
 %{
 
 open Jaf
@@ -151,6 +156,14 @@ primary_expression
   | constant { expr $sloc $1 }
   | string { expr $sloc $1 }
   | LPAREN expression RPAREN { {$2 with loc=$sloc} }
+  ;
+
+(* Due to the way menhir handles reduce/reduce conflicts, the generation rule
+ * for message_statement needs to be placed before the constant rule so that
+ * C_CONSTANT at the statement level is treated as a message rather than a
+ * character constant. *)
+message_statement
+  : C_CONSTANT { Message $1 }
   ;
 
 constant
@@ -402,10 +415,6 @@ jump_statement
   | RETURN expression? SEMICOLON { Return ($2) }
   | JUMP IDENTIFIER SEMICOLON { Jump $2 }
   | JUMPS expression SEMICOLON { Jumps $2 }
-  ;
-
-message_statement
-  : C_CONSTANT IDENTIFIER SEMICOLON { MessageCall ($1, Some $2, None) }
   ;
 
 rassign_statement
