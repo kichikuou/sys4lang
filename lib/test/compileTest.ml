@@ -19,12 +19,6 @@ open Sys4cLib
 
 let sprintf = Printf.sprintf
 
-let parse_jaf input =
-  let lexbuf = Lexing.from_string input in
-  Lexing.set_filename lexbuf "-";
-  try Parser.jaf Lexer.token lexbuf
-  with Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
-
 let arg_to_string ain (argtype : Bytecode.argtype) arg =
   match argtype with
   | Int -> Int32.to_string arg
@@ -65,18 +59,7 @@ let print_disassemble ain =
 let compile_test input =
   let ctx = Jaf.context_from_ain (Ain.create 4 0) in
   try
-    let jaf = parse_jaf input in
-    Declarations.register_type_declarations ctx jaf;
-    Declarations.resolve_types ctx jaf false;
-    Declarations.define_types ctx jaf;
-    let array_init = new ArrayInit.visitor ctx in
-    List.iter ~f:array_init#visit_declaration jaf;
-    let jaf = jaf @ array_init#generate_initializers () in
-    TypeAnalysis.check_types ctx jaf;
-    ConstEval.evaluate_constant_expressions ctx jaf;
-    VariableAlloc.allocate_variables ctx jaf;
-    SanityCheck.check_invariants ctx jaf;
-    Codegen.compile ctx "test.jaf" jaf;
+    Compiler.compile ctx [ Pje.Jaf "test.jaf" ] (fun _ -> input);
     print_disassemble ctx.ain
   with CompileError.CompileError e ->
     CompileError.print_error e (fun _ -> Some input)
@@ -90,8 +73,9 @@ let%expect_test "empty function" =
       000: FUNC f
       006: RETURN
       008: ENDFUNC f
-      014: FUNC NULL
-      020: EOF test.jaf
+      014: EOF test.jaf
+      020: FUNC NULL
+      026: EOF
     |}]
 
 let%expect_test "return" =
@@ -108,8 +92,9 @@ let%expect_test "return" =
       014: PUSH 0
       020: RETURN
       022: ENDFUNC f
-      028: FUNC NULL
-      034: EOF test.jaf
+      028: EOF test.jaf
+      034: FUNC NULL
+      040: EOF
     |}]
 
 let%expect_test "local ref int" =
@@ -137,8 +122,9 @@ let%expect_test "local ref int" =
       052: POP
       054: RETURN
       056: ENDFUNC f
-      062: FUNC NULL
-      068: EOF test.jaf
+      062: EOF test.jaf
+      068: FUNC NULL
+      074: EOF
     |}]
 
 let%expect_test "local ref string" =
@@ -164,8 +150,9 @@ let%expect_test "local ref string" =
       044: POP
       046: RETURN
       048: ENDFUNC f
-      054: FUNC NULL
-      060: EOF test.jaf
+      054: EOF test.jaf
+      060: FUNC NULL
+      066: EOF
   |}]
 
 let%expect_test "jump statement" =
@@ -186,8 +173,9 @@ let%expect_test "jump statement" =
       022: CALLONJUMP
       024: SJUMP
       026: ENDFUNC sfunc
-      032: FUNC NULL
-      038: EOF test.jaf
+      032: EOF test.jaf
+      038: FUNC NULL
+      044: EOF
   |}]
 
 let%expect_test "new" =
@@ -213,8 +201,9 @@ let%expect_test "new" =
       046: PUSH -1
       052: RETURN
       054: ENDFUNC f
-      060: FUNC NULL
-      066: EOF test.jaf
+      060: EOF test.jaf
+      066: FUNC NULL
+      072: EOF
   |}]
 
 let%expect_test "function returning ref" =
@@ -235,8 +224,9 @@ let%expect_test "function returning ref" =
       028: PUSH -1
       034: RETURN
       036: ENDFUNC f
-      042: FUNC NULL
-      048: EOF test.jaf
+      042: EOF test.jaf
+      048: FUNC NULL
+      054: EOF
   |}]
 
 let%expect_test "ref struct assign" =
@@ -280,8 +270,9 @@ let%expect_test "ref struct assign" =
       082: PUSH -1
       088: RETURN
       090: ENDFUNC f
-      096: FUNC NULL
-      102: EOF test.jaf
+      096: EOF test.jaf
+      102: FUNC NULL
+      108: EOF
   |}]
 
 let%expect_test "ref int assign" =
@@ -324,8 +315,9 @@ let%expect_test "ref int assign" =
       086: PUSH 0
       092: RETURN
       094: ENDFUNC f
-      100: FUNC NULL
-      106: EOF test.jaf
+      100: EOF test.jaf
+      106: FUNC NULL
+      112: EOF
   |}]
 
 let%expect_test "syscall" =
@@ -339,8 +331,9 @@ let%expect_test "syscall" =
       012: CALLSYS Exit
       018: RETURN
       020: ENDFUNC f
-      026: FUNC NULL
-      032: EOF test.jaf
+      026: EOF test.jaf
+      032: FUNC NULL
+      038: EOF
   |}]
 
 let%expect_test "global array initializer" =
@@ -353,16 +346,17 @@ let%expect_test "global array initializer" =
       000: FUNC f
       006: RETURN
       008: ENDFUNC f
-      014: FUNC 0
-      020: PUSHGLOBALPAGE
-      022: PUSH 0
-      028: PUSH 10
-      034: PUSH 1
-      040: A_ALLOC
-      042: RETURN
-      044: ENDFUNC 0
-      050: FUNC NULL
-      056: EOF test.jaf
+      014: EOF test.jaf
+      020: FUNC 0
+      026: PUSHGLOBALPAGE
+      028: PUSH 0
+      034: PUSH 10
+      040: PUSH 1
+      046: A_ALLOC
+      048: RETURN
+      050: ENDFUNC 0
+      056: FUNC NULL
+      062: EOF
     |}]
 
 let%expect_test "if" =
@@ -395,8 +389,9 @@ let%expect_test "if" =
       058: JUMP 64
       064: RETURN
       066: ENDFUNC f
-      072: FUNC NULL
-      078: EOF test.jaf
+      072: EOF test.jaf
+      078: FUNC NULL
+      084: EOF
     |}]
 
 let%expect_test "if-else" =
@@ -436,6 +431,7 @@ let%expect_test "if-else" =
       080: POP
       082: RETURN
       084: ENDFUNC f
-      090: FUNC NULL
-      096: EOF test.jaf
+      090: EOF test.jaf
+      096: FUNC NULL
+      102: EOF
     |}]

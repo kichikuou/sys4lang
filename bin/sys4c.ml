@@ -16,15 +16,8 @@
 
 open Core
 open Sys4cLib
-open Jaf
 
-type source =
-  | Jaf of string * declaration list
-  | Hll of string * string * declaration list
-
-type program = source list
-
-let read_file input_encoding file =
+let read_text_file input_encoding file =
   let content =
     match file with
     | "-" -> In_channel.input_all In_channel.stdin
@@ -35,84 +28,55 @@ let read_file input_encoding file =
   | "sjis" -> Sjis.to_utf8 content
   | _ -> failwith ("unsupported character encoding: " ^ input_encoding)
 
-let parse_file ctx parse_func dir file input_encoding =
-  let source = read_file input_encoding (Stdlib.Filename.concat dir file) in
-  Hashtbl.add_exn ctx.files ~key:file ~data:source;
-  let lexbuf = Lexing.from_string source in
-  Lexing.set_filename lexbuf file;
-  try parse_func Lexer.token lexbuf with
-  | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
-  | e -> raise e
+let handle_errors f (ctx : Jaf.context) =
+  try f ctx with
+  | CompileError.CompileError e ->
+      CompileError.print_error e (fun file -> Hashtbl.find ctx.files file);
+      exit 1
+  | Sys_error msg ->
+      Stdio.print_endline msg;
+      exit 1
 
-(* pass 1: Parse jaf/hll files and create symbol table entries *)
-let parse_pass ctx source_dir sources input_encoding =
-  List.map sources ~f:(function
-    | Pje.Jaf f ->
-        let jaf = parse_file ctx Parser.jaf source_dir f input_encoding in
-        Declarations.register_type_declarations ctx jaf;
-        Jaf (f, jaf)
-    | Pje.Hll (f, import_name) ->
-        let hll = parse_file ctx Parser.hll source_dir f input_encoding in
-        let hll_name = Filename.chop_extension (Filename.basename f) in
-        Hll (hll_name, import_name, hll)
-    | _ -> failwith "unreachable")
-
-(* pass 2: Resolve type specifiers *)
-let type_resolve_pass ctx program =
-  let array_init_visitor = new ArrayInit.visitor ctx in
-  List.iter program ~f:(function
-    | Jaf (_, jaf) ->
-        Declarations.resolve_types ctx jaf false;
-        Declarations.define_types ctx jaf;
-        List.iter ~f:array_init_visitor#visit_declaration jaf
-    | Hll (hll_name, import_name, hll) ->
-        Declarations.resolve_hll_types ctx hll;
-        Declarations.resolve_types ctx hll false;
-        Declarations.define_library ctx hll hll_name import_name);
-  let initializers = array_init_visitor#generate_initializers () in
-  program @ [ Jaf ("", initializers) ]
-
-(* pass 3: Type checking *)
-let type_check_pass ctx program =
-  List.iter program ~f:(function
-    | Jaf (_, jaf) ->
-        TypeAnalysis.check_types ctx jaf;
-        ConstEval.evaluate_constant_expressions ctx jaf;
-        VariableAlloc.allocate_variables ctx jaf
-    | Hll _ -> ())
-
-(* pass 4: Code generation *)
-let codegen_pass ctx program =
-  List.iter program ~f:(function
-    | Jaf (jaf_name, jaf) ->
-        (* TODO: disable in release builds *)
-        SanityCheck.check_invariants ctx jaf;
-        Codegen.compile ctx jaf_name jaf
-    | Hll _ -> ())
-
-let do_compile source_dir sources output major minor input_encoding =
-  let ctx = context_from_ain (Ain.create major minor) in
-  try
-    let program = parse_pass ctx source_dir sources input_encoding in
-    let program = type_resolve_pass ctx program in
-    type_check_pass ctx program;
-    codegen_pass ctx program;
-    (* write output .ain file to disk *)
-    Ain.write_file ctx.ain output
-  with CompileError.CompileError e ->
-    CompileError.print_error e (fun file -> Hashtbl.find ctx.files file);
-    exit 1
+let do_compile sources output major minor import_as input_encoding =
+  let import_as =
+    List.map import_as ~f:(fun s ->
+        match String.split s ~on:'=' with
+        | [ hll_name; name ] -> (hll_name, name)
+        | _ -> failwith "invalid import-as format")
+  in
+  let sources =
+    List.map sources ~f:(fun f ->
+        if String.is_suffix (String.lowercase f) ~suffix:".hll" then
+          let import_name =
+            let hll_name = Filename.chop_extension (Filename.basename f) in
+            match List.Assoc.find import_as ~equal:String.equal hll_name with
+            | Some name -> name
+            | None -> hll_name
+          in
+          Pje.Hll (f, import_name)
+        else Pje.Jaf f)
+  in
+  handle_errors
+    (fun ctx ->
+      Compiler.compile ctx sources (read_text_file input_encoding);
+      Ain.write_file ctx.ain output)
+    (Jaf.context_from_ain (Ain.create major minor))
 
 let do_build pje_file input_encoding =
-  try
-    let pje = Project.load_pje (read_file input_encoding) pje_file in
-    let sources = Pje.collect_sources pje in
-    do_compile
-      Stdlib.Filename.(concat (dirname pje_file) pje.source_dir)
-      sources (Pje.ain_path pje) 4 0 input_encoding
-  with CompileError.CompileError e ->
-    CompileError.print_error e (fun _ -> None);
-    exit 1
+  handle_errors
+    (fun ctx ->
+      let pje = Project.load_pje (read_text_file input_encoding) pje_file in
+      let source_dir =
+        Stdlib.Filename.(concat (dirname pje_file) pje.source_dir)
+      in
+      let read_file file =
+        let file = Stdlib.Filename.(concat source_dir file) in
+        read_text_file input_encoding file
+      in
+      let sources = Pje.collect_sources pje in
+      Compiler.compile ctx sources read_file;
+      Ain.write_file ctx.ain (Pje.ain_path pje))
+    (Jaf.context_from_ain (Ain.create 4 0))
 
 let cmd_compile_jaf =
   Command.basic ~summary:"Compile .jaf files"
@@ -146,30 +110,7 @@ let cmd_compile_jaf =
         if Option.is_some test then
           let ain = Ain.load (Option.value_exn test) in
           Ain.write_file ain output
-        else
-          let import_as =
-            List.map import_as ~f:(fun s ->
-                match String.split s ~on:'=' with
-                | [ hll_name; name ] -> (hll_name, name)
-                | _ -> failwith "invalid import-as format")
-          in
-          let sources =
-            List.map sources ~f:(fun f ->
-                if String.is_suffix (String.lowercase f) ~suffix:".hll" then
-                  let import_name =
-                    let hll_name =
-                      Filename.chop_extension (Filename.basename f)
-                    in
-                    match
-                      List.Assoc.find import_as ~equal:String.equal hll_name
-                    with
-                    | Some name -> name
-                    | None -> hll_name
-                  in
-                  Pje.Hll (f, import_name)
-                else Pje.Jaf f)
-          in
-          do_compile "." sources output major minor input_encoding)
+        else do_compile sources output major minor import_as input_encoding)
 
 let cmd_build_pje =
   Command.basic ~summary:"Build a System 4 project"

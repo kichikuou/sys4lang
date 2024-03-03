@@ -17,21 +17,10 @@
 open Base
 open Sys4cLib
 
-let parse_jaf input =
-  let lexbuf = Lexing.from_string input in
-  Lexing.set_filename lexbuf "-";
-  try Parser.jaf Lexer.token lexbuf
-  with Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
-
 let type_test input =
   let ctx = Jaf.context_from_ain (Ain.create 4 0) in
   try
-    let jaf = parse_jaf input in
-    Declarations.register_type_declarations ctx jaf;
-    Declarations.resolve_types ctx jaf false;
-    Declarations.define_types ctx jaf;
-    TypeAnalysis.check_types ctx jaf;
-    ConstEval.evaluate_constant_expressions ctx jaf;
+    Compiler.compile ctx [ Pje.Jaf "-" ] (fun _ -> input);
     Stdio.print_endline "ok"
   with CompileError.CompileError e ->
     CompileError.print_error e (fun _ -> Some input)
