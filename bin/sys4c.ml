@@ -87,7 +87,7 @@ let codegen_pass ctx program =
     | Jaf (jaf_name, jaf) ->
         (* TODO: disable in release builds *)
         SanityCheck.check_invariants ctx jaf;
-        Compiler.compile ctx jaf_name jaf
+        Codegen.compile ctx jaf_name jaf
     | Hll _ -> ())
 
 let do_compile source_dir sources output major minor input_encoding =

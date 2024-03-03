@@ -76,7 +76,7 @@ let compile_test input =
     ConstEval.evaluate_constant_expressions ctx jaf;
     VariableAlloc.allocate_variables ctx jaf;
     SanityCheck.check_invariants ctx jaf;
-    Compiler.compile ctx "test.jaf" jaf;
+    Codegen.compile ctx "test.jaf" jaf;
     print_disassemble ctx.ain
   with CompileError.CompileError e ->
     CompileError.print_error e (fun _ -> Some input)
