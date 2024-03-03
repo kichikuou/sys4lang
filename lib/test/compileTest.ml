@@ -19,7 +19,7 @@ open Sys4cLib
 
 let sprintf = Printf.sprintf
 
-let arg_to_string ain (argtype : Bytecode.argtype) arg =
+let arg_to_string dasm ain (argtype : Bytecode.argtype) arg =
   match argtype with
   | Int -> Int32.to_string arg
   | Float -> Int32.float_of_bits arg |> Float.to_string
@@ -31,7 +31,12 @@ let arg_to_string ain (argtype : Bytecode.argtype) arg =
   | Message ->
       sprintf "\'%s\'"
         (Ain.get_message ain (Int32.to_int_exn arg) |> Option.value_exn)
-  | Local -> sprintf "local(%ld)" arg
+  | Local ->
+      let f =
+        Ain.get_function_by_index ain
+          (Option.value_exn (Dasm.current_func dasm))
+      in
+      (List.nth_exn f.vars (Int32.to_int_exn arg)).name
   | Global -> sprintf "global(%ld)" arg
   | Struct -> sprintf "struct(%ld)" arg
   | Syscall ->
@@ -52,7 +57,7 @@ let print_disassemble ain =
     Stdio.printf "%03d: %s %s\n" (Dasm.addr dasm)
       (Bytecode.string_of_opcode opcode)
       (String.concat ~sep:", "
-         (List.map2_exn ~f:(arg_to_string ain) argtypes args));
+         (List.map2_exn ~f:(arg_to_string dasm ain) argtypes args));
     Dasm.next dasm
   done
 
@@ -261,18 +266,16 @@ let%expect_test "ref struct assign" =
       056: POP
       058: CALLSYS UnlockPeek
       064: POP
-      066: PUSHLOCALPAGE
-      068: PUSH 0
-      074: REF
-      076: DUP
-      078: SP_INC
-      080: RETURN
-      082: PUSH -1
-      088: RETURN
-      090: ENDFUNC f
-      096: EOF test.jaf
-      102: FUNC NULL
-      108: EOF
+      066: SH_LOCALREF r
+      072: DUP
+      074: SP_INC
+      076: RETURN
+      078: PUSH -1
+      084: RETURN
+      086: ENDFUNC f
+      092: EOF test.jaf
+      098: FUNC NULL
+      104: EOF
   |}]
 
 let%expect_test "ref int assign" =
@@ -377,21 +380,19 @@ let%expect_test "if" =
       014: PUSH 1
       020: ASSIGN
       022: POP
-      024: PUSHLOCALPAGE
-      026: PUSH 0
-      032: REF
-      034: IFZ 64
-      040: PUSHLOCALPAGE
-      042: PUSH 0
-      048: PUSH 2
-      054: ASSIGN
-      056: POP
-      058: JUMP 64
-      064: RETURN
-      066: ENDFUNC f
-      072: EOF test.jaf
-      078: FUNC NULL
-      084: EOF
+      024: SH_LOCALREF i
+      030: IFZ 60
+      036: PUSHLOCALPAGE
+      038: PUSH 0
+      044: PUSH 2
+      050: ASSIGN
+      052: POP
+      054: JUMP 60
+      060: RETURN
+      062: ENDFUNC f
+      068: EOF test.jaf
+      074: FUNC NULL
+      080: EOF
     |}]
 
 let%expect_test "if-else" =
@@ -414,24 +415,22 @@ let%expect_test "if-else" =
       014: PUSH 1
       020: ASSIGN
       022: POP
-      024: PUSHLOCALPAGE
-      026: PUSH 0
-      032: REF
-      034: IFZ 64
-      040: PUSHLOCALPAGE
-      042: PUSH 0
-      048: PUSH 2
-      054: ASSIGN
-      056: POP
-      058: JUMP 82
-      064: PUSHLOCALPAGE
-      066: PUSH 0
-      072: PUSH 3
-      078: ASSIGN
-      080: POP
-      082: RETURN
-      084: ENDFUNC f
-      090: EOF test.jaf
-      096: FUNC NULL
-      102: EOF
+      024: SH_LOCALREF i
+      030: IFZ 60
+      036: PUSHLOCALPAGE
+      038: PUSH 0
+      044: PUSH 2
+      050: ASSIGN
+      052: POP
+      054: JUMP 78
+      060: PUSHLOCALPAGE
+      062: PUSH 0
+      068: PUSH 3
+      074: ASSIGN
+      076: POP
+      078: RETURN
+      080: ENDFUNC f
+      086: EOF test.jaf
+      092: FUNC NULL
+      098: EOF
     |}]

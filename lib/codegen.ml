@@ -317,14 +317,20 @@ class jaf_compiler ain =
           | _ -> ()
       in
       match e.node with
-      | Ident (_, LocalVariable i) ->
-          let v = self#get_local i in
-          self#compile_local_ref v.index;
-          compile_lvalue_after v.value_type
-      | Ident (_, GlobalVariable i) ->
-          let v = Ain.get_global_by_index ain i in
-          self#compile_global_ref v.index;
-          compile_lvalue_after v.value_type
+      | Ident (_, LocalVariable i) -> (
+          match self#get_local i with
+          | { value_type = { data = String | Array _ | Struct _; _ }; _ } ->
+              self#write_instruction1 SH_LOCALREF i
+          | v ->
+              self#compile_local_ref v.index;
+              compile_lvalue_after v.value_type)
+      | Ident (_, GlobalVariable i) -> (
+          match Ain.get_global_by_index ain i with
+          | { value_type = { data = String | Array _ | Struct _; _ }; _ } ->
+              self#write_instruction1 SH_GLOBALREF i
+          | v ->
+              self#compile_global_ref v.index;
+              compile_lvalue_after v.value_type)
       | Member (obj, _, ClassVariable (_, member_no)) ->
           self#compile_lvalue obj;
           self#write_instruction1 PUSH member_no;
@@ -431,14 +437,24 @@ class jaf_compiler ain =
       | ConstString s ->
           let no = Ain.add_string ain s in
           self#write_instruction1 S_PUSH no
-      | Ident (_, LocalVariable i) ->
-          self#write_instruction0 PUSHLOCALPAGE;
-          self#write_instruction1 PUSH i;
-          self#compile_dereference (self#get_local i).value_type
-      | Ident (_, GlobalVariable i) ->
-          self#write_instruction0 PUSHGLOBALPAGE;
-          self#write_instruction1 PUSH i;
-          self#compile_dereference (Ain.get_global_by_index ain i).value_type
+      | Ident (_, LocalVariable i) -> (
+          match (self#get_local i).value_type with
+          | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
+            ->
+              self#write_instruction1 SH_LOCALREF i
+          | t ->
+              self#write_instruction0 PUSHLOCALPAGE;
+              self#write_instruction1 PUSH i;
+              self#compile_dereference t)
+      | Ident (_, GlobalVariable i) -> (
+          match (Ain.get_global_by_index ain i).value_type with
+          | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
+            ->
+              self#write_instruction1 SH_GLOBALREF i
+          | t ->
+              self#write_instruction0 PUSHGLOBALPAGE;
+              self#write_instruction1 PUSH i;
+              self#compile_dereference t)
       | Ident (_, GlobalConstant) ->
           compiler_bug "global constant not eliminated"
             (Some (ASTExpression expr))

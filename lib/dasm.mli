@@ -12,3 +12,4 @@ val arg_type : t -> int -> Bytecode.argtype
 val argument_types : t -> Bytecode.argtype list
 val arg : t -> int -> int32
 val arguments : t -> int32 list
+val current_func : t -> int option
