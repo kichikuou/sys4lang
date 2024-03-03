@@ -4,7 +4,7 @@
  (preprocess
   (pps ppx_jane)))
 
-(ocamllex lexer)
+(ocamllex lexer pjeLexer)
 
 (menhir
- (modules parser))
+ (modules parser pjeParser))
