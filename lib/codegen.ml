@@ -292,9 +292,12 @@ class jaf_compiler ain =
           self#compile_expression index
       | _ -> compiler_bug "Invalid variable ref" (Some (ASTExpression e))
 
-    method compile_delete_ref =
+    method compile_delete_ref ty =
       self#write_instruction0 DUP2;
-      self#write_instruction0 REF;
+      if is_ref_scalar ty then (
+        self#write_instruction0 REFREF;
+        self#write_instruction0 POP)
+      else self#write_instruction0 REF;
       self#write_instruction0 DELETE
 
     (** Emit the code to put a location (variable, struct member, or array
@@ -1052,7 +1055,7 @@ class jaf_compiler ain =
       | RefAssign (lhs, rhs) ->
           self#compile_lock_peek;
           self#compile_variable_ref lhs;
-          self#compile_delete_ref;
+          self#compile_delete_ref lhs.ty;
           (match (lhs.ty, rhs.node) with
           | _, Null -> ()
           | _ -> self#write_instruction0 DUP2);

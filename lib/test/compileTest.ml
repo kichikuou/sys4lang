@@ -116,20 +116,21 @@ let%expect_test "local ref int" =
       014: PUSHLOCALPAGE
       016: PUSH 0
       022: DUP2
-      024: REF
-      026: DELETE
-      028: PUSH -1
-      034: PUSH 0
-      040: R_ASSIGN
-      042: POP
+      024: REFREF
+      026: POP
+      028: DELETE
+      030: PUSH -1
+      036: PUSH 0
+      042: R_ASSIGN
       044: POP
-      046: CALLSYS UnlockPeek
-      052: POP
-      054: RETURN
-      056: ENDFUNC f
-      062: EOF test.jaf
-      068: FUNC NULL
-      074: EOF
+      046: POP
+      048: CALLSYS UnlockPeek
+      054: POP
+      056: RETURN
+      058: ENDFUNC f
+      064: EOF test.jaf
+      070: FUNC NULL
+      076: EOF
     |}]
 
 let%expect_test "local ref string" =
@@ -294,33 +295,34 @@ let%expect_test "ref int assign" =
       014: PUSHLOCALPAGE
       016: PUSH 0
       022: DUP2
-      024: REF
-      026: DELETE
-      028: DUP2
-      030: PUSHLOCALPAGE
-      032: PUSH 2
-      038: CALLFUNC f
-      044: R_ASSIGN
+      024: REFREF
+      026: POP
+      028: DELETE
+      030: DUP2
+      032: PUSHLOCALPAGE
+      034: PUSH 2
+      040: CALLFUNC f
       046: R_ASSIGN
-      048: POP
+      048: R_ASSIGN
       050: POP
-      052: REF
-      054: SP_INC
-      056: CALLSYS UnlockPeek
-      062: POP
-      064: PUSHLOCALPAGE
-      066: PUSH 0
-      072: REFREF
-      074: DUP_U2
-      076: SP_INC
-      078: RETURN
-      080: PUSH -1
-      086: PUSH 0
-      092: RETURN
-      094: ENDFUNC f
-      100: EOF test.jaf
-      106: FUNC NULL
-      112: EOF
+      052: POP
+      054: REF
+      056: SP_INC
+      058: CALLSYS UnlockPeek
+      064: POP
+      066: PUSHLOCALPAGE
+      068: PUSH 0
+      074: REFREF
+      076: DUP_U2
+      078: SP_INC
+      080: RETURN
+      082: PUSH -1
+      088: PUSH 0
+      094: RETURN
+      096: ENDFUNC f
+      102: EOF test.jaf
+      108: FUNC NULL
+      114: EOF
   |}]
 
 let%expect_test "syscall" =
