@@ -146,23 +146,22 @@ class variable_alloc_visitor ctx =
     method add_var (v : variable) =
       let i = List.length vars in
       v.index <- Some i;
-      match v.type_spec.ty with
-      | Ref (Int | Bool | Float | FuncType (_, _)) ->
-          let void =
-            {
-              name = "<void>";
-              location = v.location;
-              array_dim = [];
-              is_const = false;
-              is_private = false;
-              kind = v.kind;
-              type_spec = { ty = Void; location = v.type_spec.location };
-              initval = None;
-              index = Some (i + 1);
-            }
-          in
-          vars <- void :: v :: vars
-      | _ -> vars <- v :: vars
+      if is_ref_scalar v.type_spec.ty then
+        let void =
+          {
+            name = "<void>";
+            location = v.location;
+            array_dim = [];
+            is_const = false;
+            is_private = false;
+            kind = v.kind;
+            type_spec = { ty = Void; location = v.type_spec.location };
+            initval = None;
+            index = Some (i + 1);
+          }
+        in
+        vars <- void :: v :: vars
+      else vars <- v :: vars
 
     method create_dummy_var name ty =
       (* create dummy ref variable to store object for extent of statement *)

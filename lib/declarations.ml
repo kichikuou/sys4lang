@@ -120,7 +120,9 @@ class type_declare_visitor ctx =
                     v.is_private <- !in_private;
                     if not v.is_const then (
                       v.index <- Some !next_index;
-                      next_index := !next_index + type_size v.type_spec.ty);
+                      next_index :=
+                        !next_index
+                        + if is_ref_scalar v.type_spec.ty then 2 else 1);
                     match Hashtbl.add jaf_s.members ~key:v.name ~data:v with
                     | `Duplicate ->
                         compile_error "duplicate member variable declaration"

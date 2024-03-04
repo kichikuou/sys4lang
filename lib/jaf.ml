@@ -93,9 +93,13 @@ type jaf_type =
 
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
 
-let type_size = function
-  | Ref (Int | Bool | Float | FuncType (_, _)) -> 2
-  | _ -> 1
+let is_scalar = function
+  | Int | Bool | Float | LongInt | FuncType _ -> true
+  | _ -> false
+
+let is_ref_scalar = function
+  | Ref (Int | Bool | Float | LongInt | FuncType _) -> true
+  | _ -> false
 
 type type_specifier = { mutable ty : jaf_type; location : location }
 
@@ -849,17 +853,16 @@ let jaf_to_ain_variables j_p =
       index =
     match params with
     | [] -> List.rev result
-    | x :: xs -> (
+    | x :: xs ->
         let var =
           Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec.ty)
         in
-        match x.type_spec.ty with
-        | Ref (Int | Bool | Float | FuncType (_, _)) ->
-            let void =
-              Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
-            in
-            convert_params xs (void :: var :: result) (index + 2)
-        | _ -> convert_params xs (var :: result) (index + 1))
+        if is_ref_scalar x.type_spec.ty then
+          let void =
+            Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
+          in
+          convert_params xs (void :: var :: result) (index + 2)
+        else convert_params xs (var :: result) (index + 1)
   in
   convert_params j_p [] 0
 

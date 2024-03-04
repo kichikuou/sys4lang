@@ -331,10 +331,16 @@ class jaf_compiler ain =
           | v ->
               self#compile_global_ref v.index;
               compile_lvalue_after v.value_type)
-      | Member (obj, _, ClassVariable (_, member_no)) ->
-          self#compile_lvalue obj;
-          self#write_instruction1 PUSH member_no;
-          compile_lvalue_after (jaf_to_ain_type e.ty)
+      | Member (obj, _, ClassVariable (_, member_no)) -> (
+          match (obj.node, e.ty) with
+          | ( This,
+              ( Ref (String | Array _ | Struct _)
+              | String | Array _ | Struct _ | Delegate _ ) ) ->
+              self#write_instruction1 SH_STRUCTREF member_no
+          | _ ->
+              self#compile_lvalue obj;
+              self#write_instruction1 PUSH member_no;
+              compile_lvalue_after (jaf_to_ain_type e.ty))
       | Subscript (obj, index) ->
           self#compile_lvalue obj;
           self#compile_expression index;
@@ -352,12 +358,10 @@ class jaf_compiler ain =
               (* assign to dummy variable *)
               self#write_instruction0 ASSIGN;
               self#compile_unlock_peek
-          | { ty = Ref (Int | Bool | Float | LongInt | FuncType _); _ } ->
-              self#compile_expression ref_expr;
-              self#write_instruction0 R_ASSIGN
           | _ ->
               self#compile_expression ref_expr;
-              self#write_instruction0 ASSIGN)
+              self#write_instruction0
+                (if is_ref_scalar ref_expr.ty then R_ASSIGN else ASSIGN))
       | This -> self#compile_expression e
       | Null -> (
           match e.ty with
@@ -720,6 +724,9 @@ class jaf_compiler ain =
           match obj.ty with
           | String -> self#write_instruction0 C_REF
           | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
+      | Member ({ node = This; _ }, _, ClassVariable (_, member_no))
+        when is_scalar expr.ty ->
+          self#write_instruction1 SH_STRUCTREF member_no
       | Member (e, _, ClassVariable (struct_no, member_no)) ->
           let struct_type = Ain.get_struct_by_index ain struct_no in
           self#compile_lvalue e;
@@ -1018,7 +1025,7 @@ class jaf_compiler ain =
           | _ -> self#write_instruction0 DUP2);
           self#compile_lvalue rhs;
           (match lhs.ty with
-          | Ref (Int | Bool | Float | LongInt | FuncType _) -> (
+          | _ when is_ref_scalar lhs.ty -> (
               (* NOTE: SDK compiler emits [DUP_U2; SP_INC; R_ASSIGN; POP; POP] here *)
               self#write_instruction0 R_ASSIGN;
               self#write_instruction0 POP;
