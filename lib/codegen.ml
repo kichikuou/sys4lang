@@ -239,7 +239,7 @@ class jaf_compiler ain =
 
     method compile_delete_var (v : Ain.Variable.t) =
       match v.value_type.data with
-      | Struct _ -> self#compile_local_delete v.index
+      | Struct _ -> self#write_instruction1 SH_LOCALDELETE v.index
       | Array _ ->
           self#compile_local_ref v.index;
           self#write_instruction0 A_FREE
@@ -296,13 +296,6 @@ class jaf_compiler ain =
       self#write_instruction0 DUP2;
       self#write_instruction0 REF;
       self#write_instruction0 DELETE
-
-    method compile_local_delete i =
-      self#compile_local_ref i;
-      self#compile_delete_ref;
-      self#write_instruction1 PUSH (-1);
-      self#write_instruction0 ASSIGN;
-      self#write_instruction0 POP
 
     (** Emit the code to put a location (variable, struct member, or array
       element) onto the stack, e.g. to prepare for an assignment or to pass
