@@ -78,6 +78,7 @@ let const_unary dst e int_op float_op =
 class const_eval_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
+    val mutable in_initval = false
 
     method eval_expression (expr : expression) =
       match expr.node with
@@ -129,7 +130,7 @@ class const_eval_visitor ctx =
           match op with
           | Plus ->
               const_binary expr a.node b.node (Some ( + )) (Some ( +. ))
-                (Some ( ^ ))
+                (if in_initval then Some ( ^ ) else None)
           | Minus ->
               const_binary expr a.node b.node (Some ( - )) (Some ( -. )) None
           | Times ->
@@ -169,7 +170,7 @@ class const_eval_visitor ctx =
               | ConstFloat f -> const_replace expr (ConstInt (Int.of_float f))
               | ConstChar _ -> () (* TODO? *)
               | _ -> ())
-          | Bool -> (
+          | Bool when in_initval -> (
               match e.node with
               | ConstInt i ->
                   const_replace expr (ConstInt (if i = 0 then 0 else 1))
@@ -209,7 +210,10 @@ class const_eval_visitor ctx =
       self#eval_expression expr
 
     method! visit_variable v =
+      in_initval <-
+        Option.is_some v.initval && (Poly.(v.kind <> LocalVar) || v.is_const);
       super#visit_variable v;
+      in_initval <- false;
       if v.is_const then
         match v.initval with
         | Some e -> (
