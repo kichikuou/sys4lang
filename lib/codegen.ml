@@ -850,7 +850,7 @@ class jaf_compiler ain =
       | Call (e, args, FuncTypeCall no) ->
           let compile_arg arg (var : Ain.Variable.t) =
             self#compile_argument arg var.value_type;
-            if var.value_type.is_ref then (
+            if is_ref_scalar (ain_to_jaf_type var.value_type) then (
               self#write_instruction0 DUP2_X1;
               self#write_instruction0 POP;
               self#write_instruction0 POP)
