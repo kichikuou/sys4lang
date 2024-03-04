@@ -899,12 +899,19 @@ class jaf_compiler ain =
             { node = ConstInt n; _ } )
         when not (self#get_local i).value_type.is_ref ->
           self#write_instruction2 SH_LOCALASSIGN i n
-      | Unary ((PreInc | PostInc), { node = Ident (_, LocalVariable i); _ })
+      | Unary
+          ( ((PreInc | PostInc | PreDec | PostDec) as op),
+            { node = Ident (_, LocalVariable i); _ } )
         when not (self#get_local i).value_type.is_ref ->
-          self#write_instruction1 SH_LOCALINC i
-      | Unary ((PreDec | PostDec), { node = Ident (_, LocalVariable i); _ })
-        when not (self#get_local i).value_type.is_ref ->
-          self#write_instruction1 SH_LOCALDEC i
+          self#write_instruction1
+            (match op with PreInc | PostInc -> SH_LOCALINC | _ -> SH_LOCALDEC)
+            i
+      | Unary (((PreInc | PreDec) as op), e) ->
+          self#compile_lvalue e;
+          self#write_instruction0 DUP2;
+          self#write_instruction0 (match op with PreInc -> INC | _ -> DEC);
+          self#write_instruction0 POP;
+          self#write_instruction0 POP
       | Seq (a, b) ->
           self#compile_expr_and_pop a;
           self#compile_expr_and_pop b
