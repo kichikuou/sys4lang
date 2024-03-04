@@ -886,6 +886,12 @@ class jaf_compiler ain =
             { node = ConstInt n; _ } )
         when not (self#get_local i).value_type.is_ref ->
           self#write_instruction2 SH_LOCALASSIGN i n
+      | Unary ((PreInc | PostInc), { node = Ident (_, LocalVariable i); _ })
+        when not (self#get_local i).value_type.is_ref ->
+          self#write_instruction1 SH_LOCALINC i
+      | Unary ((PreDec | PostDec), { node = Ident (_, LocalVariable i); _ })
+        when not (self#get_local i).value_type.is_ref ->
+          self#write_instruction1 SH_LOCALDEC i
       | Seq (a, b) ->
           self#compile_expr_and_pop a;
           self#compile_expr_and_pop b
