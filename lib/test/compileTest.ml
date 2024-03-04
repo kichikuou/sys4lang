@@ -414,3 +414,28 @@ let%expect_test "if-else" =
       068: FUNC NULL
       074: EOF
     |}]
+
+let%expect_test "logical-not" =
+  compile_test {|
+      void f() {
+        bool b;
+        b = !b;
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALASSIGN b, 0
+      016: PUSHLOCALPAGE
+      018: PUSH 0
+      024: SH_LOCALREF b
+      030: NOT
+      032: ITOB
+      034: ASSIGN
+      036: POP
+      038: RETURN
+      040: ENDFUNC f
+      046: EOF test.jaf
+      052: FUNC NULL
+      058: EOF
+    |}]

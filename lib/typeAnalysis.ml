@@ -349,7 +349,7 @@ class type_analyze_visitor ctx =
               expr.ty <- e.ty
           | LogNot | BitNot ->
               check Int e;
-              expr.ty <- e.ty
+              expr.ty <- Int
           | AddrOf -> (
               match e.ty with
               | TyFunction _ as f -> expr.ty <- Ref f
