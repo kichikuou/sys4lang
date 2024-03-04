@@ -375,24 +375,16 @@ let%expect_test "if" =
   [%expect
     {|
       000: FUNC f
-      006: PUSHLOCALPAGE
-      008: PUSH 0
-      014: PUSH 1
-      020: ASSIGN
-      022: POP
-      024: SH_LOCALREF i
-      030: IFZ 60
-      036: PUSHLOCALPAGE
-      038: PUSH 0
-      044: PUSH 2
-      050: ASSIGN
-      052: POP
-      054: JUMP 60
-      060: RETURN
-      062: ENDFUNC f
-      068: EOF test.jaf
-      074: FUNC NULL
-      080: EOF
+      006: SH_LOCALASSIGN i, 1
+      016: SH_LOCALREF i
+      022: IFZ 44
+      028: SH_LOCALASSIGN i, 2
+      038: JUMP 44
+      044: RETURN
+      046: ENDFUNC f
+      052: EOF test.jaf
+      058: FUNC NULL
+      064: EOF
     |}]
 
 let%expect_test "if-else" =
@@ -410,27 +402,15 @@ let%expect_test "if-else" =
   [%expect
     {|
       000: FUNC f
-      006: PUSHLOCALPAGE
-      008: PUSH 0
-      014: PUSH 1
-      020: ASSIGN
-      022: POP
-      024: SH_LOCALREF i
-      030: IFZ 60
-      036: PUSHLOCALPAGE
-      038: PUSH 0
-      044: PUSH 2
-      050: ASSIGN
-      052: POP
-      054: JUMP 78
-      060: PUSHLOCALPAGE
-      062: PUSH 0
-      068: PUSH 3
-      074: ASSIGN
-      076: POP
-      078: RETURN
-      080: ENDFUNC f
-      086: EOF test.jaf
-      092: FUNC NULL
-      098: EOF
+      006: SH_LOCALASSIGN i, 1
+      016: SH_LOCALREF i
+      022: IFZ 44
+      028: SH_LOCALASSIGN i, 2
+      038: JUMP 54
+      044: SH_LOCALASSIGN i, 3
+      054: RETURN
+      056: ENDFUNC f
+      062: EOF test.jaf
+      068: FUNC NULL
+      074: EOF
     |}]

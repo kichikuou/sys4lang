@@ -686,8 +686,7 @@ class jaf_compiler ain =
           | _, _ ->
               compiler_bug "invalid assignment" (Some (ASTExpression expr)))
       | Seq (a, b) ->
-          self#compile_expression a;
-          self#compile_pop a.ty;
+          self#compile_expr_and_pop a;
           self#compile_expression b
       | Ternary (test, con, alt) ->
           self#compile_expression test;
@@ -879,6 +878,21 @@ class jaf_compiler ain =
                 ("unimplemented: NULL rvalue of type " ^ jaf_type_to_string ty)
                 (Some (ASTExpression expr)))
 
+    method compile_expr_and_pop (expr : expression) =
+      match expr.node with
+      | Assign
+          ( EqAssign,
+            { node = Ident (_, LocalVariable i); _ },
+            { node = ConstInt n; _ } )
+        when not (self#get_local i).value_type.is_ref ->
+          self#write_instruction2 SH_LOCALASSIGN i n
+      | Seq (a, b) ->
+          self#compile_expr_and_pop a;
+          self#compile_expr_and_pop b
+      | _ ->
+          self#compile_expression expr;
+          self#compile_pop expr.ty
+
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
       state of the stack is unchanged after executing a statement. *)
     method compile_statement (stmt : statement) =
@@ -889,9 +903,7 @@ class jaf_compiler ain =
       | EmptyStatement -> ()
       | Declarations decls ->
           List.iter decls.vars ~f:self#compile_variable_declaration
-      | Expression e ->
-          self#compile_expression e;
-          self#compile_pop e.ty
+      | Expression e -> self#compile_expr_and_pop e
       | Compound stmts -> self#compile_block stmts
       | Label name -> self#scope_add_label name
       | If (test, con, alt) ->
@@ -952,11 +964,7 @@ class jaf_compiler ain =
           let loop_addr = current_address in
           self#start_loop loop_addr;
           (* self#set_continue_addr loop_addr; *)
-          (match inc with
-          | Some e ->
-              self#compile_expression e;
-              self#compile_pop e.ty
-          | None -> ());
+          Option.iter inc ~f:self#compile_expr_and_pop;
           self#write_instruction1 JUMP test_addr;
           (* loop body *)
           self#write_address_at body_addr current_address;
@@ -1116,13 +1124,12 @@ class jaf_compiler ain =
                       loc = dummy_location;
                     }
               in
-              self#compile_expression
+              self#compile_expr_and_pop
                 {
                   node = Assign (EqAssign, lhs, rhs);
                   ty = decl.type_spec.ty;
                   loc = decl.location;
-                };
-              self#compile_pop rhs.ty
+                }
           | Struct sno -> (
               (* FIXME: use verbose versions *)
               self#write_instruction1 SH_LOCALDELETE v.index;
