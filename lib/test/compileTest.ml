@@ -66,7 +66,7 @@ let compile_test input =
   try
     Compiler.compile ctx [ Pje.Jaf "test.jaf" ] (fun _ -> input);
     print_disassemble ctx.ain
-  with CompileError.CompileError e ->
+  with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> Some input)
 
 let%expect_test "empty function" =

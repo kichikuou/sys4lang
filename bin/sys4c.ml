@@ -30,7 +30,7 @@ let read_text_file input_encoding file =
 
 let handle_errors f (ctx : Jaf.context) =
   try f ctx with
-  | CompileError.CompileError e ->
+  | CompileError.Compile_error e ->
       CompileError.print_error e (fun file -> Hashtbl.find ctx.files file);
       exit 1
   | Sys_error msg ->

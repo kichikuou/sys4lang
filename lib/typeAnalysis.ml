@@ -165,7 +165,7 @@ class type_analyze_visitor ctx =
     method errors = List.rev errors
 
     method catch_errors f =
-      try f () with CompileError e -> errors <- e :: errors
+      try f () with Compile_error e -> errors <- e :: errors
 
     (* an lvalue is an expression which denotes a location that can be assigned to *)
     method check_lvalue (e : expression) (parent : ast_node) =

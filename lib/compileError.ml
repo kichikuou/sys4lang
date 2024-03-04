@@ -24,10 +24,10 @@ type compile_error =
   | Error of string * location
   | ErrorList of compile_error list
 
-exception CompileError of compile_error
+exception Compile_error of compile_error
 
-let raise msg loc = Base.raise (CompileError (Error (msg, loc)))
-let raise_list es = Base.raise (CompileError (ErrorList es))
+let raise msg loc = Base.raise (Compile_error (Error (msg, loc)))
+let raise_list es = Base.raise (Compile_error (ErrorList es))
 
 let syntax_error lexbuf =
   raise "Syntax error" (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf)

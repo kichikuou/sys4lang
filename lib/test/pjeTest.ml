@@ -24,7 +24,7 @@ let pje_load_test pje_name mock_read_file =
       | Pje.Jaf f -> Stdio.print_endline f
       | Pje.Hll (f, name) -> Stdio.printf "%s as %s\n" f name
       | _ -> failwith "unreachable")
-  with CompileError.CompileError e ->
+  with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> None)
 
 let%expect_test "simple" =
