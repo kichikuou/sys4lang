@@ -962,6 +962,15 @@ class jaf_compiler ain =
           (* loop end *)
           self#write_address_at break_addr current_address;
           self#end_loop
+      | For (decl, None, None, body) ->
+          (* loop init *)
+          self#compile_block [ decl ];
+          (* loop body *)
+          let loop_addr = current_address in
+          self#start_loop loop_addr;
+          self#compile_statement body;
+          self#write_instruction1 JUMP loop_addr;
+          self#end_loop
       | For (decl, test, inc, body) ->
           (* loop init *)
           self#compile_block [ decl ];

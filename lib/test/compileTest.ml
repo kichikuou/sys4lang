@@ -415,6 +415,90 @@ let%expect_test "if-else" =
       074: EOF
     |}]
 
+let%expect_test "for-loop" =
+  compile_test
+    {|
+      void f() {
+        int i;
+        for (i = 0; i < 10; i++) {
+          continue;
+          break;
+        }
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALASSIGN i, 0
+      016: SH_LOCALASSIGN i, 0
+      026: SH_LOCALREF i
+      032: PUSH 10
+      038: LT
+      040: IFZ 82
+      046: JUMP 64
+      052: SH_LOCALINC i
+      058: JUMP 26
+      064: JUMP 52
+      070: JUMP 82
+      076: JUMP 52
+      082: RETURN
+      084: ENDFUNC f
+      090: EOF test.jaf
+      096: FUNC NULL
+      102: EOF
+    |}]
+
+let%expect_test "for-inconly" =
+  compile_test
+    {|
+      void f() {
+        int i;
+        for (;; i++) {
+          continue;
+          break;
+        }
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALASSIGN i, 0
+      016: JUMP 34
+      022: SH_LOCALINC i
+      028: JUMP 16
+      034: JUMP 22
+      040: JUMP 52
+      046: JUMP 22
+      052: RETURN
+      054: ENDFUNC f
+      060: EOF test.jaf
+      066: FUNC NULL
+      072: EOF
+    |}]
+
+let%expect_test "forever" =
+  compile_test
+    {|
+      void f() {
+        for (;;) {
+          continue;
+          break;
+        }
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: JUMP 6
+      012: JUMP 24
+      018: JUMP 6
+      024: RETURN
+      026: ENDFUNC f
+      032: EOF test.jaf
+      038: FUNC NULL
+      044: EOF
+    |}]
+
 let%expect_test "logical-not" =
   compile_test {|
       void f() {
