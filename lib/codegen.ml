@@ -28,6 +28,10 @@ type scope = {
   mutable gotos : (string * int * statement) list;
 }
 
+let is_variable_ref = function
+  | Ident _ | Member (_, _, ClassVariable _) | Subscript _ -> true
+  | _ -> false
+
 class jaf_compiler ain =
   object (self)
     (* The function currently being compiled. *)
@@ -770,40 +774,41 @@ class jaf_compiler ain =
           let f = Builtin.function_of_syscall sys in
           self#compile_function_arguments args f;
           self#write_instruction1 CALLSYS f.index
-      (* built-in call *)
-      | Call (lhs, args, BuiltinCall builtin) -> (
+      (* built-in method call *)
+      | Call ({ node = Member (e, _, _); _ }, args, BuiltinCall builtin) -> (
           let receiver_ty = ref Void in
-          (match lhs with
-          | { node = Member (e, _, _); _ } -> (
-              match builtin with
-              | IntString | FloatString | StringInt | StringLength
-              | StringLengthByte | StringEmpty | StringFind | StringGetPart ->
-                  self#compile_expression e
-              | StringPushBack | StringPopBack | StringErase | DelegateSet
-              | DelegateAdd | DelegateNumof | DelegateExist | DelegateErase
-              | DelegateClear ->
-                  self#compile_lvalue e
-              | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
-              | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty
-              | ArrayErase | ArrayInsert | ArraySort ->
-                  receiver_ty := e.ty;
-                  self#compile_variable_ref e
-              | Assert ->
-                  compiler_bug "invalid assert expression"
-                    (Some (ASTExpression expr)))
-          | _ -> ());
+          (match builtin with
+          | (StringLength | StringLengthByte) when is_variable_ref e.node ->
+              self#compile_variable_ref e
+          | IntString | FloatString | StringInt | StringLength
+          | StringLengthByte | StringEmpty | StringFind | StringGetPart ->
+              self#compile_expression e
+          | StringPushBack | StringPopBack | StringErase | DelegateSet
+          | DelegateAdd | DelegateNumof | DelegateExist | DelegateErase
+          | DelegateClear ->
+              self#compile_lvalue e
+          | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
+          | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty | ArrayErase
+          | ArrayInsert | ArraySort ->
+              receiver_ty := e.ty;
+              self#compile_variable_ref e
+          | Assert ->
+              compiler_bug "invalid assert expression"
+                (Some (ASTExpression expr)));
           let f = Builtin.function_of_builtin builtin !receiver_ty in
           self#compile_function_arguments args f;
           match builtin with
-          | Assert -> self#write_instruction0 ASSERT
           | IntString -> self#write_instruction0 I_STRING
           | FloatString ->
               self#write_instruction1 PUSH 6;
               self#write_instruction0 ITOF
           | StringInt -> self#write_instruction0 STOI
-          (* FIXME: if `e` is an lvalue, can use S_LENGTH instead of S_LENGTH2, etc. *)
-          | StringLength -> self#write_instruction0 S_LENGTH2
-          | StringLengthByte -> self#write_instruction0 S_LENGTHBYTE2
+          | StringLength ->
+              self#write_instruction0
+                (if is_variable_ref e.node then S_LENGTH else S_LENGTH2)
+          | StringLengthByte ->
+              self#write_instruction0
+                (if is_variable_ref e.node then S_LENGTHBYTE else S_LENGTHBYTE2)
           | StringEmpty -> self#write_instruction0 S_EMPTY
           | StringFind -> self#write_instruction0 S_FIND
           | StringGetPart -> self#write_instruction0 S_GETPART
@@ -835,7 +840,19 @@ class jaf_compiler ain =
           | DelegateNumof -> self#write_instruction0 DG_NUMOF
           | DelegateExist -> self#write_instruction0 DG_EXIST
           | DelegateErase -> self#write_instruction0 DG_ERASE
-          | DelegateClear -> self#write_instruction0 DG_CLEAR)
+          | DelegateClear -> self#write_instruction0 DG_CLEAR
+          | Assert ->
+              compiler_bug "invalid built-in method call"
+                (Some (ASTExpression expr)))
+      (* built-in function call *)
+      | Call ({ node = Ident _; _ }, args, BuiltinCall builtin) -> (
+          let f = Builtin.function_of_builtin builtin Void in
+          self#compile_function_arguments args f;
+          match builtin with
+          | Assert -> self#write_instruction0 ASSERT
+          | _ ->
+              compiler_bug "invalid built-in function call"
+                (Some (ASTExpression expr)))
       (* functype call *)
       | Call (e, args, FuncTypeCall no) ->
           let compile_arg arg (var : Ain.Variable.t) =
