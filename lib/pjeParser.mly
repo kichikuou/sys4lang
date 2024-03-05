@@ -27,6 +27,7 @@ type toplevel =
   | KeyValue of (string * value)
   | Formation of string * string list
   | SyncFolder of (string * string) list
+  | HashDefine of (string * value)
 
 let to_unix_path = Base.String.tr ~target:'\\' ~replacement:'/'
 
@@ -55,6 +56,12 @@ let to_pje toplevels path =
     | KeyValue ("SyncLock", Bool v) -> pje.sync_lock <- v
     | KeyValue ("UpdateIDEPath", String v) -> pje.update_ide_path <- Some (to_unix_path v)
     | KeyValue (k, _) -> raise (KeyError k)
+    | HashDefine ("_AINVERSION", Int v) -> pje.ain_version <- v
+    | HashDefine ("_KEYCODE", Int v) -> pje.key_code <- v
+    | HashDefine ("_ISAI2FILE", Bool v) -> pje.is_ai2_file <- v
+    | HashDefine ("_USESMSG1", Bool v) -> pje.uses_msg1 <- v
+    | HashDefine ("_TARGETVM", Int v) -> pje.target_vm <- v
+    | HashDefine _ -> ()
   ) toplevels;
   pje
 
@@ -67,7 +74,7 @@ let to_pje toplevels path =
 /* punctuations */
 %token EQUAL LBRACE RBRACE COMMA ARROW
 /* keywords */
-%token FORMATION SYNCFOLDER DEFINE
+%token FORMATION SYNCFOLDER DEFINE HASH_DEFINE
 
 %token EOF
 
@@ -83,6 +90,7 @@ toplevel
   : IDENTIFIER EQUAL value { KeyValue ($1, $3) }
   | FORMATION S_CONSTANT LBRACE flexible_list(COMMA, formation_item) RBRACE { Formation ($2, $4) }
   | SYNCFOLDER EQUAL LBRACE flexible_list(COMMA, separated_pair(S_CONSTANT, ARROW, S_CONSTANT)) RBRACE { SyncFolder $4 }
+  | HASH_DEFINE IDENTIFIER value { HashDefine ($2, $3) }
 
 value
   : B_CONSTANT { Bool $1 }

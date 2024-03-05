@@ -22,6 +22,8 @@ exception Error
 }
 
 let d  = ['0'-'9']
+let h  = ['a'-'f' 'A'-'F' '0'-'9']
+let hp = '0' ['x' 'X']
 let l  = ['a'-'z' 'A'-'Z' '_']
 let a  = ['a'-'z' 'A'-'Z' '_' '0'-'9']
 let sc = [^ '\n' '"']
@@ -32,6 +34,7 @@ rule token = parse
   | "/*"                { block_comment lexbuf }
   | ['\n' ]             { Lexing.new_line lexbuf; token lexbuf }
   | d+ as n             { I_CONSTANT (Int.of_string n) }
+  | (hp h+) as n        { I_CONSTANT (Int.of_string n) }
   | '"' (sc* as s) '"'  { S_CONSTANT s }
   | "true"              { B_CONSTANT true }
   | "false"             { B_CONSTANT false }
@@ -43,6 +46,7 @@ rule token = parse
   | "Define"            { DEFINE }
   | "Formation"         { FORMATION }
   | "SyncFolder"        { SYNCFOLDER }
+  | "#define"           { HASH_DEFINE }
   | (l a*) as s         { IDENTIFIER s }
   | _                   { raise Error }
   | eof                 { EOF }

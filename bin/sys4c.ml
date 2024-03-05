@@ -28,10 +28,10 @@ let read_text_file input_encoding file =
   | "sjis" -> Sjis.to_utf8 content
   | _ -> failwith ("unsupported character encoding: " ^ input_encoding)
 
-let handle_errors f (ctx : Jaf.context) =
-  try f ctx with
+let handle_errors f get_content =
+  try f () with
   | CompileError.Compile_error e ->
-      CompileError.print_error e (fun file -> Hashtbl.find ctx.files file);
+      CompileError.print_error e get_content;
       exit 1
   | Sys_error msg ->
       Stdio.print_endline msg;
@@ -56,16 +56,22 @@ let do_compile sources output major minor import_as input_encoding =
           Pje.Hll (f, import_name)
         else Pje.Jaf f)
   in
+  let ctx = Jaf.context_from_ain (Ain.create major minor) in
   handle_errors
-    (fun ctx ->
+    (fun () ->
       Compiler.compile ctx sources (read_text_file input_encoding);
       Ain.write_file ctx.ain output)
-    (Jaf.context_from_ain (Ain.create major minor))
+    (fun file -> Hashtbl.find ctx.files file)
 
 let do_build pje_file input_encoding =
+  let pje =
+    handle_errors
+      (fun () -> Project.load_pje (read_text_file input_encoding) pje_file)
+      (fun _ -> None)
+  in
+  let ctx = Jaf.context_from_ain (Ain.create pje.ain_version 0) in
   handle_errors
-    (fun ctx ->
-      let pje = Project.load_pje (read_text_file input_encoding) pje_file in
+    (fun () ->
       let source_dir =
         Stdlib.Filename.(concat (dirname pje_file) pje.source_dir)
       in
@@ -76,7 +82,7 @@ let do_build pje_file input_encoding =
       let sources = Pje.collect_sources pje in
       Compiler.compile ctx sources read_file;
       Ain.write_file ctx.ain (Pje.ain_path pje))
-    (Jaf.context_from_ain (Ain.create 4 0))
+    (fun file -> Hashtbl.find ctx.files file)
 
 let cmd_compile_jaf =
   Command.basic ~summary:"Compile .jaf files"

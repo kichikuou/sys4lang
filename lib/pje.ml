@@ -42,6 +42,12 @@ type t = {
   mutable formations : formation list;
   mutable sync_lock : bool;
   mutable update_ide_path : string option;
+  (* AinDecompiler extensions *)
+  mutable ain_version : int;
+  mutable key_code : int;
+  mutable is_ai2_file : bool;
+  mutable uses_msg1 : bool;
+  mutable target_vm : int;
 }
 
 and source = Jaf of string | Hll of (string * string) | Include of t
@@ -69,6 +75,11 @@ let default_pje path =
     formations = [];
     sync_lock = false;
     update_ide_path = None;
+    ain_version = 4;
+    key_code = 0;
+    is_ai2_file = false;
+    uses_msg1 = false;
+    target_vm = 0;
   }
 
 let collect_sources pje =
