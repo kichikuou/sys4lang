@@ -56,24 +56,23 @@ class variable_alloc_visitor ctx =
     method end_scope kind =
       let scope = Stack.pop_exn scopes in
       (* resolve gotos *)
-      let rec update_gotos gotos unresolved =
-        match gotos with
-        | (({ node = Goto name; _ } as goto), goto_vars) :: rest -> (
-            match
-              List.find scope.labels ~f:(fun (label_name, _) ->
-                  String.equal name label_name)
-            with
-            | Some (_, label_vars) ->
-                (* variables which aren't in-scope at the target label should be deleted *)
-                goto.delete_vars <- Set.elements (Set.diff goto_vars label_vars);
-                update_gotos rest unresolved
-            | None -> update_gotos rest ((goto, goto_vars) :: unresolved))
-        | (stmt, _) :: _ ->
-            compiler_bug "Invalid statement in goto list"
-              (Some (ASTStatement stmt))
-        | [] -> unresolved
+      let unresolved =
+        List.filter scope.gotos ~f:(function
+          | ({ node = Goto name; _ } as goto), goto_vars -> (
+              match
+                List.find scope.labels ~f:(fun (label_name, _) ->
+                    String.equal name label_name)
+              with
+              | Some (_, label_vars) ->
+                  (* variables which aren't in-scope at the target label should be deleted *)
+                  goto.delete_vars <-
+                    Set.elements (Set.diff goto_vars label_vars);
+                  false
+              | None -> true)
+          | stmt, _ ->
+              compiler_bug "Invalid statement in goto list"
+                (Some (ASTStatement stmt)))
       in
-      let unresolved = update_gotos scope.gotos [] in
       (* unresolved gotos are moved to the parent scope *)
       (match (Stack.top scopes, unresolved) with
       | _, [] -> ()
@@ -166,7 +165,7 @@ class variable_alloc_visitor ctx =
     method create_dummy_var name ty =
       (* create dummy ref variable to store object for extent of statement *)
       let index = List.length vars in
-      vars <-
+      let v =
         {
           name = Printf.sprintf "<dummy : %s : %d>" name dummy_var_seqno;
           location = dummy_location;
@@ -178,7 +177,9 @@ class variable_alloc_visitor ctx =
           initval = None;
           index = Some index;
         }
-        :: vars;
+      in
+      environment#push_var v;
+      vars <- v :: vars;
       dummy_var_seqno <- dummy_var_seqno + 1;
       index
 

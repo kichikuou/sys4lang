@@ -61,20 +61,17 @@ class jaf_compiler ain =
     method end_scope =
       let scope = Stack.pop_exn scopes in
       (* update goto addresses *)
-      let rec update_gotos gotos unresolved =
-        match gotos with
-        | ((name, addr_loc, _) as goto) :: rest -> (
+      let unresolved =
+        List.filter scope.gotos ~f:(fun (name, addr_loc, _) ->
             match
               List.findi scope.labels ~f:(fun _ (label_name, _) ->
                   String.equal name label_name)
             with
             | Some (_, (_, addr)) ->
                 self#write_address_at addr_loc addr;
-                update_gotos rest unresolved
-            | None -> update_gotos rest (goto :: unresolved))
-        | [] -> unresolved
+                false
+            | None -> true)
       in
-      let unresolved = update_gotos scope.gotos [] in
       (* unresolved gotos are moved to parent scope *)
       (match (Stack.top scopes, unresolved) with
       | _, [] -> ()
@@ -89,7 +86,7 @@ class jaf_compiler ain =
                not be deleted here. *)
       match Stack.top scopes with
       | None -> ()
-      | Some _ -> List.iter (List.rev scope.vars) ~f:self#compile_delete_var
+      | Some _ -> List.iter scope.vars ~f:self#compile_delete_var
 
     (** Add a variable to the current scope. *)
     method scope_add_var v =
@@ -347,6 +344,7 @@ class jaf_compiler ain =
           compile_lvalue_after (jaf_to_ain_type e.ty)
       | New _ -> compiler_bug "bare new expression" (Some (ASTExpression e))
       | DummyRef (var_no, ref_expr) -> (
+          self#scope_add_var (self#get_local var_no);
           (* prepare for assign to dummy variable *)
           self#write_instruction0 PUSHLOCALPAGE;
           self#write_instruction1 PUSH var_no;
@@ -1108,11 +1106,9 @@ class jaf_compiler ain =
       Otherwise a default value is assigned. *)
     method compile_variable_declaration (decl : variable) =
       if decl.is_const then ()
-      else (
-        self#scope_add_var
-          (List.nth_exn (Option.value_exn current_function).vars
-             (Option.value_exn decl.index));
+      else
         let v = self#get_local (Option.value_exn decl.index) in
+        self#scope_add_var v;
         if v.value_type.is_ref then
           let lhs =
             {
@@ -1201,7 +1197,7 @@ class jaf_compiler ain =
           | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
           | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
           | IFaceWrap _ | Function _ | Method _ | NullType ->
-              compile_error "Unimplemented variable type" (ASTVariable decl))
+              compile_error "Unimplemented variable type" (ASTVariable decl)
 
     (** Emit the code for a block of statements. *)
     method compile_block (stmts : statement list) =
