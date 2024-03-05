@@ -160,6 +160,7 @@ and ast_expression =
   | This
   | Null
 
+let make_expr ?(ty = Untyped) ?(loc = dummy_location) node = { ty; node; loc }
 let clone_expr (e : expression) = { e with loc = e.loc }
 
 type statement = {

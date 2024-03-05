@@ -17,7 +17,6 @@
 open Base
 open Jaf
 
-let make_expr node = { ty = Untyped; node; loc = dummy_location }
 let make_stmt node = { node; delete_vars = []; loc = dummy_location }
 
 let array_alloc_stmt (v : variable) =

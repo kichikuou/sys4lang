@@ -310,11 +310,7 @@ class type_analyze_visitor ctx =
           | ResolvedMember (s, v) ->
               expr.node <-
                 Member
-                  ( {
-                      node = This;
-                      ty = Struct (s.name, s.index);
-                      loc = dummy_location;
-                    },
+                  ( make_expr ~ty:(Struct (s.name, s.index)) This,
                     name,
                     if v.is_const then ClassConst s.name
                     else ClassVariable (s.index, Option.value_exn v.index) );
@@ -323,11 +319,7 @@ class type_analyze_visitor ctx =
               let fun_name = mangled_name f in
               expr.node <-
                 Member
-                  ( {
-                      node = This;
-                      ty = Struct (s.name, s.index);
-                      loc = dummy_location;
-                    },
+                  ( make_expr ~ty:(Struct (s.name, s.index)) This,
                     name,
                     ClassMethod fun_name );
               expr.ty <- TyMethod (fun_name, Option.value_exn f.index)

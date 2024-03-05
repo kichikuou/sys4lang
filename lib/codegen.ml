@@ -1119,8 +1119,7 @@ class jaf_compiler ain =
           and rhs =
             match decl.initval with
             | Some e -> e
-            | None ->
-                { node = Null; ty = decl.type_spec.ty; loc = dummy_location }
+            | None -> make_expr ~ty:decl.type_spec.ty Null
           in
           self#compile_statement
             {
@@ -1149,11 +1148,7 @@ class jaf_compiler ain =
                       | FuncType _ | String -> Null
                       | _ -> failwith "unreachable"
                     in
-                    {
-                      node = value;
-                      ty = decl.type_spec.ty;
-                      loc = dummy_location;
-                    }
+                    make_expr ~ty:decl.type_spec.ty value
               in
               self#compile_expr_and_pop
                 {

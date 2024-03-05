@@ -25,9 +25,6 @@ open Jaf
 
 let implicit_void pos = { ty = Void; location = (pos, pos) }
 
-let expr loc ast =
-  { ty=Untyped; node=ast; loc }
-
 let stmt loc ast =
   { node=ast; delete_vars=[]; loc }
 
@@ -57,12 +54,11 @@ let vardecls kind is_const type_spec var_list =
   | true, Int ->
     (* If initval is omitted, set it to 0 (for the first constant) or the
        previous value + 1 (for subsequent constants). *)
-    let expr node = expr dummy_location node in
-    Base.List.folding_map vars ~init:(expr (ConstInt 0), 0) ~f:(fun (base, delta) v ->
+    Base.List.folding_map vars ~init:(make_expr (ConstInt 0), 0) ~f:(fun (base, delta) v ->
         match v.initval with
         | Some e -> ((e, 1), v)
         | None ->
-            let value = expr (Binary (Plus, base, expr (ConstInt delta))) in
+            let value = make_expr (Binary (Plus, base, make_expr (ConstInt delta))) in
             ((base, delta + 1), { v with initval = Some value }))
   | _ -> vars
 
@@ -150,11 +146,11 @@ hll
   ;
 
 primary_expression
-  : IDENTIFIER { expr $sloc (Ident ($1, UnresolvedIdent)) }
-  | THIS { expr $sloc This }
-  | NULL { expr $sloc Null }
-  | constant { expr $sloc $1 }
-  | string { expr $sloc $1 }
+  : IDENTIFIER { make_expr ~loc:$sloc (Ident ($1, UnresolvedIdent)) }
+  | THIS { make_expr ~loc:$sloc This }
+  | NULL { make_expr ~loc:$sloc Null }
+  | constant { make_expr ~loc:$sloc $1 }
+  | string { make_expr ~loc:$sloc $1 }
   | LPAREN expression RPAREN { {$2 with loc=$sloc} }
   ;
 
@@ -190,13 +186,13 @@ string
 
 postfix_expression
   : primary_expression { $1 }
-  | postfix_expression LBRACKET expression RBRACKET { expr $sloc (Subscript ($1, $3)) }
-  | primitive_type_specifier LPAREN expression RPAREN { expr $sloc (Cast ($1, $3)) }
-  | postfix_expression arglist { expr $sloc (Call ($1, $2, UnresolvedCall)) }
-  | NEW IDENTIFIER { expr $sloc (New { ty = Unresolved $2; location = $loc($2) }) }
-  | postfix_expression DOT IDENTIFIER { expr $sloc (Member ($1, $3, UnresolvedMember)) }
-  | postfix_expression INC { expr $sloc (Unary (PostInc, $1)) }
-  | postfix_expression DEC { expr $sloc (Unary (PostDec, $1)) }
+  | postfix_expression LBRACKET expression RBRACKET { make_expr ~loc:$sloc (Subscript ($1, $3)) }
+  | primitive_type_specifier LPAREN expression RPAREN { make_expr ~loc:$sloc (Cast ($1, $3)) }
+  | postfix_expression arglist { make_expr ~loc:$sloc (Call ($1, $2, UnresolvedCall)) }
+  | NEW IDENTIFIER { make_expr ~loc:$sloc (New { ty = Unresolved $2; location = $loc($2) }) }
+  | postfix_expression DOT IDENTIFIER { make_expr ~loc:$sloc (Member ($1, $3, UnresolvedMember)) }
+  | postfix_expression INC { make_expr ~loc:$sloc (Unary (PostInc, $1)) }
+  | postfix_expression DEC { make_expr ~loc:$sloc (Unary (PostDec, $1)) }
   ;
 
 arglist
@@ -205,9 +201,9 @@ arglist
 
 unary_expression
   : postfix_expression { $1 }
-  | INC unary_expression { expr $sloc (Unary (PreInc, $2)) }
-  | DEC unary_expression { expr $sloc (Unary (PreDec, $2)) }
-  | unary_operator cast_expression { expr $sloc (Unary ($1, $2)) }
+  | INC unary_expression { make_expr ~loc:$sloc (Unary (PreInc, $2)) }
+  | DEC unary_expression { make_expr ~loc:$sloc (Unary (PreDec, $2)) }
+  | unary_operator cast_expression { make_expr ~loc:$sloc (Unary ($1, $2)) }
   ;
 
 unary_operator
@@ -220,77 +216,77 @@ unary_operator
 
 cast_expression
   : unary_expression { $1 }
-  | LPAREN primitive_type_specifier RPAREN cast_expression { expr $sloc (Cast ($2, $4)) }
+  | LPAREN primitive_type_specifier RPAREN cast_expression { make_expr ~loc:$sloc (Cast ($2, $4)) }
   ;
 
 mul_expression
   : cast_expression { $1 }
-  | mul_expression TIMES cast_expression { expr $sloc (Binary (Times, $1, $3)) }
-  | mul_expression DIV cast_expression { expr $sloc (Binary (Divide, $1, $3)) }
-  | mul_expression MOD cast_expression { expr $sloc (Binary (Modulo, $1, $3)) }
+  | mul_expression TIMES cast_expression { make_expr ~loc:$sloc (Binary (Times, $1, $3)) }
+  | mul_expression DIV cast_expression { make_expr ~loc:$sloc (Binary (Divide, $1, $3)) }
+  | mul_expression MOD cast_expression { make_expr ~loc:$sloc (Binary (Modulo, $1, $3)) }
   ;
 
 add_expression
   : mul_expression { $1 }
-  | add_expression PLUS mul_expression { expr $sloc (Binary (Plus, $1, $3)) }
-  | add_expression MINUS mul_expression { expr $sloc (Binary (Minus, $1, $3)) }
+  | add_expression PLUS mul_expression { make_expr ~loc:$sloc (Binary (Plus, $1, $3)) }
+  | add_expression MINUS mul_expression { make_expr ~loc:$sloc (Binary (Minus, $1, $3)) }
   ;
 
 shift_expression
   : add_expression { $1 }
-  | shift_expression LSHIFT add_expression { expr $sloc (Binary (LShift, $1, $3)) }
-  | shift_expression RSHIFT add_expression { expr $sloc (Binary (RShift, $1, $3)) }
+  | shift_expression LSHIFT add_expression { make_expr ~loc:$sloc (Binary (LShift, $1, $3)) }
+  | shift_expression RSHIFT add_expression { make_expr ~loc:$sloc (Binary (RShift, $1, $3)) }
   ;
 
 rel_expression
   : shift_expression { $1 }
-  | rel_expression LT shift_expression { expr $sloc (Binary (LT, $1, $3)) }
-  | rel_expression GT shift_expression { expr $sloc (Binary (GT, $1, $3)) }
-  | rel_expression LTE shift_expression { expr $sloc (Binary (LTE, $1, $3)) }
-  | rel_expression GTE shift_expression { expr $sloc (Binary (GTE, $1, $3)) }
+  | rel_expression LT shift_expression { make_expr ~loc:$sloc (Binary (LT, $1, $3)) }
+  | rel_expression GT shift_expression { make_expr ~loc:$sloc (Binary (GT, $1, $3)) }
+  | rel_expression LTE shift_expression { make_expr ~loc:$sloc (Binary (LTE, $1, $3)) }
+  | rel_expression GTE shift_expression { make_expr ~loc:$sloc (Binary (GTE, $1, $3)) }
   ;
 
 eql_expression
   : rel_expression { $1 }
-  | eql_expression EQUAL rel_expression { expr $sloc (Binary (Equal, $1, $3)) }
-  | eql_expression NEQUAL rel_expression { expr $sloc (Binary (NEqual, $1, $3)) }
-  | eql_expression REF_EQUAL rel_expression { expr $sloc (Binary (RefEqual, $1, $3)) }
-  | eql_expression REF_NEQUAL rel_expression { expr $sloc (Binary (RefNEqual, $1, $3)) }
+  | eql_expression EQUAL rel_expression { make_expr ~loc:$sloc (Binary (Equal, $1, $3)) }
+  | eql_expression NEQUAL rel_expression { make_expr ~loc:$sloc (Binary (NEqual, $1, $3)) }
+  | eql_expression REF_EQUAL rel_expression { make_expr ~loc:$sloc (Binary (RefEqual, $1, $3)) }
+  | eql_expression REF_NEQUAL rel_expression { make_expr ~loc:$sloc (Binary (RefNEqual, $1, $3)) }
   ;
 
 and_expression
   : eql_expression { $1 }
-  | and_expression BITAND eql_expression { expr $sloc (Binary (BitAnd, $1, $3)) }
+  | and_expression BITAND eql_expression { make_expr ~loc:$sloc (Binary (BitAnd, $1, $3)) }
   ;
 
 xor_expression
   : and_expression { $1 }
-  | xor_expression BITXOR and_expression { expr $sloc (Binary (BitXor, $1, $3)) }
+  | xor_expression BITXOR and_expression { make_expr ~loc:$sloc (Binary (BitXor, $1, $3)) }
   ;
 
 ior_expression
   : xor_expression { $1 }
-  | ior_expression BITOR xor_expression { expr $sloc (Binary (BitOr, $1, $3)) }
+  | ior_expression BITOR xor_expression { make_expr ~loc:$sloc (Binary (BitOr, $1, $3)) }
   ;
 
 logand_expression
   : ior_expression { $1 }
-  | logand_expression AND ior_expression { expr $sloc (Binary (LogAnd, $1, $3)) }
+  | logand_expression AND ior_expression { make_expr ~loc:$sloc (Binary (LogAnd, $1, $3)) }
   ;
 
 logor_expression
   : logand_expression { $1 }
-  | logor_expression OR logand_expression { expr $sloc (Binary (LogOr, $1, $3)) }
+  | logor_expression OR logand_expression { make_expr ~loc:$sloc (Binary (LogOr, $1, $3)) }
   ;
 
 cond_expression
   : logor_expression { $1 }
-  | logor_expression QUESTION expression COLON cond_expression { expr $sloc (Ternary ($1, $3, $5)) }
+  | logor_expression QUESTION expression COLON cond_expression { make_expr ~loc:$sloc (Ternary ($1, $3, $5)) }
   ;
 
 assign_expression
   : cond_expression { $1 }
-  | unary_expression assign_operator assign_expression { expr $sloc (Assign ($2, $1, $3)) }
+  | unary_expression assign_operator assign_expression { make_expr ~loc:$sloc (Assign ($2, $1, $3)) }
   ;
 
 assign_operator
@@ -309,7 +305,7 @@ assign_operator
 
 expression
   : assign_expression { $1 }
-  | expression COMMA assign_expression { expr $sloc (Seq ($1, $3)) }
+  | expression COMMA assign_expression { make_expr ~loc:$sloc (Seq ($1, $3)) }
   ;
 
 constant_expression
@@ -426,10 +422,10 @@ objswap_statement
 assert_statement
   : ASSERT LPAREN expression RPAREN SEMICOLON
     { let args = [Some $3;
-                  Some (expr $loc($3) (ConstString (expr_to_string $3)));
-                  Some (expr $loc($1) (ConstString $startpos.Lexing.pos_fname));
-                  Some (expr $loc($1) (ConstInt $startpos.pos_lnum))] in
-      Expression (expr $sloc (Call (expr $loc($1) (Ident ("assert", UnresolvedIdent)), args, UnresolvedCall))) }
+                  Some (make_expr ~loc:$loc($3) (ConstString (expr_to_string $3)));
+                  Some (make_expr ~loc:$loc($1) (ConstString $startpos.Lexing.pos_fname));
+                  Some (make_expr ~loc:$loc($1) (ConstInt $startpos.pos_lnum))] in
+      Expression (make_expr ~loc:$sloc (Call (make_expr ~loc:$loc($1) (Ident ("assert", UnresolvedIdent)), args, UnresolvedCall))) }
 
 declaration
   : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
