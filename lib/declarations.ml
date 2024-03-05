@@ -24,6 +24,7 @@ open CompileError
 class type_declare_visitor ctx =
   object (self)
     inherit ivisitor ctx
+    val mutable gg_index = -1
 
     method declare_function decl =
       let name = mangled_name decl in
@@ -60,7 +61,12 @@ class type_declare_visitor ctx =
                     (ASTDeclaration decl)
               | `Ok ->
                   if not g.is_const then
-                    g.index <- Some (Ain.add_global ctx.ain g.name))
+                    g.index <- Some (Ain.add_global ctx.ain g.name gg_index))
+      | GlobalGroup gg ->
+          gg_index <- Ain.add_global_group ctx.ain gg.name;
+          List.iter gg.vardecls ~f:(fun ds ->
+              self#visit_declaration (Global ds));
+          gg_index <- -1
       | Function f ->
           (match f.class_name with
           | Some name ->
@@ -199,7 +205,9 @@ class type_resolve_visitor ctx decl_only =
           | Some name ->
               f.class_index <- Some (Hashtbl.find_exn ctx.structs name).index
           | _ -> ())
-      | FuncTypeDef _ | DelegateDef _ | Global _ | StructDef _ -> ()
+      | FuncTypeDef _ | DelegateDef _ | Global _ | GlobalGroup _ | StructDef _
+        ->
+          ()
       | Enum _ ->
           compile_error "enum types not yet supported" (ASTDeclaration decl));
       if not decl_only then super#visit_declaration decl
@@ -212,7 +220,7 @@ let resolve_types ctx decls decl_only =
  * AST pass over top-level declarations to define function/struct types.
  *)
 class type_define_visitor ctx =
-  object
+  object (self)
     inherit ivisitor ctx
 
     method! visit_declaration decl =
@@ -222,6 +230,9 @@ class type_define_visitor ctx =
               if not g.is_const then
                 Ain.set_global_type ctx.ain g.name
                   (jaf_to_ain_type g.type_spec.ty))
+      | GlobalGroup gg ->
+          List.iter gg.vardecls ~f:(fun ds ->
+              self#visit_declaration (Global ds))
       | Function f ->
           let obj =
             Ain.get_function_by_index ctx.ain (Option.value_exn f.index)

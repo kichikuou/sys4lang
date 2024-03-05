@@ -122,7 +122,7 @@ let rec multidim_array dims t =
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN JUMP JUMPS ASSERT
 %token CONST REF ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
-%token FILE_MACRO LINE_MACRO DATE_MACRO TIME_MACRO
+%token FILE_MACRO LINE_MACRO DATE_MACRO TIME_MACRO GLOBALGROUP
 
 %token EOF
 
@@ -474,7 +474,13 @@ external_declaration
     { Enum ({ loc=$sloc; name=None; values=$2 }) }
   | ENUM IDENTIFIER enumerator_list SEMICOLON
     { Enum ({ loc=$sloc; name=Some $2; values=$3 }) }
-  ;
+  | GLOBALGROUP IDENTIFIER SEMICOLON
+    { GlobalGroup { name = $2; loc = $loc; vardecls = [] } }
+  | GLOBALGROUP IDENTIFIER LBRACE declaration* RBRACE
+    {
+      let update_decls ds = { ds with vars = (List.map (fun d -> { d with kind = GlobalVar }) ds.vars) } in
+      GlobalGroup { name = $2; loc = $loc; vardecls = List.map update_decls $4 }
+    }
 
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list(declarator) SEMICOLON

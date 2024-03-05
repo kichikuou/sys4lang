@@ -1250,7 +1250,7 @@ class jaf_compiler ain =
       current_address <- start_address;
       let compile_decl = function
         | Jaf.Function f -> self#compile_function f
-        | Global _ | FuncTypeDef _ | DelegateDef _ -> ()
+        | Global _ | GlobalGroup _ | FuncTypeDef _ | DelegateDef _ -> ()
         | StructDef d ->
             let compile_struct_decl (d : struct_declaration) =
               match d with

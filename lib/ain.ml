@@ -1407,12 +1407,22 @@ let write_new_global ain (v : Variable.t) =
   ain.globals <- Array.append ain.globals [| g |];
   index
 
-let add_global ain name =
+let add_global ain name group_index =
   let index = Array.length ain.globals in
   let variable = Variable.make ~index name (Type.make Void) in
-  let g = Global.create variable (-1) in
+  let g = Global.create variable group_index in
   ain.globals <- Array.append ain.globals [| g |];
   index
+
+let add_global_group ain name =
+  match
+    Array.findi ain.global_group_names ~f:(fun _ n -> String.equal n name)
+  with
+  | Some (i, _) -> i
+  | None ->
+      let index = Array.length ain.global_group_names in
+      ain.global_group_names <- Array.append ain.global_group_names [| name |];
+      index
 
 (* functions *)
 

@@ -268,9 +268,12 @@ type enumdecl = {
   values : (string * expression option) list;
 }
 
+type global_group = { name : string; loc : location; vardecls : vardecls list }
+
 type declaration =
   | Function of fundecl
   | Global of vardecls
+  | GlobalGroup of global_group
   | FuncTypeDef of fundecl
   | DelegateDef of fundecl
   | StructDef of structdecl
@@ -292,6 +295,7 @@ let ast_node_pos = function
       match d with
       | Function f -> f.loc
       | Global d -> d.decl_loc
+      | GlobalGroup gg -> gg.loc
       | FuncTypeDef f -> f.loc
       | DelegateDef f -> f.loc
       | StructDef s -> s.loc
@@ -534,6 +538,7 @@ class ivisitor ctx =
     method visit_declaration d =
       match d with
       | Global ds -> self#visit_vardecls ds
+      | GlobalGroup gg -> List.iter gg.vardecls ~f:self#visit_vardecls
       | Function f | FuncTypeDef f | DelegateDef f -> self#visit_fundecl f
       | StructDef s -> List.iter s.decls ~f:self#visit_struct_declaration
       | Enum enum ->
@@ -760,6 +765,11 @@ let sdecl_to_string = function
 let decl_to_string d =
   match d with
   | Global ds -> vardecls_to_string ds
+  | GlobalGroup gg ->
+      let body =
+        List.fold (List.map gg.vardecls ~f:vardecls_to_string) ~init:"" ~f:( ^ )
+      in
+      sprintf "globalgroup %s { %s }" gg.name body
   | Function d ->
       let return = jaf_type_to_string d.return.ty in
       let params = params_to_string d.params in
