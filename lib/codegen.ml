@@ -817,10 +817,7 @@ class jaf_compiler ain =
               self#write_instruction1 PUSH 1;
               self#write_instruction0 A_REALLOC
           | ArrayFree -> self#write_instruction0 A_FREE
-          | ArrayNumof ->
-              (* FIXME: this built-in should accept an optional argument *)
-              self#write_instruction1 PUSH 1;
-              self#write_instruction0 A_NUMOF
+          | ArrayNumof -> self#write_instruction0 A_NUMOF
           | ArrayCopy -> self#write_instruction0 A_COPY
           | ArrayFill -> self#write_instruction0 A_FILL
           | ArrayPushBack -> self#write_instruction0 A_PUSHBACK

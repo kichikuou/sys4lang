@@ -49,10 +49,12 @@ int main()
 	array@int a4[10];
 	assert(a4.Numof() == 10);
 	a4.PushBack(1);
-	assert(a4.Numof() == 11);
+	assert(a4.Numof(1) == 11);
 	// a4.PushBack("s");  // type error
 
 	array@int@2 a[1][2];
+	assert(a.Numof(1) == 1);
+	assert(a.Numof(2) == 2);
 	a[0][1] = 1;
 	assert(a[0][1] == 1);
 	a.Alloc(2, 3);
@@ -62,7 +64,7 @@ int main()
 	WithoutCtor o1;
 	assert(o1.a.Numof() == 3);
 	WithCtor o2;
-	assert(o2.a.Numof() == 4);
+	assert(o2.a.Numof(1) == 4);
 
 	return 0;
 }

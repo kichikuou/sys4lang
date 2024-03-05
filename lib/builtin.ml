@@ -18,8 +18,13 @@ open Base
 open Bytecode
 open Jaf
 
-let make_params (types : jaf_type list) =
-  List.mapi types ~f:(fun i t ->
+let make_params (types : jaf_type list) defaults =
+  let defaults =
+    match defaults with
+    | [] -> List.map types ~f:(fun _ -> None)
+    | _ -> defaults
+  in
+  List.mapi (List.zip_exn types defaults) ~f:(fun i (t, initval) ->
       {
         name = "";
         location = dummy_location;
@@ -28,7 +33,7 @@ let make_params (types : jaf_type list) =
         is_private = false;
         kind = Parameter;
         type_spec = { ty = t; location = dummy_location };
-        initval = None;
+        initval;
         index = Some i;
       })
 
@@ -38,7 +43,7 @@ let fundecl_of_syscall sys =
       name = string_of_syscall sys;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
-      params = make_params arg_types;
+      params = make_params arg_types [];
       body = None;
       is_label = false;
       is_private = false;
@@ -80,18 +85,15 @@ let fundecl_of_syscall sys =
 
 let fundecl_of_builtin builtin receiver_ty =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
-  let rec alloc_params = function
-    | Array t -> Int :: alloc_params t
-    | _ -> []
-  in
+  let rank = array_rank receiver_ty in
   let t_func = Ref (TyFunction ("", 0)) in
   let t_method = Ref (TyMethod ("", 0)) in
-  let make return_type name (arg_types : jaf_type list) =
+  let make return_type name ?(defaults = []) (arg_types : jaf_type list) =
     {
       name;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
-      params = make_params arg_types;
+      params = make_params arg_types defaults;
       body = None;
       is_label = false;
       is_private = false;
@@ -113,10 +115,13 @@ let fundecl_of_builtin builtin receiver_ty =
   | StringPushBack -> make Void "PushBack" [ Int ]
   | StringPopBack -> make Void "PopBack" []
   | StringErase -> make Void "Erase" [ Int ]
-  | ArrayAlloc -> make Void "Alloc" (alloc_params receiver_ty)
+  | ArrayAlloc -> make Void "Alloc" (List.init rank ~f:(fun _ -> Int))
   | ArrayRealloc -> make Void "Realloc" [ Int ]
   | ArrayFree -> make Void "Free" []
-  | ArrayNumof -> make Int "Numof" []
+  | ArrayNumof ->
+      make Int "Numof" [ Int ]
+        ~defaults:
+          (if rank = 1 then [ Some (make_expr ~ty:Int (ConstInt 1)) ] else [])
   | ArrayCopy -> make Int "Copy" [ Int; Ref receiver_ty; Int; Int ]
   | ArrayFill -> make Int "Fill" [ Int; Int; elem_ty ]
   | ArrayPushBack -> make Void "PushBack" [ elem_ty ]

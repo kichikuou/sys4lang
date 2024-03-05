@@ -179,6 +179,10 @@ let%expect_test "default parameter" =
         f(, 2);  // missing argument
         f(1, 2, 3);  // arity error
         f(1, 2,);  // arity error
+        array@int a1;
+        array@int@2 a2;
+        a1.Numof();  // ok
+        a2.Numof();  // arity error
       }
     |};
   [%expect
@@ -197,7 +201,10 @@ let%expect_test "default parameter" =
                       ^^^^^^^^^^
       -:12:9-17: Wrong number of arguments to function f (expected 2; got 3)
          12 |         f(1, 2,);  // arity error
-                      ^^^^^^^^ |}]
+                      ^^^^^^^^
+      -:16:9-19: Wrong number of arguments to function Numof (expected 1; got 0)
+         16 |         a2.Numof();  // arity error
+                      ^^^^^^^^^^ |}]
 
 let%expect_test "non-constant default parameter" =
   type_test

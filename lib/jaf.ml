@@ -101,6 +101,8 @@ let is_ref_scalar = function
   | Ref (Int | Bool | Float | LongInt | FuncType _) -> true
   | _ -> false
 
+let rec array_rank = function Array t -> 1 + array_rank t | _ -> 0
+
 type type_specifier = { mutable ty : jaf_type; location : location }
 
 type ident_type =

@@ -696,17 +696,13 @@ class type_analyze_visitor ctx =
 
     method! visit_variable var =
       super#visit_variable var;
-      let rec calculate_array_rank (t : jaf_type) =
-        match t with Array sub_t -> 1 + calculate_array_rank sub_t | _ -> 0
-      in
-      let rank = calculate_array_rank var.type_spec.ty in
       let nr_dims = List.length var.array_dim in
       (* Check that there is no initializer if array has explicit dimensions *)
       if nr_dims > 0 && Option.is_some var.initval then
         compile_error "Initializer provided for array with explicit dimensions"
           (ASTVariable var);
       (* Check that number of dims matches rank of array *)
-      if nr_dims > 0 && not (nr_dims = rank) then
+      if nr_dims > 0 && not (nr_dims = array_rank var.type_spec.ty) then
         compile_error "Number of array dimensions does not match array rank"
           (ASTVariable var);
       (* Check that array dims are integers *)
