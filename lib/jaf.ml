@@ -468,8 +468,8 @@ class ivisitor ctx =
     method visit_vardecls (ds : vardecls) =
       self#visit_type_specifier ds.typespec;
       List.iter ds.vars ~f:(fun v ->
-          self#visit_variable v;
-          match v.kind with LocalVar -> environment#push_var v | _ -> ())
+          (match v.kind with LocalVar -> environment#push_var v | _ -> ());
+          self#visit_variable v)
 
     method visit_statement (s : statement) =
       match s.node with

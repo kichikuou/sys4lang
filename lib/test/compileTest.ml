@@ -525,3 +525,25 @@ let%expect_test "logical-not" =
       052: FUNC NULL
       058: EOF
     |}]
+
+let%expect_test "self reference in initval" =
+  compile_test {|
+      void f() {
+        string s = s = "a";
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALREF s
+      012: SH_LOCALREF s
+      018: S_PUSH "a"
+      024: S_ASSIGN
+      026: S_ASSIGN
+      028: S_POP
+      030: RETURN
+      032: ENDFUNC f
+      038: EOF test.jaf
+      044: FUNC NULL
+      050: EOF
+    |}]
