@@ -109,13 +109,17 @@ let type_check_numeric parent (actual : expression) =
       compiler_bug "tried to type check untyped expression" (Some parent)
   | _ -> type_error Int (Some actual) parent
 
-let type_check_struct parent (actual : expression) =
-  maybe_deref actual;
+let type_check_member_lhs parent (actual : expression) =
   match actual.ty with
-  | Struct (name, _) -> name
+  | Ref (Struct (name, _)) -> name
+  | Struct (name, _) -> (
+      match actual.node with
+      | Ident _ | Member _ | Subscript _ | This -> name
+      | _ ->
+          compile_error "Member access not allowed for temporary object" parent)
   | Untyped ->
       compiler_bug "tried to type check untyped expression" (Some parent)
-  | _ -> type_error (Struct ("", 0)) (Some actual) parent
+  | _ -> type_error (Struct ("struct", 0)) (Some actual) parent
 
 let is_builtin = function
   | Int | Float | String | Array _ | Delegate _ -> true
@@ -255,7 +259,7 @@ class type_analyze_visitor ctx =
       let check = type_check (ASTExpression expr) in
       let check_numeric = type_check_numeric (ASTExpression expr) in
       let coerce_numerics = type_coerce_numerics (ASTExpression expr) in
-      let check_struct = type_check_struct (ASTExpression expr) in
+      let check_member_lhs = type_check_member_lhs (ASTExpression expr) in
       let check_expr (a : expression) b = check a.ty b in
       (* check function call arguments *)
       let check_call name params args =
@@ -498,7 +502,7 @@ class type_analyze_visitor ctx =
               undefined_variable_error name (ASTExpression expr))
       (* member variable OR method *)
       | Member (obj, member_name, _) -> (
-          let struc = Hashtbl.find_exn ctx.structs (check_struct obj) in
+          let struc = Hashtbl.find_exn ctx.structs (check_member_lhs obj) in
           let access_check () =
             match environment#current_class with
             | Some (Struct (_, i)) when i = struc.index -> ()

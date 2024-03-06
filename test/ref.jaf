@@ -24,6 +24,18 @@ ref int ref_int()
 	return NULL;
 }
 
+class C {
+public:
+	C() { n = 42; }
+	int get() { return n; }
+	int n;
+};
+
+ref C new_C()
+{
+	return new C;
+}
+
 int main()
 {
 	int i;
@@ -74,6 +86,9 @@ int main()
 	assert(obj.a === NULL);
 
 	ref S rs = new S;
+
+	assert(new_C().get() == 42);
+	assert(new_C().n == 42);
 
 	return 0;
 }

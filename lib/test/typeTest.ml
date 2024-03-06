@@ -328,6 +328,29 @@ let%expect_test "private members" =
        14 |         c.priv_memb;    // error
                     ^^^^^^^^^^^ |}]
 
+let%expect_test "Member access for temporary object" =
+  type_test
+    {|
+      class C {
+      public:
+        int n;
+        void f() {}
+      };
+      C get_C() { C c; return c; }
+      void test() {
+        get_C().n;
+        get_C().f();
+      }
+    |};
+  [%expect
+    {|
+      -:9:9-18: Member access not allowed for temporary object
+          9 |         get_C().n;
+                      ^^^^^^^^^
+      -:10:9-18: Member access not allowed for temporary object
+         10 |         get_C().f();
+                      ^^^^^^^^^ |}]
+
 let%expect_test "RefAssign operator" =
   type_test
     {|
