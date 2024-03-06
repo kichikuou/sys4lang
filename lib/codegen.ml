@@ -376,19 +376,19 @@ class jaf_compiler ain =
             (Some (ASTExpression e))
 
     (** Emit the code to pop a value off the stack. *)
-    method compile_pop (t : jaf_type) =
+    method compile_pop (t : jaf_type) parent =
       match t with
       | Void -> ()
-      | Int | Float | Bool | LongInt | FuncType _ | Ref (TyFunction _) ->
+      | Int | Float | Bool | LongInt | FuncType _ | Ref _ ->
           self#write_instruction0 POP
       | String -> self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
-      | Ref _ | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc
-      | TyFunction _ | TyMethod _ | NullType | Untyped | Unresolved _ ->
+      | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | TyFunction _
+      | TyMethod _ | NullType | Untyped | Unresolved _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
-            None
+            (Some parent)
 
     method compile_argument (expr : expression option) (t : Ain.Type.t) =
       match expr with
@@ -873,9 +873,7 @@ class jaf_compiler ain =
       | Call (_, _, _) ->
           compiler_bug "invalid call expression" (Some (ASTExpression expr))
       | New _ -> compiler_bug "bare new expression" (Some (ASTExpression expr))
-      | DummyRef _ ->
-          self#compile_lvalue expr;
-          self#write_instruction0 A_REF
+      | DummyRef _ -> self#compile_lvalue expr
       | This -> self#write_instruction0 PUSHSTRUCTPAGE
       | Null -> (
           match expr.ty with
@@ -912,7 +910,7 @@ class jaf_compiler ain =
           self#compile_expr_and_pop b
       | _ ->
           self#compile_expression expr;
-          self#compile_pop expr.ty
+          self#compile_pop expr.ty (ASTExpression expr)
 
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
       state of the stack is unchanged after executing a statement. *)
@@ -1168,7 +1166,7 @@ class jaf_compiler ain =
                   self#compile_expression e;
                   self#write_instruction1 PUSH sno;
                   self#write_instruction0 SR_ASSIGN;
-                  self#compile_pop decl.type_spec.ty
+                  self#compile_pop decl.type_spec.ty (ASTVariable decl)
               | None -> ())
           | Array _ ->
               let has_dims = List.length decl.array_dim > 0 in

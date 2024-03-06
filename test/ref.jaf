@@ -87,6 +87,7 @@ int main()
 
 	ref S rs = new S;
 
+	new_C();
 	assert(new_C().get() == 42);
 	assert(new_C().n == 42);
 
