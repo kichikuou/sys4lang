@@ -783,7 +783,7 @@ class jaf_compiler ain =
               self#compile_lvalue e
           | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
           | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty | ArrayErase
-          | ArrayInsert | ArraySort ->
+          | ArrayInsert | ArraySort | ArrayReverse | ArrayFind ->
               receiver_ty := e.ty;
               self#compile_variable_ref e
           | Assert ->
@@ -826,6 +826,8 @@ class jaf_compiler ain =
           | ArrayErase -> self#write_instruction0 A_ERASE
           | ArrayInsert -> self#write_instruction0 A_INSERT
           | ArraySort -> self#write_instruction0 A_SORT
+          | ArrayReverse -> self#write_instruction0 A_REVERSE
+          | ArrayFind -> self#write_instruction0 A_FIND
           | DelegateSet -> self#write_instruction0 DG_SET
           | DelegateAdd -> self#write_instruction0 DG_ADD
           | DelegateNumof -> self#write_instruction0 DG_NUMOF

@@ -135,17 +135,33 @@ let fundecl_of_builtin builtin receiver_ty node_opt =
   | ArrayEmpty -> make Int "Empty" []
   | ArrayErase -> make Int "Erase" [ Int ]
   | ArrayInsert -> make Void "Insert" [ Int; elem_ty ]
+  | ArrayReverse -> make Void "Reverse" []
   | ArraySort ->
-      let cb_argtype, defaults =
+      let cb_argtype, cb_default =
         match elem_ty with
-        | Int | Float | String -> (elem_ty, [ Some addr_null ])
-        | Struct _ -> (Ref elem_ty, [ None ])
+        | Int | Float | String -> (elem_ty, Some addr_null)
+        | Struct _ -> (Ref elem_ty, None)
         | _ ->
             CompileError.compile_error
               ("Sort() is not supported for array@" ^ jaf_type_to_string elem_ty)
               (Option.value_exn node_opt)
       in
-      make Void "Sort" [ Callback ([ cb_argtype; cb_argtype ], Int) ] ~defaults
+      make Void "Sort"
+        [ Callback ([ cb_argtype; cb_argtype ], Int) ]
+        ~defaults:[ cb_default ]
+  | ArrayFind ->
+      let cb_argtype, cb_default =
+        match elem_ty with
+        | Int | Float | String -> (elem_ty, Some addr_null)
+        | Struct _ -> (Ref elem_ty, None)
+        | _ ->
+            CompileError.compile_error
+              ("Find() is not supported for array@" ^ jaf_type_to_string elem_ty)
+              (Option.value_exn node_opt)
+      in
+      make Int "Find"
+        [ Int; Int; cb_argtype; Callback ([ cb_argtype; cb_argtype ], Bool) ]
+        ~defaults:[ None; None; None; cb_default ]
   | DelegateSet -> make Void "Set" [ t_method ]
   | DelegateAdd -> make Void "Add" [ t_method ]
   | DelegateNumof -> make Int "Numof" []

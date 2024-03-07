@@ -67,6 +67,7 @@ int main()
 	assert(o2.a.Numof(1) == 4);
 
 	test_sort();
+	test_find();
 
 	return 0;
 }
@@ -109,4 +110,25 @@ int int_compare_rev(int a, int b)
 int S_compare(ref S a, ref S b)
 {
 	return a.a - b.a;
+}
+
+void test_find()
+{
+	array@int ai[3];
+	ai[0] = 3;
+	ai[1] = 4;
+	ai[2] = 5;
+	assert(ai.Find(0, ai.Numof(), 4) == 1);
+	array@S as[3];
+	as[0].a = 3;
+	as[1].a = 4;
+	as[2].a = 5;
+	S s;
+	s.a = 4;
+	assert(as.Find(0, as.Numof(), s, &S_match) == 1);
+}
+
+bool S_match(ref S a, ref S b)
+{
+	return a.a == b.a;
 }
