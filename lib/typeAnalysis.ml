@@ -63,7 +63,8 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | HLLFunc, _
   | TyFunction _, _
   | TyMethod _, _
-  | NullType, _ ->
+  | NullType, _
+  | Callback _, _ ->
       false
   | Untyped, _ -> compiler_bug "expected type is untyped" None
   | Unresolved _, _ -> compiler_bug "expected type is unresolved" None
@@ -226,6 +227,14 @@ class type_analyze_visitor ctx =
           | NullType -> rhs.ty <- t
           | _ -> type_error (Ref (TyFunction ("", -1))) (Some rhs) parent)
       | Delegate (dn, di) -> self#check_delegate_compatible parent dn di rhs
+      | Callback (args, ret) -> (
+          match rhs.ty with
+          | Ref (TyFunction (f_name, _)) ->
+              let cb = Builtin.fundecl_of_callback args ret in
+              let f = Hashtbl.find_exn ctx.functions f_name in
+              if not (fundecl_compatible cb f) then
+                type_error t (Some rhs) parent
+          | _ -> type_error t (Some rhs) parent)
       | Int | LongInt | Bool | Float ->
           type_check_numeric parent rhs;
           insert_cast t rhs
@@ -545,7 +554,9 @@ class type_analyze_visitor ctx =
       (* built-in function call *)
       | Call (({ node = Ident (_, BuiltinFunction builtin); _ } as e), args, _)
         ->
-          let f = Builtin.fundecl_of_builtin builtin Void in
+          let f =
+            Builtin.fundecl_of_builtin builtin Void (Some (ASTExpression expr))
+          in
           let args = check_call f.name f.params args in
           expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
@@ -587,7 +598,10 @@ class type_analyze_visitor ctx =
       | Call
           (({ node = Member (obj, _, BuiltinMethod builtin); _ } as e), args, _)
         ->
-          let f = Builtin.fundecl_of_builtin builtin obj.ty in
+          let f =
+            Builtin.fundecl_of_builtin builtin obj.ty
+              (Some (ASTExpression expr))
+          in
           let args = check_call f.name f.params args in
           expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty

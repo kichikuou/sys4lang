@@ -15,6 +15,10 @@
  *)
 
 val fundecl_of_syscall : Bytecode.syscall -> Jaf.fundecl
-val fundecl_of_builtin : Bytecode.builtin -> Jaf.jaf_type -> Jaf.fundecl
+
+val fundecl_of_builtin :
+  Bytecode.builtin -> Jaf.jaf_type -> Jaf.ast_node option -> Jaf.fundecl
+
 val function_of_syscall : Bytecode.syscall -> Ain.Function.t
 val function_of_builtin : Bytecode.builtin -> Jaf.jaf_type -> Ain.Function.t
+val fundecl_of_callback : Jaf.jaf_type list -> Jaf.jaf_type -> Jaf.fundecl

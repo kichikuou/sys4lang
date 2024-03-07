@@ -91,7 +91,8 @@ let rec print_error err get_source_text =
       | None -> ()
       | Some src ->
           let lines = String.split_lines src in
-          if s.pos_lnum = e.pos_lnum then (
+          if s.pos_lnum <= 0 then ()
+          else if s.pos_lnum = e.pos_lnum then (
             let line = List.nth_exn lines (s.pos_lnum - 1) in
             printf "%5d | %s\n        " s.pos_lnum (detab line);
             print_underline ' '

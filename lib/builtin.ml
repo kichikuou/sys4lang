@@ -83,10 +83,16 @@ let fundecl_of_syscall sys =
   | ExistFunc -> make Bool [ String ]
   | CopySaveFile -> make Int [ String; String ]
 
-let fundecl_of_builtin builtin receiver_ty =
+(* `&NULL` expression (used as default value for callback functions) *)
+let addr_null =
+  let null_func =
+    make_expr ~ty:(TyFunction ("NULL", 0)) (Ident ("NULL", FunctionName "NULL"))
+  in
+  make_expr ~ty:(Ref null_func.ty) (Unary (AddrOf, null_func))
+
+let fundecl_of_builtin builtin receiver_ty node_opt =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
   let rank = array_rank receiver_ty in
-  let t_func = Ref (TyFunction ("", 0)) in
   let t_method = Ref (TyMethod ("", 0)) in
   let make return_type name ?(defaults = []) (arg_types : jaf_type list) =
     {
@@ -129,7 +135,17 @@ let fundecl_of_builtin builtin receiver_ty =
   | ArrayEmpty -> make Int "Empty" []
   | ArrayErase -> make Int "Erase" [ Int ]
   | ArrayInsert -> make Void "Insert" [ Int; elem_ty ]
-  | ArraySort -> make Void "Sort" [ t_func ]
+  | ArraySort ->
+      let cb_argtype, defaults =
+        match elem_ty with
+        | Int | Float | String -> (elem_ty, [ Some addr_null ])
+        | Struct _ -> (Ref elem_ty, [ None ])
+        | _ ->
+            CompileError.compile_error
+              ("Sort() is not supported for array@" ^ jaf_type_to_string elem_ty)
+              (Option.value_exn node_opt)
+      in
+      make Void "Sort" [ Callback ([ cb_argtype; cb_argtype ], Int) ] ~defaults
   | DelegateSet -> make Void "Set" [ t_method ]
   | DelegateAdd -> make Void "Add" [ t_method ]
   | DelegateNumof -> make Int "Numof" []
@@ -157,4 +173,18 @@ let function_of_syscall sys =
     { default_function with index = int_of_syscall sys }
 
 let function_of_builtin sys receiver_ty =
-  jaf_to_ain_function (fundecl_of_builtin sys receiver_ty) default_function
+  jaf_to_ain_function (fundecl_of_builtin sys receiver_ty None) default_function
+
+let fundecl_of_callback args ret =
+  {
+    name = "";
+    loc = dummy_location;
+    return = { ty = ret; location = dummy_location };
+    params = make_params args [];
+    body = None;
+    is_label = false;
+    is_private = false;
+    index = None;
+    class_name = None;
+    class_index = None;
+  }

@@ -385,7 +385,7 @@ class jaf_compiler ain =
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
       | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | TyFunction _
-      | TyMethod _ | NullType | Untyped | Unresolved _ ->
+      | TyMethod _ | NullType | Untyped | Unresolved _ | Callback _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             (Some parent)

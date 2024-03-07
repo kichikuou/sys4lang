@@ -90,6 +90,7 @@ type jaf_type =
   | NullType
   | TyFunction of string * int
   | TyMethod of string * int
+  | Callback of jaf_type list * jaf_type
 
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
 
@@ -622,6 +623,9 @@ let rec jaf_type_to_string = function
   | IMainSystem -> "IMainSystem"
   | NullType -> "null"
   | TyFunction (name, _) | TyMethod (name, _) -> "typeof(" ^ name ^ ")"
+  | Callback (args, ret) ->
+      sprintf "%s callback(%s)" (jaf_type_to_string ret)
+        (String.concat ~sep:", " (List.map ~f:jaf_type_to_string args))
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string args =
@@ -820,6 +824,7 @@ let rec jaf_to_ain_data_type = function
   | NullType -> Ain.Type.NullType
   | TyFunction (_, i) -> Ain.Type.Function i
   | TyMethod (_, i) -> Ain.Type.Method i
+  | Callback _ -> Ain.Type.FuncType (-1)
 
 and jaf_to_ain_type = function
   | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)

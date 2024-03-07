@@ -66,5 +66,47 @@ int main()
 	WithCtor o2;
 	assert(o2.a.Numof(1) == 4);
 
+	test_sort();
+
 	return 0;
+}
+
+struct S {
+	int a;
+};
+
+void test_sort()
+{
+	array@int ai[3];
+	ai[0] = 3;
+	ai[1] = 1;
+	ai[2] = 2;
+	ai.Sort();
+	assert(ai[0] == 1);
+	assert(ai[1] == 2);
+	assert(ai[2] == 3);
+
+	ai.Sort(&int_compare_rev);
+	assert(ai[0] == 3);
+	assert(ai[1] == 2);
+	assert(ai[2] == 1);
+
+	array@S as[3];
+	as[0].a = 3;
+	as[1].a = 1;
+	as[2].a = 2;
+	as.Sort(&S_compare);
+	assert(as[0].a == 1);
+	assert(as[1].a == 2);
+	assert(as[2].a == 3);
+}
+
+int int_compare_rev(int a, int b)
+{
+	return b - a;
+}
+
+int S_compare(ref S a, ref S b)
+{
+	return a.a - b.a;
 }

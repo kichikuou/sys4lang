@@ -638,3 +638,37 @@ let%expect_test "wrong constructor name" =
       -:3:9-13: constructor name doesn't match struct name
           3 |         X();
                       ^^^^ |}]
+
+let%expect_test "Array.Sort() callback" =
+  type_test
+    {|
+      struct S {};
+      int int_compare(int a, int b) { return 0; }
+      int S_compare(ref S a, ref S b) { return 0; }
+      void f() {
+        array@int ai;
+        ai.Sort();  // ok
+        ai.Sort(&int_compare);  // ok
+        ai.Sort(&S_compare);  // error
+        array@S as;
+        as.Sort();  // error
+        as.Sort(&S_compare);  // ok
+        as.Sort(&int_compare);  // error
+        array@bool ab;
+        ab.Sort();  // error
+      }
+    |};
+  [%expect
+    {|
+      -:9:17-27: Type error: expected int callback(int, int); got ref typeof(S_compare)
+          9 |         ai.Sort(&S_compare);  // error
+                              ^^^^^^^^^^
+      -:11:9-18: Wrong number of arguments to function Sort (expected 1; got 0)
+         11 |         as.Sort();  // error
+                      ^^^^^^^^^
+      -:13:17-29: Type error: expected int callback(ref S, ref S); got ref typeof(int_compare)
+         13 |         as.Sort(&int_compare);  // error
+                              ^^^^^^^^^^^^
+      -:15:9-18: Sort() is not supported for array@bool
+         15 |         ab.Sort();  // error
+                      ^^^^^^^^^ |}]
