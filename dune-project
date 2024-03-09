@@ -16,6 +16,7 @@
    core_unix
    stdio
    camlzip
+   vector
    dune
    menhir
    (ppx_expect :with-test)))

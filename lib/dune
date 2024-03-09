@@ -1,6 +1,6 @@
 (library
  (name Sys4cLib)
- (libraries base camlzip)
+ (libraries base camlzip vector)
  (preprocess
   (pps ppx_jane)))
 

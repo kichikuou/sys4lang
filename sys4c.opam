@@ -12,6 +12,7 @@ depends: [
   "core_unix"
   "stdio"
   "camlzip"
+  "vector"
   "dune" {>= "2.8"}
   "menhir"
   "ppx_expect" {with-test}
