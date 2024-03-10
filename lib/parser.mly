@@ -142,7 +142,7 @@ jaf
   ;
 
 hll
-  : hll_declaration+ EOF { List.concat $1 }
+  : hll_declaration* EOF { $1 }
   ;
 
 primary_expression
@@ -484,10 +484,7 @@ external_declaration
 
 hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list(declarator) SEMICOLON
-    { [Function (func $sloc $1 $2 $3 None)] }
-  | struct_or_class IDENTIFIER LBRACE struct_declaration* RBRACE SEMICOLON
-    { [StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 })] }
-  ;
+    { Function (func $sloc $1 $2 $3 None) }
 
 struct_or_class
   : STRUCT { false }

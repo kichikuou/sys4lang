@@ -23,24 +23,31 @@ type source =
 
 type program = source list
 
-let parse_file ctx parse_func file read_file =
+let parse_file ctx lexer parser file read_file =
   let source = read_file file in
   Hashtbl.add_exn ctx.files ~key:file ~data:source;
   let lexbuf = Lexing.from_string source in
   Lexing.set_filename lexbuf file;
-  try parse_func Lexer.token lexbuf with
+  try parser lexer lexbuf with
   | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
   | e -> raise e
+
+(* Replace the struct keyword with HLL_STRUCT when lexing HLL files.
+ * This is a hack to simplify the parser *)
+let hll_lexer lexbuf =
+  match Lexer.token lexbuf with
+  | Parser.STRUCT -> Parser.HLL_STRUCT
+  | tok -> tok
 
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
 let parse_pass ctx sources read_file =
   List.map sources ~f:(function
     | Pje.Jaf f ->
-        let jaf = parse_file ctx Parser.jaf f read_file in
+        let jaf = parse_file ctx Lexer.token Parser.jaf f read_file in
         Declarations.register_type_declarations ctx jaf;
         Jaf (f, jaf)
     | Pje.Hll (f, import_name) ->
-        let hll = parse_file ctx Parser.hll f read_file in
+        let hll = parse_file ctx hll_lexer Parser.hll f read_file in
         let hll_name = Stdlib.Filename.(chop_extension (basename f)) in
         Hll (hll_name, import_name, hll)
     | _ -> failwith "unreachable")
