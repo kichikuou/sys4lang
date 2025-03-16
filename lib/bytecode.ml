@@ -259,8 +259,8 @@ type opcode =
   | SH_GLOBALSREF_NE_STR0
   | SH_LOC_LT_IMM_OR_LOC_GE_IMM
   | A_SORT_MEM
-  | DG_ADD
   | DG_SET
+  | DG_ADD
   | DG_CALL
   | DG_NUMOF
   | DG_EXIST
@@ -534,8 +534,8 @@ let int_of_opcode = function
   | SH_GLOBALSREF_NE_STR0 -> 0xef
   | SH_LOC_LT_IMM_OR_LOC_GE_IMM -> 0xf0
   | A_SORT_MEM -> 0xf1
-  | DG_ADD -> 0xf2
-  | DG_SET -> 0xf3
+  | DG_SET -> 0xf2
+  | DG_ADD -> 0xf3
   | DG_CALL -> 0xf4
   | DG_NUMOF -> 0xf5
   | DG_EXIST -> 0xf6
@@ -809,8 +809,8 @@ let opcode_of_int = function
   | 0xef -> SH_GLOBALSREF_NE_STR0
   | 0xf0 -> SH_LOC_LT_IMM_OR_LOC_GE_IMM
   | 0xf1 -> A_SORT_MEM
-  | 0xf2 -> DG_ADD
-  | 0xf3 -> DG_SET
+  | 0xf2 -> DG_SET
+  | 0xf3 -> DG_ADD
   | 0xf4 -> DG_CALL
   | 0xf5 -> DG_NUMOF
   | 0xf6 -> DG_EXIST
@@ -1085,8 +1085,8 @@ let string_of_opcode = function
   | SH_GLOBALSREF_NE_STR0 -> "SH_GLOBALSREF_NE_STR0"
   | SH_LOC_LT_IMM_OR_LOC_GE_IMM -> "SH_LOC_LT_IMM_OR_LOC_GE_IMM"
   | A_SORT_MEM -> "A_SORT_MEM"
-  | DG_ADD -> "DG_ADD"
   | DG_SET -> "DG_SET"
+  | DG_ADD -> "DG_ADD"
   | DG_CALL -> "DG_CALL"
   | DG_NUMOF -> "DG_NUMOF"
   | DG_EXIST -> "DG_EXIST"
@@ -1632,8 +1632,8 @@ let args_of_opcode = function
   | SH_GLOBALSREF_NE_STR0 -> [ Global; String ]
   | SH_LOC_LT_IMM_OR_LOC_GE_IMM -> [ Local; Int; Int ]
   | A_SORT_MEM -> []
-  | DG_ADD -> []
   | DG_SET -> []
+  | DG_ADD -> []
   | DG_CALL -> [ Delegate; Address ]
   | DG_NUMOF -> []
   | DG_EXIST -> []

@@ -670,11 +670,9 @@ class jaf_compiler ain =
                   compiler_bug "invalid string assignment"
                     (Some (ASTExpression expr)))
           | PlusAssign, String -> self#write_instruction0 S_PLUSA2
-          | EqAssign, Ref (TyMethod _) ->
-              (* XXX: DG_SET and DG_ADD seem to be misnamed... *)
-              self#write_instruction0 DG_ADD
+          | EqAssign, Ref (TyMethod _) -> self#write_instruction0 DG_SET
           | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
-          | PlusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_SET
+          | PlusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ADD
           | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
           | MinusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ERASE
           | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
