@@ -22,6 +22,7 @@ type formation = { name : string; defs : string list }
 
 type t = {
   mutable pje_path : string;
+  mutable encoding : string;
   mutable project_name : string;
   mutable code_name : string;
   mutable game_version : int;
@@ -55,6 +56,7 @@ and source = Jaf of string | Hll of (string * string) | Include of t
 let default_pje path =
   {
     pje_path = path;
+    encoding = "UTF-8";
     project_name = "";
     code_name = "code.jab";
     game_version = 100;

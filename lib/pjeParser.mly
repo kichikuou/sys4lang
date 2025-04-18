@@ -36,6 +36,7 @@ let to_pje toplevels path =
   in
   List.iter (function
     | KeyValue ("ProjectName", String v) -> pje.project_name <- v
+    | KeyValue ("Encoding", String v) -> pje.encoding <- v
     | KeyValue ("CodeName", String v) -> pje.code_name <- v
     | KeyValue ("GameVersion", Int v) -> pje.game_version <- v
     | KeyValue ("SourceDir", String v) -> pje.source_dir <- to_unix_path v
