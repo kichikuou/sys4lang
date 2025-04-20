@@ -485,7 +485,7 @@ class jaf_compiler ain =
       | Unary (UPlus, e) -> self#compile_expression e
       | Unary (UMinus, e) ->
           self#compile_expression e;
-          self#write_instruction0 INV
+          self#write_instruction0 (match e.ty with Float -> F_INV | _ -> INV)
       | Unary (LogNot, e) ->
           self#compile_expression e;
           self#write_instruction0 NOT
