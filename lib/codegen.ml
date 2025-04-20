@@ -808,7 +808,9 @@ class jaf_compiler ain =
           | StringGetPart -> self#write_instruction0 S_GETPART
           | StringPushBack -> self#write_instruction0 S_PUSHBACK2
           | StringPopBack -> self#write_instruction0 S_POPBACK2
-          | StringErase -> self#write_instruction0 S_ERASE2
+          | StringErase ->
+              self#write_instruction1 PUSH 1;
+              self#write_instruction0 S_ERASE2
           | ArrayAlloc ->
               self#write_instruction1 PUSH (List.length args);
               self#write_instruction0 A_ALLOC
