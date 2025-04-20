@@ -229,7 +229,8 @@ class const_eval_visitor ctx =
         | GlobalVar, Some e ->
             Ain.set_global_initval ctx.ain v.name
               (match e.node with
-              | ConstInt i -> Ain.Variable.Int (Int32.of_int_exn i)
+              | ConstInt i | Cast (LongInt, { node = ConstInt i; _ }) ->
+                  Ain.Variable.Int (Int32.of_int_exn i)
               | ConstFloat f -> Ain.Variable.Float f
               | ConstString s -> Ain.Variable.String s
               | _ -> const_error v)
