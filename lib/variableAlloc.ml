@@ -36,12 +36,13 @@ type scope = {
   mutable continues : (statement * var_set) list;
 }
 
+let dummy_var_seqno = ref 0
+
 class variable_alloc_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
     val mutable vars : variable list = []
     val scopes = Stack.create ()
-    val mutable dummy_var_seqno = 0
 
     method start_scope =
       Stack.push scopes
@@ -167,7 +168,7 @@ class variable_alloc_visitor ctx =
       let index = List.length vars in
       let v =
         {
-          name = Printf.sprintf "<dummy : %s : %d>" name dummy_var_seqno;
+          name = Printf.sprintf "<dummy : %s : %d>" name !dummy_var_seqno;
           location = dummy_location;
           array_dim = [];
           is_const = false;
@@ -180,7 +181,7 @@ class variable_alloc_visitor ctx =
       in
       environment#push_var v;
       vars <- v :: vars;
-      dummy_var_seqno <- dummy_var_seqno + 1;
+      dummy_var_seqno := !dummy_var_seqno + 1;
       index
 
     method! visit_expression expr =
