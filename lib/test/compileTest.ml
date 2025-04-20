@@ -102,6 +102,31 @@ let%expect_test "return" =
       040: EOF
     |}]
 
+let%expect_test "lint inc" =
+  compile_test {|
+    void f() {
+      lint i;
+      i++;
+    }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALASSIGN i, 0
+      016: PUSHLOCALPAGE
+      018: PUSH 0
+      024: DUP2
+      026: REF
+      028: DUP_X2
+      030: POP
+      032: LI_INC
+      034: POP
+      036: RETURN
+      038: ENDFUNC f
+      044: EOF test.jaf
+      050: FUNC NULL
+      056: EOF |}]
+
 let%expect_test "local ref int" =
   compile_test {|
     void f() {

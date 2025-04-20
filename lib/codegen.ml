@@ -32,6 +32,13 @@ let is_variable_ref = function
   | Ident _ | Member (_, _, ClassVariable _) | Subscript _ -> true
   | _ -> false
 
+let incdec_instruction = function
+  | (PreInc | PostInc), LongInt -> LI_INC
+  | (PreDec | PostDec), LongInt -> LI_DEC
+  | (PreInc | PostInc), _ -> INC
+  | (PreDec | PostDec), _ -> DEC
+  | _ -> compiler_bug "invalid inc/dec expression" None
+
 class jaf_compiler ain =
   object (self)
     (* The function currently being compiled. *)
@@ -493,30 +500,18 @@ class jaf_compiler ain =
           | _ ->
               compiler_bug "invalid type for & operator"
                 (Some (ASTExpression expr)))
-      | Unary (PreInc, e) ->
+      | Unary (((PreInc | PreDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
-          self#write_instruction0 INC;
+          self#write_instruction0 (incdec_instruction (op, e.ty));
           self#write_instruction0 REF
-      | Unary (PreDec, e) ->
-          self#compile_lvalue e;
-          self#write_instruction0 DUP2;
-          self#write_instruction0 DEC;
-          self#write_instruction0 REF
-      | Unary (PostInc, e) ->
+      | Unary (((PostInc | PostDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
           self#write_instruction0 REF;
           self#write_instruction0 DUP_X2;
           self#write_instruction0 POP;
-          self#write_instruction0 INC
-      | Unary (PostDec, e) ->
-          self#compile_lvalue e;
-          self#write_instruction0 DUP2;
-          self#write_instruction0 REF;
-          self#write_instruction0 DUP_X2;
-          self#write_instruction0 POP;
-          self#write_instruction0 DEC
+          self#write_instruction0 (incdec_instruction (op, e.ty))
       | Binary (LogOr, a, b) ->
           self#compile_expression a;
           let lhs_true_addr = current_address + 2 in
@@ -901,14 +896,15 @@ class jaf_compiler ain =
       | Unary
           ( ((PreInc | PostInc | PreDec | PostDec) as op),
             { node = Ident (_, LocalVariable i); _ } )
-        when not (self#get_local i).value_type.is_ref ->
+        when (not (self#get_local i).value_type.is_ref)
+             && Poly.(expr.ty <> LongInt) ->
           self#write_instruction1
             (match op with PreInc | PostInc -> SH_LOCALINC | _ -> SH_LOCALDEC)
             i
       | Unary (((PreInc | PreDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
-          self#write_instruction0 (match op with PreInc -> INC | _ -> DEC);
+          self#write_instruction0 (incdec_instruction (op, e.ty));
           self#write_instruction0 POP;
           self#write_instruction0 POP
       | Seq (a, b) ->
