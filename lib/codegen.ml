@@ -1150,7 +1150,7 @@ class jaf_compiler ain =
               self#compile_expr_and_pop
                 {
                   node = Assign (EqAssign, lhs, rhs);
-                  ty = decl.type_spec.ty;
+                  ty = rhs.ty;
                   loc = decl.location;
                 }
           | Struct sno -> (

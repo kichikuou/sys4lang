@@ -572,3 +572,26 @@ let%expect_test "self reference in initval" =
       044: FUNC NULL
       050: EOF
     |}]
+
+let%expect_test "functype with string initval" =
+  compile_test
+    {|
+        functype void funcptr(void);
+        void f() {
+          funcptr fp = "f";
+        }
+    |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSHLOCALPAGE
+      008: PUSH 0
+      014: S_PUSH "f"
+      020: PUSH 0
+      026: FT_ASSIGNS
+      028: S_POP
+      030: RETURN
+      032: ENDFUNC f
+      038: EOF test.jaf
+      044: FUNC NULL
+      050: EOF |}]
