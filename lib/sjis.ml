@@ -1762,11 +1762,11 @@ let () =
   for i = 0x80 to 0xff do
     for j = 0x40 to 0xff do
       let u = s2u.(i - 0x80).(j - 0x40) in
-      if u <> 0 then u2s.(u) <- (i lsl 8) lor j
+      if u <> 0 then u2s.(u) <- i lor (j lsl 8)
     done
   done
 
-let from_uchar u =
+let from_uchar_le u =
   if Uchar.to_scalar u < 0x10000 then
     let c = u2s.(Uchar.to_scalar u) in
     if c <> 0 then Some c else None
@@ -1780,12 +1780,12 @@ let from_utf8 s =
       let dec = Stdlib.String.get_utf_8_uchar s !i in
       if not (utf_decode_is_valid dec) then
         Printf.failwithf "invalid UTF-8 string: \"%s\"" s ();
-      (match from_uchar (utf_decode_uchar dec) with
+      (match from_uchar_le (utf_decode_uchar dec) with
       | Some c ->
           if c <= 0xff then Buffer.add_char buf (Char.of_int_exn c)
           else (
-            Buffer.add_char buf (Char.of_int_exn (c lsr 8));
-            Buffer.add_char buf (Char.of_int_exn (c land 0xff)))
+            Buffer.add_char buf (Char.of_int_exn (c land 0xff));
+            Buffer.add_char buf (Char.of_int_exn (c lsr 8)))
       | None ->
           Printf.failwithf
             "Unicode character '%s' cannot be converted to Shift_JIS"

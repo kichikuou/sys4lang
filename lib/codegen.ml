@@ -439,7 +439,7 @@ class jaf_compiler ain =
                 (utf_decode_is_valid dec
                 && String.length s = utf_decode_length dec)
             then compile_error "Invalid character constant" (ASTExpression expr);
-            match Sjis.from_uchar (utf_decode_uchar dec) with
+            match Sjis.from_uchar_le (utf_decode_uchar dec) with
             | Some c -> self#write_instruction1 PUSH c
             | None ->
                 compile_error "Invalid character constant" (ASTExpression expr))

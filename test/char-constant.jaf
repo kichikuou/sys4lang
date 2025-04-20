@@ -1,6 +1,6 @@
 int main()
 {
 	assert('a' == 97);
-	assert('あ' == 0x82a0);
+	assert('あ' == 0xa082);
 	return 0;
 }

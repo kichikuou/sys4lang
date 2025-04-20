@@ -23,5 +23,5 @@ val to_utf8 : string -> string
 (** [is_valid n] checks if the integer [n] is a valid Shift_JIS code point. *)
 val is_valid : int -> bool
 
-(** [from_uchar u] converts the Unicode character [u] to a Shift_JIS code point, if possible. *)
-val from_uchar : Uchar.t -> int option
+(** [from_uchar_le u] converts the Unicode character [u] to a Shift_JIS code, in little-endian order. *)
+val from_uchar_le : Uchar.t -> int option
