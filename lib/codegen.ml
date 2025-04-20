@@ -242,9 +242,10 @@ class jaf_compiler ain =
         self#write_instruction0 POP)
 
     method compile_delete_var (v : Ain.Variable.t) =
-      match v.value_type.data with
-      | Struct _ -> self#write_instruction1 SH_LOCALDELETE v.index
-      | Array _ ->
+      match v.value_type with
+      | { is_ref = true; _ } | { data = Struct _; _ } ->
+          self#write_instruction1 SH_LOCALDELETE v.index
+      | { data = Array _; _ } ->
           self#compile_local_ref v.index;
           self#write_instruction0 A_FREE
       | _ -> ()

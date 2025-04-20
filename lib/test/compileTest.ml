@@ -595,3 +595,50 @@ let%expect_test "functype with string initval" =
       038: EOF test.jaf
       044: FUNC NULL
       050: EOF |}]
+
+let%expect_test "local delete" =
+  compile_test
+    {|
+        struct S {};
+        void f() {
+          for (;;) {
+            ref int r;
+            array@int a;
+            S s;
+          }
+        }
+    |};
+  [%expect
+    {|
+        000: FUNC f
+        006: CALLSYS LockPeek
+        012: POP
+        014: PUSHLOCALPAGE
+        016: PUSH 0
+        022: DUP2
+        024: REFREF
+        026: POP
+        028: DELETE
+        030: PUSH -1
+        036: PUSH 0
+        042: R_ASSIGN
+        044: POP
+        046: POP
+        048: CALLSYS UnlockPeek
+        054: POP
+        056: PUSHLOCALPAGE
+        058: PUSH 2
+        064: A_FREE
+        066: SH_LOCALDELETE s
+        072: SH_LOCALCREATE s, struct(0)
+        082: SH_LOCALDELETE s
+        088: PUSHLOCALPAGE
+        090: PUSH 2
+        096: A_FREE
+        098: SH_LOCALDELETE r
+        104: JUMP 6
+        110: RETURN
+        112: ENDFUNC f
+        118: EOF test.jaf
+        124: FUNC NULL
+        130: EOF |}]
