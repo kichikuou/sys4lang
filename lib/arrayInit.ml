@@ -86,12 +86,15 @@ class visitor ctx =
           Ain.write_struct ctx.ain { ain_s with constructor = f_index })
 
     method! visit_declaration decl =
+      let visit_global = function
+        | { array_dim = _ :: _; is_const = false; _ } as g ->
+            global_init_stmts <- array_alloc_stmt g :: global_init_stmts
+        | _ -> ()
+      in
       match decl with
-      | Global ds ->
-          List.iter ds.vars ~f:(function
-            | { array_dim = _ :: _; is_const = false; _ } as g ->
-                global_init_stmts <- array_alloc_stmt g :: global_init_stmts
-            | _ -> ())
+      | Global ds -> List.iter ds.vars ~f:visit_global
+      | GlobalGroup { vardecls = dss; _ } ->
+          List.iter dss ~f:(function ds -> List.iter ds.vars ~f:visit_global)
       | StructDef s -> self#visit_struct_decl s
       | Function fdecl when is_constructor fdecl ->
           self#insert_array_initializer_call fdecl
