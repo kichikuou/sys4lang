@@ -116,10 +116,16 @@ class jaf_compiler ain =
       Stack.push cflow_stmts { kind = CFlowLoop addr; break_addrs = [] }
 
     (** Begin a switch statement. *)
-    method start_switch =
-      let switch = Ain.add_switch ain in
+    method start_switch ty =
+      let op, case_type =
+        match ty with
+        | Jaf.Int -> (SWITCH, Ain.Switch.IntCase)
+        | String -> (STRSWITCH, Ain.Switch.StringCase)
+        | _ -> compiler_bug "invalid switch type" None
+      in
+      let switch = Ain.add_switch ain case_type in
       Stack.push cflow_stmts { kind = CFlowSwitch switch; break_addrs = [] };
-      switch.index
+      self#write_instruction1 op switch.index
 
     (** End the current control flow construct. Updates 'break' addresses. *)
     method end_cflow_stmt =
@@ -141,8 +147,22 @@ class jaf_compiler ain =
       | _ -> compiler_bug "Mismatched start/end of control flow construct" None);
       self#end_cflow_stmt
 
-    method add_switch_case value node =
+    method add_switch_case expr node =
       let (switch : Ain.Switch.t) = self#current_switch node in
+      let value =
+        match expr with
+        | ConstInt n -> (
+            match switch.case_type with
+            | Ain.Switch.IntCase -> n
+            | Ain.Switch.StringCase ->
+                compile_error "int case in string switch" node)
+        | ConstString s -> (
+            match switch.case_type with
+            | Ain.Switch.StringCase -> Ain.add_string ain s
+            | Ain.Switch.IntCase ->
+                compile_error "string case in int switch" node)
+        | _ -> compile_error "invalid expression in switch case" node
+      in
       switch.cases <-
         List.append switch.cases [ (Int32.of_int_exn value, current_address) ]
 
@@ -1018,15 +1038,12 @@ class jaf_compiler ain =
           self#write_instruction1 JUMP 0
       | Switch (expr, stmts) ->
           self#compile_expression expr;
-          self#write_instruction1 SWITCH self#start_switch;
+          self#start_switch expr.ty;
           self#push_break_addr (current_address + 2) (ASTStatement stmt);
           self#write_instruction1 JUMP 0;
           List.iter stmts ~f:self#compile_statement;
           self#end_switch
-      | Case { node = ConstInt i; _ } ->
-          self#add_switch_case i (ASTStatement stmt)
-      | Case _ ->
-          compile_error "invalid expression in switch case" (ASTStatement stmt)
+      | Case { node; _ } -> self#add_switch_case node (ASTStatement stmt)
       | Default -> self#set_switch_default (ASTStatement stmt)
       | Return None -> self#write_instruction0 RETURN
       | Return (Some e) ->

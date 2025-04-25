@@ -174,7 +174,7 @@ val write_struct : t -> Struct.t -> unit
 val write_new_struct : t -> Struct.t -> int
 val add_struct : t -> string -> Struct.t
 val write_switch : t -> Switch.t -> unit
-val add_switch : t -> Switch.t
+val add_switch : t -> Switch.case_type -> Switch.t
 val get_enum : t -> string -> int option
 val get_library_index : t -> string -> int option
 val get_library_function_index : t -> int -> string -> int option

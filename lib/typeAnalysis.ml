@@ -662,12 +662,10 @@ class type_analyze_visitor ctx =
           | Goto _ -> ()
           | Continue -> ()
           | Break -> ()
-          | Switch (expr, _) ->
-              (* TODO: string switch *)
-              type_check (ASTStatement stmt) Int expr
-          | Case expr ->
-              (* TODO: string switch *)
-              type_check (ASTStatement stmt) Int expr
+          | Switch (expr, _) | Case expr -> (
+              match expr.ty with
+              | String -> ()
+              | _ -> type_check (ASTStatement stmt) Int expr)
           | Default -> ()
           | Return (Some e) -> (
               match environment#current_function with

@@ -1473,11 +1473,9 @@ let add_struct ain name =
 let write_switch ain (switch : Switch.t) =
   Array.set ain.switches switch.index switch
 
-let add_switch ain =
+let add_switch ain case_type =
   let index = Array.length ain.switches in
-  let s : Switch.t =
-    { index; case_type = IntCase; default_address = -1; cases = [] }
-  in
+  let s : Switch.t = { index; case_type; default_address = -1; cases = [] } in
   ain.switches <- Array.append ain.switches [| s |];
   s
 

@@ -672,3 +672,19 @@ let%expect_test "Array.Sort() callback" =
       -:15:9-18: Sort() is not supported for array@bool
          15 |         ab.Sort();  // error
                       ^^^^^^^^^ |}]
+
+let%expect_test "switch type error" =
+  type_test
+    {|
+      void f() {
+        switch (1) {
+          case "a":
+            break;
+        }
+      }
+    |};
+  [%expect
+    {|
+      -:4:11-20: string case in int switch
+          4 |           case "a":
+                        ^^^^^^^^^ |}]

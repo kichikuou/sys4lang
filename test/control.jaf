@@ -101,6 +101,23 @@ void test_switch_no_default()
 	assert(i == 42);
 }
 
+void test_string_switch()
+{
+	string s = "test";
+	switch (s) {
+	case "test":
+		s = "ok";
+		break;
+	case "fail":
+		s = "no";
+		break;
+	default:
+		s = "default";
+		break;
+	}
+	assert(s == "ok");
+}
+
 void test_ternary()
 {
 	int zero = 0;
@@ -198,6 +215,7 @@ int main()
 	test_switch();
 	test_switch_default();
 	test_switch_no_default();
+	test_string_switch();
 	test_ternary();
 	test_goto();
 	test_break_nested();
