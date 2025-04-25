@@ -244,6 +244,10 @@ class type_analyze_visitor ctx =
       | Int | LongInt | Bool | Float ->
           type_check_numeric parent rhs;
           insert_cast t rhs
+      | Struct _ -> (
+          match rhs.ty with
+          | Ref t' when type_equal t t' -> ()
+          | _ -> type_check parent t rhs)
       | _ -> type_check parent t rhs
 
     method check_ref_assign parent (lhs : expression) (rhs : expression) =

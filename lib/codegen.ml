@@ -693,7 +693,7 @@ class jaf_compiler ain =
           | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
           | MinusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ERASE
           | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
-          | EqAssign, Struct (_, sno) ->
+          | EqAssign, Struct (_, sno) | EqAssign, Ref (Struct (_, sno)) ->
               self#write_instruction1 PUSH sno;
               self#write_instruction0 SR_ASSIGN
           | _, _ ->
