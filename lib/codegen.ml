@@ -1231,7 +1231,7 @@ class jaf_compiler ain =
       else
         match t.data with
         | Void -> ()
-        | Int | Bool | LongInt -> self#write_instruction1 PUSH 0
+        | Int | Bool | LongInt | FuncType _ -> self#write_instruction1 PUSH 0
         | Float -> self#write_instruction1 F_PUSH 0
         | String -> self#write_instruction1 S_PUSH 0
         | Struct _ | Array _ -> self#write_instruction1 PUSH (-1)
