@@ -152,7 +152,7 @@ let fundecl_of_builtin builtin receiver_ty node_opt =
   | ArrayFind ->
       let cb_argtype, cb_default =
         match elem_ty with
-        | Int | Float | String -> (elem_ty, Some addr_null)
+        | Int | Float | Bool | String -> (elem_ty, Some addr_null)
         | Struct _ -> (Ref elem_ty, None)
         | _ ->
             CompileError.compile_error

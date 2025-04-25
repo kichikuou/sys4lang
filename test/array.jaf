@@ -1,3 +1,6 @@
+const int true = 1;
+const int false = 0;
+
 void set(array@int a)
 {
 	a[0] = 1;
@@ -119,6 +122,13 @@ void test_find()
 	ai[1] = 4;
 	ai[2] = 5;
 	assert(ai.Find(0, ai.Numof(), 4) == 1);
+
+	array@bool ab[3];
+	ab[0] = true;
+	ab[1] = true;
+	ab[2] = false;
+	assert(ab.Find(0, ab.Numof(), false) == 2);
+
 	array@S as[3];
 	as[0].a = 3;
 	as[1].a = 4;
