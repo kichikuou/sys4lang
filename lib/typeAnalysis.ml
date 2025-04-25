@@ -39,6 +39,8 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | IMainSystem, (IMainSystem | Int) -> true
   | FuncType (_, a), FuncType (_, b) -> a = b
   | Delegate (_, a), Delegate (_, b) -> a = b
+  | MemberPtr (s1, t1), MemberPtr (s2, t2) ->
+      String.equal s1 s2 && type_equal t1 t2
   | NullType, (FuncType _ | Delegate _ | IMainSystem | NullType) -> true
   | HLLParam, HLLParam -> true
   | Array a, Array b -> type_equal a b
@@ -64,7 +66,8 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | TyFunction _, _
   | TyMethod _, _
   | NullType, _
-  | Callback _, _ ->
+  | Callback _, _
+  | MemberPtr _, _ ->
       false
   | Untyped, _ -> compiler_bug "expected type is untyped" None
   | Unresolved _, _ -> compiler_bug "expected type is unresolved" None
@@ -357,6 +360,22 @@ class type_analyze_visitor ctx =
               expr.ty <- Void
           | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
           )
+      | Qualified (sname, name, _) -> (
+          match environment#resolve_qualified sname name with
+          | UnresolvedName ->
+              undefined_variable_error
+                (sname ^ "::" ^ name)
+                (ASTExpression expr)
+          | ResolvedMember (s, v) ->
+              expr.node <-
+                Qualified
+                  ( sname,
+                    name,
+                    ClassVariable (s.index, Option.value_exn v.index) );
+              expr.ty <- MemberPtr (sname, v.type_spec.ty)
+          | _ ->
+              compiler_bug "resolve_qualified returned an unexpected value"
+                (Some (ASTExpression expr)))
       | Unary (op, e) -> (
           match op with
           | UPlus | UMinus | PreInc | PreDec | PostInc | PostDec ->
@@ -369,6 +388,7 @@ class type_analyze_visitor ctx =
               match e.ty with
               | TyFunction _ as f -> expr.ty <- Ref f
               | TyMethod _ as m -> expr.ty <- Ref m
+              | MemberPtr _ as m -> expr.ty <- m
               | _ ->
                   type_error (TyFunction ("", -1)) (Some e) (ASTExpression expr)
               ))

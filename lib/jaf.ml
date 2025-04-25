@@ -91,6 +91,7 @@ type jaf_type =
   | TyFunction of string * int
   | TyMethod of string * int
   | Callback of jaf_type list * jaf_type
+  | MemberPtr of string * jaf_type
 
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
 
@@ -149,6 +150,7 @@ and ast_expression =
   | ConstChar of string
   | ConstString of string
   | Ident of string * ident_type
+  | Qualified of string * string * member_type
   | Unary of unary_op * expression
   | Binary of binary_op * expression * expression
   | Assign of assign_op * expression * expression
@@ -434,6 +436,14 @@ class ivisitor ctx =
                           | Some f -> ResolvedMethod (s, f)
                           | None -> ctx_resolve ctx))
                   | _ -> ctx_resolve ctx))
+
+        method resolve_qualified sname name =
+          match Hashtbl.find ctx.structs sname with
+          | None -> UnresolvedName
+          | Some s -> (
+              match Hashtbl.find s.members name with
+              | Some v -> ResolvedMember (s, v)
+              | None -> UnresolvedName)
       end
 
     method visit_expression (e : expression) =
@@ -442,7 +452,8 @@ class ivisitor ctx =
       | ConstFloat _ -> ()
       | ConstChar _ -> ()
       | ConstString _ -> ()
-      | Ident (_, _) -> ()
+      | Ident _ -> ()
+      | Qualified _ -> ()
       | Unary (_, e) -> self#visit_expression e
       | Binary (_, lhs, rhs) ->
           self#visit_expression lhs;
@@ -631,6 +642,7 @@ let rec jaf_type_to_string = function
   | Callback (args, ret) ->
       sprintf "%s callback(%s)" (jaf_type_to_string ret)
         (String.concat ~sep:", " (List.map ~f:jaf_type_to_string args))
+  | MemberPtr (s, t) -> s ^ "::" ^ jaf_type_to_string t
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string args =
@@ -643,6 +655,7 @@ let rec expr_to_string (e : expression) =
   | ConstChar s -> sprintf "'%s'" s
   | ConstString s -> sprintf "\"%s\"" s
   | Ident (s, _) -> s
+  | Qualified (sname, name, _) -> sprintf "%s::%s" sname name
   | Unary (op, e) -> (
       match op with
       | PostInc | PostDec -> expr_to_string e ^ unary_op_to_string op
@@ -835,6 +848,7 @@ let rec jaf_to_ain_data_type = function
   | TyFunction (_, i) -> Ain.Type.Function i
   | TyMethod (_, i) -> Ain.Type.Method i
   | Callback _ -> Ain.Type.FuncType (-1)
+  | MemberPtr _ -> Ain.Type.Int (* slot number *)
 
 and jaf_to_ain_type = function
   | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)

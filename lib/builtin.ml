@@ -149,6 +149,13 @@ let fundecl_of_builtin builtin receiver_ty node_opt =
       make Void "Sort"
         [ Callback ([ cb_argtype; cb_argtype ], Int) ]
         ~defaults:[ cb_default ]
+  | ArraySortBy -> (
+      match elem_ty with
+      | Struct (name, _) -> make Void "SortBy" [ MemberPtr (name, Int) ]
+      | _ ->
+          CompileError.compile_error
+            ("SortBy() is not supported for array@" ^ jaf_type_to_string elem_ty)
+            (Option.value_exn node_opt))
   | ArrayFind ->
       let cb_argtype, cb_default =
         match elem_ty with

@@ -94,6 +94,7 @@ class const_eval_visitor ctx =
                 | Some e -> const_replace expr e.node
                 | None -> const_error v)
           | _ -> ())
+      | Qualified _ -> ()
       | Unary (op, e) -> (
           let const_not i = if i = 0 then 1 else 0 in
           match op with

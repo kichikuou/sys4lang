@@ -761,3 +761,28 @@ let%expect_test "local delete" =
         118: EOF test.jaf
         124: FUNC NULL
         130: EOF |}]
+
+let%expect_test "member pointer" =
+  compile_test
+    {|
+      struct S {
+        int a;
+        int b;
+      };
+      void f(array@S as) {
+        as.SortBy(&S::b);
+      }
+    |};
+  [%expect
+    {|
+      000: FUNC f
+      006: PUSHLOCALPAGE
+      008: PUSH 0
+      014: PUSH 1
+      020: A_SORT_MEM
+      022: RETURN
+      024: ENDFUNC f
+      030: EOF test.jaf
+      036: FUNC NULL
+      042: EOF
+    |}]

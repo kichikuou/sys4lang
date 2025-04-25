@@ -413,7 +413,8 @@ class jaf_compiler ain =
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
       | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | TyFunction _
-      | TyMethod _ | NullType | Untyped | Unresolved _ | Callback _ ->
+      | TyMethod _ | NullType | Untyped | Unresolved _ | Callback _
+      | MemberPtr _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             (Some parent)
@@ -476,6 +477,8 @@ class jaf_compiler ain =
               self#write_instruction0 PUSHLOCALPAGE;
               self#write_instruction1 PUSH i;
               self#compile_dereference t)
+      | Qualified (_, _, _) ->
+          compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (
           match (Ain.get_global_by_index ain i).value_type with
           | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
@@ -518,6 +521,8 @@ class jaf_compiler ain =
           | TyMethod (_, no), Member (e, _, ClassMethod _) ->
               self#compile_lvalue e;
               self#write_instruction1 PUSH no
+          | MemberPtr (_, _), Qualified (_, _, ClassVariable (_, v)) ->
+              self#write_instruction1 PUSH v
           | _ ->
               compiler_bug "invalid type for & operator"
                 (Some (ASTExpression expr)))
@@ -804,7 +809,7 @@ class jaf_compiler ain =
               self#compile_lvalue e
           | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
           | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty | ArrayErase
-          | ArrayInsert | ArraySort | ArrayReverse | ArrayFind ->
+          | ArrayInsert | ArraySort | ArraySortBy | ArrayReverse | ArrayFind ->
               receiver_ty := e.ty;
               self#compile_variable_ref e
           | Assert ->
@@ -849,6 +854,7 @@ class jaf_compiler ain =
           | ArrayErase -> self#write_instruction0 A_ERASE
           | ArrayInsert -> self#write_instruction0 A_INSERT
           | ArraySort -> self#write_instruction0 A_SORT
+          | ArraySortBy -> self#write_instruction0 A_SORT_MEM
           | ArrayReverse -> self#write_instruction0 A_REVERSE
           | ArrayFind -> self#write_instruction0 A_FIND
           | DelegateSet -> self#write_instruction0 DG_SET

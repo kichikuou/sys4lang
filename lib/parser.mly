@@ -147,6 +147,7 @@ hll
 
 primary_expression
   : IDENTIFIER { make_expr ~loc:$sloc (Ident ($1, UnresolvedIdent)) }
+  | IDENTIFIER COCO IDENTIFIER { make_expr ~loc:$sloc (Qualified ($1, $3, UnresolvedMember)) }
   | THIS { make_expr ~loc:$sloc This }
   | NULL { make_expr ~loc:$sloc Null }
   | constant { make_expr ~loc:$sloc $1 }
