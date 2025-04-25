@@ -260,6 +260,35 @@ let%expect_test "function returning ref" =
       054: EOF
   |}]
 
+let%expect_test "bool ? ref int : int" =
+  compile_test
+    {|
+      int f(int a, ref int ra) {
+        return a == 0 ? ra : a;
+      }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALREF a
+      012: PUSH 0
+      018: EQUALE
+      020: IFZ 44
+      026: PUSHLOCALPAGE
+      028: PUSH 1
+      034: REFREF
+      036: REF
+      038: JUMP 50
+      044: SH_LOCALREF a
+      050: RETURN
+      052: PUSH 0
+      058: RETURN
+      060: ENDFUNC f
+      066: EOF test.jaf
+      072: FUNC NULL
+      078: EOF
+    |}]
+
 let%expect_test "ref struct assign" =
   compile_test
     {|
