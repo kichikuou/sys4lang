@@ -581,9 +581,9 @@ class jaf_compiler ain =
           | (Int | LongInt), GT -> self#write_instruction0 GT
           | (Int | LongInt), LTE -> self#write_instruction0 LTE
           | (Int | LongInt), GTE -> self#write_instruction0 GTE
-          | Int, BitOr -> self#write_instruction0 OR
-          | Int, BitXor -> self#write_instruction0 XOR
-          | Int, BitAnd -> self#write_instruction0 AND
+          | (Int | Bool), BitOr -> self#write_instruction0 OR
+          | (Int | Bool), BitXor -> self#write_instruction0 XOR
+          | (Int | Bool), BitAnd -> self#write_instruction0 AND
           | Int, LShift -> self#write_instruction0 LSHIFT
           | Int, RShift -> self#write_instruction0 RSHIFT
           | Int, (LogOr | LogAnd) ->
