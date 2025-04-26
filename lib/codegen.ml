@@ -623,6 +623,7 @@ class jaf_compiler ain =
                 | Float -> 3
                 | String -> 4
                 | Bool -> 48
+                | LongInt -> 56
                 | _ ->
                     compiler_bug "invalid type for string formatting"
                       (Some (ASTExpression expr))
