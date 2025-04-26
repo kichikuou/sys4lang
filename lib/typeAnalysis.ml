@@ -668,6 +668,7 @@ class type_analyze_visitor ctx =
           | Continue -> ()
           | Break -> ()
           | Switch (expr, _) | Case expr -> (
+              maybe_deref expr;
               match expr.ty with
               | String -> ()
               | _ -> type_check (ASTStatement stmt) Int expr)

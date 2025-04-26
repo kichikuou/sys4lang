@@ -116,12 +116,12 @@ class jaf_compiler ain =
       Stack.push cflow_stmts { kind = CFlowLoop addr; break_addrs = [] }
 
     (** Begin a switch statement. *)
-    method start_switch ty =
+    method start_switch ty node =
       let op, case_type =
         match ty with
-        | Jaf.Int -> (SWITCH, Ain.Switch.IntCase)
+        | Jaf.Bool | Int | LongInt -> (SWITCH, Ain.Switch.IntCase)
         | String -> (STRSWITCH, Ain.Switch.StringCase)
-        | _ -> compiler_bug "invalid switch type" None
+        | _ -> compiler_bug "invalid switch type" (Some node)
       in
       let switch = Ain.add_switch ain case_type in
       Stack.push cflow_stmts { kind = CFlowSwitch switch; break_addrs = [] };
@@ -1039,7 +1039,7 @@ class jaf_compiler ain =
           self#write_instruction1 JUMP 0
       | Switch (expr, stmts) ->
           self#compile_expression expr;
-          self#start_switch expr.ty;
+          self#start_switch expr.ty (ASTExpression expr);
           self#push_break_addr (current_address + 2) (ASTStatement stmt);
           self#write_instruction1 JUMP 0;
           List.iter stmts ~f:self#compile_statement;
