@@ -37,7 +37,8 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | String, String -> true
   | Struct (_, a), Struct (_, b) -> a = -1 (* hll_struct *) || a = b
   | IMainSystem, (IMainSystem | Int) -> true
-  | FuncType (_, a), FuncType (_, b) -> a = b
+  | FuncType (Some (_, a)), FuncType (Some (_, b)) -> a = b
+  | FuncType None, FuncType None -> true
   | Delegate (_, a), Delegate (_, b) -> a = b
   | MemberPtr (s1, t1), MemberPtr (s2, t2) ->
       String.equal s1 s2 && type_equal t1 t2
@@ -220,18 +221,18 @@ class type_analyze_visitor ctx =
        * 'ref function'. This is then converted into the declared
        * functype of the variable (if the prototypes match).
        *)
-      | FuncType (ft_name, ft_i) -> (
+      | FuncType (Some (ft_name, _)) -> (
           match rhs.ty with
           | TyFunction (f_name, _) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let f = Hashtbl.find_exn ctx.functions f_name in
               if not (fundecl_compatible ft f) then
-                type_error (FuncType (ft.name, ft_i)) (Some rhs) parent
-          | FuncType (ft2_name, _) ->
+                type_error t (Some rhs) parent
+          | FuncType (Some (ft2_name, _)) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let ft2 = Hashtbl.find_exn ctx.functypes ft2_name in
               if not (fundecl_compatible ft ft2) then
-                type_error (FuncType (ft_name, ft_i)) (Some rhs) parent
+                type_error t (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
           | _ -> type_error (TyFunction ("", -1)) (Some rhs) parent)
@@ -421,10 +422,10 @@ class type_analyze_visitor ctx =
               (* NOTE: NULL is not allowed on lhs *)
               (match (a.ty, b.ty) with
               | String, _ -> check String b
-              | FuncType (_, ft_i), FuncType (_, ft_j) ->
+              | FuncType (Some (_, ft_i)), FuncType (Some (_, ft_j)) ->
                   if ft_i <> ft_j then
                     type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (ft_name, _), TyFunction (f_name, _) ->
+              | FuncType (Some (ft_name, _)), TyFunction (f_name, _) ->
                   let ft = Hashtbl.find_exn ctx.functypes ft_name in
                   let f = Hashtbl.find_exn ctx.functions f_name in
                   if not (fundecl_compatible ft f) then
@@ -635,7 +636,7 @@ class type_analyze_visitor ctx =
       (* functype/delegate call *)
       | Call (e, args, _) -> (
           match e.ty with
-          | FuncType (name, _) ->
+          | FuncType (Some (name, _)) ->
               let f = Hashtbl.find_exn ctx.functypes name in
               let args = check_call f.name f.params args in
               expr.node <-
@@ -647,7 +648,7 @@ class type_analyze_visitor ctx =
               expr.node <-
                 Call (e, args, DelegateCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
-          | _ -> type_error (FuncType ("", -1)) (Some e) (ASTExpression expr))
+          | _ -> type_error (FuncType None) (Some e) (ASTExpression expr))
       | New { ty; _ } -> (
           match ty with
           | Struct _ -> expr.ty <- Ref ty

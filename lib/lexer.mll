@@ -120,6 +120,7 @@ let () =
               "__DATE__",     DATE_MACRO;
               "__TIME__",     TIME_MACRO;
               "globalgroup",  GLOBALGROUP;
+              "unknown_functype", UNKNOWN_FUNCTYPE;
             ]
 }
 

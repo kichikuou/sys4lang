@@ -178,7 +178,7 @@ class type_resolve_visitor ctx decl_only =
       | Some s -> Struct (name, s.index)
       | None -> (
           match Hashtbl.find ctx.functypes name with
-          | Some ft -> FuncType (name, Option.value_exn ft.index)
+          | Some ft -> FuncType (Some (name, Option.value_exn ft.index))
           | None -> (
               match Hashtbl.find ctx.delegates name with
               | Some dg -> Delegate (name, Option.value_exn dg.index)

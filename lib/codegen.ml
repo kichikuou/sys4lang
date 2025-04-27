@@ -677,7 +677,7 @@ class jaf_compiler ain =
           | DivideAssign, Float -> self#write_instruction0 F_DIVA
           | EqAssign, String -> (
               match lhs.ty with
-              | FuncType (_, ft_i) ->
+              | FuncType (Some (_, ft_i)) ->
                   self#write_instruction1 PUSH ft_i;
                   self#write_instruction0 FT_ASSIGNS
               | String -> self#write_instruction0 S_ASSIGN
