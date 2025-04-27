@@ -222,7 +222,7 @@ class type_analyze_visitor ctx =
        *)
       | FuncType (ft_name, ft_i) -> (
           match rhs.ty with
-          | Ref (TyFunction (f_name, _)) ->
+          | TyFunction (f_name, _) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let f = Hashtbl.find_exn ctx.functions f_name in
               if not (fundecl_compatible ft f) then
@@ -234,11 +234,11 @@ class type_analyze_visitor ctx =
                 type_error (FuncType (ft_name, ft_i)) (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
-          | _ -> type_error (Ref (TyFunction ("", -1))) (Some rhs) parent)
+          | _ -> type_error (TyFunction ("", -1)) (Some rhs) parent)
       | Delegate (dn, di) -> self#check_delegate_compatible parent dn di rhs
       | Callback (args, ret) -> (
           match rhs.ty with
-          | Ref (TyFunction (f_name, _)) ->
+          | TyFunction (f_name, _) ->
               let cb = Builtin.fundecl_of_callback args ret in
               let f = Hashtbl.find_exn ctx.functions f_name in
               if not (fundecl_compatible cb f) then
@@ -362,8 +362,7 @@ class type_analyze_visitor ctx =
           )
       | FuncAddr name -> (
           match Hashtbl.find ctx.functions name with
-          | Some f ->
-              expr.ty <- Ref (TyFunction (name, Option.value_exn f.index))
+          | Some f -> expr.ty <- TyFunction (name, Option.value_exn f.index)
           | None -> undefined_variable_error name (ASTExpression expr))
       | MemberAddr (sname, name, _) -> (
           match environment#resolve_qualified sname name with
@@ -425,7 +424,7 @@ class type_analyze_visitor ctx =
               | FuncType (_, ft_i), FuncType (_, ft_j) ->
                   if ft_i <> ft_j then
                     type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (ft_name, _), Ref (TyFunction (f_name, _)) ->
+              | FuncType (ft_name, _), TyFunction (f_name, _) ->
                   let ft = Hashtbl.find_exn ctx.functypes ft_name in
                   let f = Hashtbl.find_exn ctx.functions f_name in
                   if not (fundecl_compatible ft f) then

@@ -407,13 +407,14 @@ class jaf_compiler ain =
     method compile_pop (t : jaf_type) parent =
       match t with
       | Void -> ()
-      | Int | Float | Bool | LongInt | FuncType _ | Ref _ | TyMethod _ ->
+      | Int | Float | Bool | LongInt | FuncType _ | Ref _ | TyFunction _
+      | TyMethod _ ->
           self#write_instruction0 POP
       | String -> self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
-      | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | TyFunction _
-      | NullType | Untyped | Unresolved _ | Callback _ | MemberPtr _ ->
+      | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | NullType | Untyped
+      | Unresolved _ | Callback _ | MemberPtr _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             (Some parent)
@@ -478,7 +479,7 @@ class jaf_compiler ain =
               self#compile_dereference t)
       | FuncAddr _ -> (
           match expr.ty with
-          | Ref (TyFunction (_, no)) -> self#write_instruction1 PUSH no
+          | TyFunction (_, no) -> self#write_instruction1 PUSH no
           | _ -> compile_error "not implemented" (ASTExpression expr))
       | MemberAddr (_, _, ClassVariable v) -> self#write_instruction1 PUSH v
       | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
@@ -645,7 +646,7 @@ class jaf_compiler ain =
           self#compile_lvalue lhs;
           self#compile_expression rhs;
           match (op, rhs.ty) with
-          | EqAssign, (Int | Bool | Ref (TyFunction _) | FuncType _) ->
+          | EqAssign, (Int | Bool | TyFunction _ | FuncType _) ->
               self#write_instruction0 ASSIGN
           | PlusAssign, (Int | Bool) -> self#write_instruction0 PLUSA
           | MinusAssign, (Int | Bool) -> self#write_instruction0 MINUSA

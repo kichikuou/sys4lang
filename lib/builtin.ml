@@ -84,7 +84,7 @@ let fundecl_of_syscall sys =
   | CopySaveFile -> make Int [ String; String ]
 
 (* `&NULL` expression (used as default value for callback functions) *)
-let addr_null = make_expr ~ty:(Ref (TyFunction ("NULL", 0))) (FuncAddr "NULL")
+let addr_null = make_expr ~ty:(TyFunction ("NULL", 0)) (FuncAddr "NULL")
 
 let fundecl_of_builtin builtin receiver_ty node_opt =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
