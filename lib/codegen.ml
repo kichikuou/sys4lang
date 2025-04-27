@@ -407,14 +407,13 @@ class jaf_compiler ain =
     method compile_pop (t : jaf_type) parent =
       match t with
       | Void -> ()
-      | Int | Float | Bool | LongInt | FuncType _ | Ref _ ->
+      | Int | Float | Bool | LongInt | FuncType _ | Ref _ | TyMethod _ ->
           self#write_instruction0 POP
       | String -> self#write_instruction0 S_POP
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
       | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | TyFunction _
-      | TyMethod _ | NullType | Untyped | Unresolved _ | Callback _
-      | MemberPtr _ ->
+      | NullType | Untyped | Unresolved _ | Callback _ | MemberPtr _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             (Some parent)
@@ -477,8 +476,13 @@ class jaf_compiler ain =
               self#write_instruction0 PUSHLOCALPAGE;
               self#write_instruction1 PUSH i;
               self#compile_dereference t)
-      | Qualified (_, _, _) ->
-          compile_error "not implemented" (ASTExpression expr)
+      | FuncAddr _ -> (
+          match expr.ty with
+          | Ref (TyFunction (_, no)) -> self#write_instruction1 PUSH no
+          | _ -> compile_error "not implemented" (ASTExpression expr))
+      | MemberAddr (_, _, ClassVariable (_, v)) ->
+          self#write_instruction1 PUSH v
+      | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (
           match (Ain.get_global_by_index ain i).value_type with
           | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
@@ -515,17 +519,6 @@ class jaf_compiler ain =
       | Unary (BitNot, e) ->
           self#compile_expression e;
           self#write_instruction0 COMPL
-      | Unary (AddrOf, e) -> (
-          match (e.ty, e.node) with
-          | TyFunction (_, no), _ -> self#write_instruction1 PUSH no
-          | TyMethod (_, no), Member (e, _, ClassMethod _) ->
-              self#compile_lvalue e;
-              self#write_instruction1 PUSH no
-          | MemberPtr (_, _), Qualified (_, _, ClassVariable (_, v)) ->
-              self#write_instruction1 PUSH v
-          | _ ->
-              compiler_bug "invalid type for & operator"
-                (Some (ASTExpression expr)))
       | Unary (((PreInc | PreDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
@@ -692,11 +685,11 @@ class jaf_compiler ain =
                   compiler_bug "invalid string assignment"
                     (Some (ASTExpression expr)))
           | PlusAssign, String -> self#write_instruction0 S_PLUSA2
-          | EqAssign, Ref (TyMethod _) -> self#write_instruction0 DG_SET
+          | EqAssign, TyMethod _ -> self#write_instruction0 DG_SET
           | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
-          | PlusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ADD
+          | PlusAssign, TyMethod _ -> self#write_instruction0 DG_ADD
           | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
-          | MinusAssign, Ref (TyMethod _) -> self#write_instruction0 DG_ERASE
+          | MinusAssign, TyMethod _ -> self#write_instruction0 DG_ERASE
           | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
           | EqAssign, Struct (_, sno) | EqAssign, Ref (Struct (_, sno)) ->
               self#write_instruction1 PUSH sno;
@@ -759,9 +752,14 @@ class jaf_compiler ain =
       | Member (_, _, ClassConst _) ->
           compiler_bug "class constant not eliminated"
             (Some (ASTExpression expr))
-      | Member (_, _, ClassMethod _) ->
-          compiler_bug "tried to compile method member expression"
-            (Some (ASTExpression expr))
+      | Member (e, _, ClassMethod _) -> (
+          match expr.ty with
+          | TyMethod (_, no) ->
+              self#compile_lvalue e;
+              self#write_instruction1 PUSH no
+          | _ ->
+              compiler_bug "tried to compile method member expression"
+                (Some (ASTExpression expr)))
       | Member (_, _, HLLFunction (_, _)) ->
           compiler_bug "tried to compile HLL member expression"
             (Some (ASTExpression expr))

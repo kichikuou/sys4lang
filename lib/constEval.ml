@@ -94,7 +94,8 @@ class const_eval_visitor ctx =
                 | Some e -> const_replace expr e.node
                 | None -> const_error v)
           | _ -> ())
-      | Qualified _ -> ()
+      | FuncAddr _ -> ()
+      | MemberAddr _ -> ()
       | Unary (op, e) -> (
           let const_not i = if i = 0 then 1 else 0 in
           match op with
@@ -103,7 +104,6 @@ class const_eval_visitor ctx =
           | UMinus -> const_unary expr e.node (Some ( ~- )) (Some ( ~-. ))
           | LogNot -> const_unary expr e.node (Some const_not) None
           | BitNot -> const_unary expr e.node (Some lnot) None
-          | AddrOf -> ()
           | PreInc -> ()
           | PreDec -> ()
           | PostInc -> ()

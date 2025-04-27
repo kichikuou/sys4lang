@@ -26,7 +26,6 @@ type unary_op =
   | UMinus
   | LogNot
   | BitNot
-  | AddrOf
   | PreInc
   | PreDec
   | PostInc
@@ -150,7 +149,8 @@ and ast_expression =
   | ConstChar of string
   | ConstString of string
   | Ident of string * ident_type
-  | Qualified of string * string * member_type
+  | FuncAddr of string
+  | MemberAddr of string * string * member_type
   | Unary of unary_op * expression
   | Binary of binary_op * expression * expression
   | Assign of assign_op * expression * expression
@@ -453,7 +453,8 @@ class ivisitor ctx =
       | ConstChar _ -> ()
       | ConstString _ -> ()
       | Ident _ -> ()
-      | Qualified _ -> ()
+      | FuncAddr _ -> ()
+      | MemberAddr _ -> ()
       | Unary (_, e) -> self#visit_expression e
       | Binary (_, lhs, rhs) ->
           self#visit_expression lhs;
@@ -576,7 +577,6 @@ let unary_op_to_string op =
   | UMinus -> "-"
   | LogNot -> "!"
   | BitNot -> "~"
-  | AddrOf -> "&"
   | PreInc -> "++"
   | PreDec -> "--"
   | PostInc -> "++"
@@ -655,7 +655,8 @@ let rec expr_to_string (e : expression) =
   | ConstChar s -> sprintf "'%s'" s
   | ConstString s -> sprintf "\"%s\"" s
   | Ident (s, _) -> s
-  | Qualified (sname, name, _) -> sprintf "%s::%s" sname name
+  | FuncAddr s -> "&" ^ s
+  | MemberAddr (sname, name, _) -> sprintf "&%s::%s" sname name
   | Unary (op, e) -> (
       match op with
       | PostInc | PostDec -> expr_to_string e ^ unary_op_to_string op

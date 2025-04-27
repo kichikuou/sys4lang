@@ -202,7 +202,7 @@ class type_analyze_visitor ctx =
 
     method check_delegate_compatible parent dg_name dg_i (expr : expression) =
       match expr.ty with
-      | Ref (TyMethod (f_name, _)) ->
+      | TyMethod (f_name, _) ->
           let dg = Hashtbl.find_exn ctx.delegates dg_name in
           let f = Hashtbl.find_exn ctx.functions f_name in
           if not (fundecl_compatible dg f) then
@@ -210,7 +210,7 @@ class type_analyze_visitor ctx =
       | Delegate (name, idx) ->
           if not (String.equal name dg_name && dg_i = idx) then
             type_error (Delegate (dg_name, dg_i)) (Some expr) parent
-      | _ -> type_error (Ref (TyMethod ("", -1))) (Some expr) parent
+      | _ -> type_error (TyMethod ("", -1)) (Some expr) parent
 
     method check_assign parent t (rhs : expression) =
       match t with
@@ -360,7 +360,12 @@ class type_analyze_visitor ctx =
               expr.ty <- Void
           | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
           )
-      | Qualified (sname, name, _) -> (
+      | FuncAddr name -> (
+          match Hashtbl.find ctx.functions name with
+          | Some f ->
+              expr.ty <- Ref (TyFunction (name, Option.value_exn f.index))
+          | None -> undefined_variable_error name (ASTExpression expr))
+      | MemberAddr (sname, name, _) -> (
           match environment#resolve_qualified sname name with
           | UnresolvedName ->
               undefined_variable_error
@@ -368,7 +373,7 @@ class type_analyze_visitor ctx =
                 (ASTExpression expr)
           | ResolvedMember (s, v) ->
               expr.node <-
-                Qualified
+                MemberAddr
                   ( sname,
                     name,
                     ClassVariable (s.index, Option.value_exn v.index) );
@@ -383,15 +388,7 @@ class type_analyze_visitor ctx =
               expr.ty <- e.ty
           | LogNot | BitNot ->
               check Int e;
-              expr.ty <- Int
-          | AddrOf -> (
-              match e.ty with
-              | TyFunction _ as f -> expr.ty <- Ref f
-              | TyMethod _ as m -> expr.ty <- Ref m
-              | MemberPtr _ as m -> expr.ty <- m
-              | _ ->
-                  type_error (TyFunction ("", -1)) (Some e) (ASTExpression expr)
-              ))
+              expr.ty <- Int)
       | Binary (op, a, b) -> (
           match op with
           | Plus -> (
@@ -485,7 +482,7 @@ class type_analyze_visitor ctx =
               compiler_bug "unexpected CharAssign" (Some (ASTExpression expr)));
           (* XXX: Nothing is left on stack after assigning method to delegate *)
           match (lhs.ty, rhs.ty) with
-          | Delegate _, Ref (TyMethod _) -> expr.ty <- Void
+          | Delegate _, TyMethod _ -> expr.ty <- Void
           | _ -> expr.ty <- rhs.ty)
       | Seq (_, e) -> expr.ty <- e.ty
       | Ternary (test, con, alt) ->
