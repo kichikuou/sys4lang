@@ -309,7 +309,7 @@ class jaf_compiler ain =
     method compile_variable_ref (e : expression) =
       match e.node with
       | Ident (_, id_type) -> self#compile_identifier_ref id_type
-      | Member (e, _, ClassVariable (_, member_no)) ->
+      | Member (e, _, ClassVariable member_no) ->
           self#compile_lvalue e;
           self#write_instruction1 PUSH member_no
       | Subscript (obj, index) ->
@@ -356,7 +356,7 @@ class jaf_compiler ain =
           | v ->
               self#compile_global_ref v.index;
               compile_lvalue_after v.value_type)
-      | Member (obj, _, ClassVariable (_, member_no)) -> (
+      | Member (obj, _, ClassVariable member_no) -> (
           match (obj.node, e.ty) with
           | ( This,
               ( Ref (String | Array _ | Struct _)
@@ -480,8 +480,7 @@ class jaf_compiler ain =
           match expr.ty with
           | Ref (TyFunction (_, no)) -> self#write_instruction1 PUSH no
           | _ -> compile_error "not implemented" (ASTExpression expr))
-      | MemberAddr (_, _, ClassVariable (_, v)) ->
-          self#write_instruction1 PUSH v
+      | MemberAddr (_, _, ClassVariable v) -> self#write_instruction1 PUSH v
       | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (
           match (Ain.get_global_by_index ain i).value_type with
@@ -740,11 +739,17 @@ class jaf_compiler ain =
           match obj.ty with
           | String -> self#write_instruction0 C_REF
           | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
-      | Member ({ node = This; _ }, _, ClassVariable (_, member_no))
+      | Member ({ node = This; _ }, _, ClassVariable member_no)
         when is_scalar expr.ty ->
           self#write_instruction1 SH_STRUCTREF member_no
-      | Member (e, _, ClassVariable (struct_no, member_no)) ->
-          let struct_type = Ain.get_struct_by_index ain struct_no in
+      | Member (e, _, ClassVariable member_no) ->
+          let struct_type =
+            match e.ty with
+            | Struct (_, struct_no) | Ref (Struct (_, struct_no)) ->
+                Ain.get_struct_by_index ain struct_no
+            | _ ->
+                compiler_bug "member of non-struct" (Some (ASTExpression expr))
+          in
           self#compile_lvalue e;
           self#write_instruction1 PUSH member_no;
           self#compile_dereference

@@ -118,7 +118,7 @@ type ident_type =
 
 type member_type =
   | UnresolvedMember
-  | ClassVariable of int * int
+  | ClassVariable of int
   | ClassConst of string
   | ClassMethod of string
   | HLLFunction of string * string

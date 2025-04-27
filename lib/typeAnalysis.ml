@@ -339,7 +339,7 @@ class type_analyze_visitor ctx =
                   ( make_expr ~ty:(Struct (s.name, s.index)) This,
                     name,
                     if v.is_const then ClassConst s.name
-                    else ClassVariable (s.index, Option.value_exn v.index) );
+                    else ClassVariable (Option.value_exn v.index) );
               expr.ty <- v.type_spec.ty
           | ResolvedMethod (s, f) ->
               let fun_name = mangled_name f in
@@ -371,12 +371,10 @@ class type_analyze_visitor ctx =
               undefined_variable_error
                 (sname ^ "::" ^ name)
                 (ASTExpression expr)
-          | ResolvedMember (s, v) ->
+          | ResolvedMember (_, v) ->
               expr.node <-
                 MemberAddr
-                  ( sname,
-                    name,
-                    ClassVariable (s.index, Option.value_exn v.index) );
+                  (sname, name, ClassVariable (Option.value_exn v.index));
               expr.ty <- MemberPtr (sname, v.type_spec.ty)
           | _ ->
               compiler_bug "resolve_qualified returned an unexpected value"
@@ -560,9 +558,7 @@ class type_analyze_visitor ctx =
                   ( obj,
                     member_name,
                     if member.is_const then ClassConst struc.name
-                    else
-                      ClassVariable (struc.index, Option.value_exn member.index)
-                  );
+                    else ClassVariable (Option.value_exn member.index) );
               expr.ty <- member.type_spec.ty
           | None -> (
               let fun_name = struc.name ^ "@" ^ member_name in
