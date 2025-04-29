@@ -1110,9 +1110,8 @@ class jaf_compiler ain =
                 (Some (ASTStatement stmt)));
           self#compile_unlock_peek
       | ObjSwap (a, b) ->
-          (* FIXME: this doesn't work for string / struct *)
-          self#compile_lvalue a;
-          self#compile_lvalue b;
+          self#compile_variable_ref a;
+          self#compile_variable_ref b;
           let type_no =
             Ain.Type.int_of_data_type (Ain.version ain) (jaf_to_ain_type a.ty)
           in

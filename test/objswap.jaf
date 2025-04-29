@@ -1,3 +1,8 @@
+struct S {
+	int a;
+	int b;
+};
+
 int main()
 {
 	int i = 1, j = 2;
@@ -14,11 +19,25 @@ int main()
 		ref int ri, rj;
 		ri <=> rj;  // FIXME: this should be compile error
 	}
-/* FIXME: This doesn't work yet
+
 	string s = "hello", t = "world";
 	s <=> t;
 	assert(s == "world");
 	assert(t == "hello");
-*/
+
+	array@int ai[2];
+	ai[0] = 1;
+	ai[1] = 2;
+	ai[0] <=> ai[1];
+	assert(ai[0] == 2);
+	assert(ai[1] == 1);
+
+	S s;
+	s.a = 1;
+	s.b = 2;
+	s.a <=> s.b;
+	assert(s.a == 2);
+	assert(s.b == 1);
+
 	return 0;
 }
