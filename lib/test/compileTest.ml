@@ -314,6 +314,35 @@ let%expect_test "bool ? ref int : int" =
       078: EOF
     |}]
 
+let%expect_test "assign this" =
+  compile_test
+    {|
+      struct S {
+        void f();
+      };
+
+      void S::f() {
+        S s2;
+        s2 = this;
+      }
+    |};
+  [%expect
+    {|
+      000: FUNC S@f
+      006: SH_LOCALDELETE s2
+      012: SH_LOCALCREATE s2, struct(0)
+      022: SH_LOCALREF s2
+      028: PUSHSTRUCTPAGE
+      030: SR_REF2 struct(0)
+      036: PUSH 0
+      042: SR_ASSIGN
+      044: SR_POP
+      046: RETURN
+      048: EOF test.jaf
+      054: FUNC NULL
+      060: EOF
+    |}]
+
 let%expect_test "deref struct assign" =
   compile_test
     {|

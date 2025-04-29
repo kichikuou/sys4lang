@@ -388,7 +388,7 @@ class jaf_compiler ain =
               self#compile_expression ref_expr;
               self#write_instruction0
                 (if is_ref_scalar ref_expr.ty then R_ASSIGN else ASSIGN))
-      | This -> self#compile_expression e
+      | This -> self#write_instruction0 PUSHSTRUCTPAGE
       | Null -> (
           match e.ty with
           | Ref t ->
@@ -899,7 +899,14 @@ class jaf_compiler ain =
           compiler_bug "invalid call expression" (Some (ASTExpression expr))
       | New _ -> compiler_bug "bare new expression" (Some (ASTExpression expr))
       | DummyRef _ -> self#compile_lvalue expr
-      | This -> self#write_instruction0 PUSHSTRUCTPAGE
+      | This -> (
+          match expr.ty with
+          | Struct (_, no) ->
+              self#write_instruction0 PUSHSTRUCTPAGE;
+              self#write_instruction1 SR_REF2 no
+          | _ ->
+              compiler_bug "unexpected type of this" (Some (ASTExpression expr))
+          )
       | Null -> (
           match expr.ty with
           | FuncType _ | IMainSystem -> self#write_instruction1 PUSH 0
