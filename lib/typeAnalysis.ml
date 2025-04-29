@@ -147,11 +147,17 @@ let type_coerce_numerics parent op a b =
     insert_cast t e;
     t
   in
+  let is_compare_op = function
+    | Equal | NEqual | LT | GT | LTE | GTE -> true
+    | _ -> false
+  in
   match (a.ty, b.ty) with
   | Float, Float -> Float
   | Float, _ -> coerce Float b
   | _, Float -> coerce Float a
   | LongInt, LongInt -> LongInt
+  | LongInt, Int when is_compare_op op -> LongInt
+  | Int, LongInt when is_compare_op op -> LongInt
   | LongInt, _ -> coerce LongInt b
   | _, LongInt -> coerce LongInt a
   | Int, Int -> Int

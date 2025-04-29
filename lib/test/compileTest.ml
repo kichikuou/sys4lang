@@ -127,6 +127,31 @@ let%expect_test "lint inc" =
       050: FUNC NULL
       056: EOF |}]
 
+let%expect_test "compare lint and int" =
+  compile_test {|
+    void f(lint a) {
+      a == 0;
+      1 < a;
+    }
+  |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALREF a
+      012: PUSH 0
+      018: EQUALE
+      020: POP
+      022: PUSH 1
+      028: SH_LOCALREF a
+      034: LT
+      036: POP
+      038: RETURN
+      040: ENDFUNC f
+      046: EOF test.jaf
+      052: FUNC NULL
+      058: EOF
+    |}]
+
 let%expect_test "local ref int" =
   compile_test {|
     void f() {
