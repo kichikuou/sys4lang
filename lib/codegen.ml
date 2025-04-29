@@ -942,7 +942,7 @@ class jaf_compiler ain =
       state of the stack is unchanged after executing a statement. *)
     method compile_statement (stmt : statement) =
       (* delete locals that will be out-of-scope after this statement *)
-      List.iter stmt.delete_vars ~f:(fun i ->
+      List.iter (List.rev stmt.delete_vars) ~f:(fun i ->
           self#compile_delete_var (self#get_local i));
       match stmt.node with
       | EmptyStatement -> ()
