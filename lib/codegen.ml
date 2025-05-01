@@ -971,6 +971,7 @@ class jaf_compiler ctx =
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
         state of the stack is unchanged after executing a statement. *)
     method compile_statement (stmt : statement) =
+      DebugInfo.add_loc ctx.debug_info current_address stmt.loc;
       (* delete locals that will be out-of-scope after this statement *)
       List.iter (List.rev stmt.delete_vars) ~f:(fun i ->
           self#compile_delete_var (self#get_local i));
