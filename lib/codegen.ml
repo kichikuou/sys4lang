@@ -718,7 +718,7 @@ class jaf_compiler ain =
           | LongInt, LongInt -> ()
           | (Int | LongInt), Bool -> self#write_instruction0 ITOB
           | (Int | LongInt), Float -> self#write_instruction0 ITOF
-          | Int, LongInt -> self#write_instruction0 ITOLI
+          | (Bool | Int), LongInt -> self#write_instruction0 ITOLI
           | LongInt, Int -> ()
           | (Bool | Int | LongInt), String -> self#write_instruction0 I_STRING
           | Bool, (Bool | Int) -> ()
