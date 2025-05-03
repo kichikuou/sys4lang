@@ -582,8 +582,8 @@ class jaf_compiler ain =
           | (Int | Bool), BitOr -> self#write_instruction0 OR
           | (Int | Bool), BitXor -> self#write_instruction0 XOR
           | (Int | Bool), BitAnd -> self#write_instruction0 AND
-          | Int, LShift -> self#write_instruction0 LSHIFT
-          | Int, RShift -> self#write_instruction0 RSHIFT
+          | (Int | Bool), LShift -> self#write_instruction0 LSHIFT
+          | (Int | Bool), RShift -> self#write_instruction0 RSHIFT
           | Int, (LogOr | LogAnd) ->
               compiler_bug "invalid integer operator"
                 (Some (ASTExpression expr))
