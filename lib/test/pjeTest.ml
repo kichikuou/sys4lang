@@ -17,12 +17,14 @@
 open Base
 open Sys4cLib
 
+let unix_path = String.map ~f:(function '\\' -> '/' | c -> c)
+
 let pje_load_test pje_name mock_read_file =
   try
     let pje = Project.load_pje mock_read_file pje_name in
     List.iter (Pje.collect_sources pje) ~f:(function
-      | Pje.Jaf f -> Stdio.print_endline f
-      | Pje.Hll (f, name) -> Stdio.printf "%s as %s\n" f name
+      | Pje.Jaf f -> Stdio.print_endline (unix_path f)
+      | Pje.Hll (f, name) -> Stdio.printf "%s as %s\n" (unix_path f) name
       | _ -> failwith "unreachable")
   with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> None)
@@ -72,38 +74,39 @@ let%expect_test "no hll name" =
     project.pje:6:9-9: No import name for foo.hll |}]
 
 let%expect_test "include" =
-  pje_load_test "Proj/project.pje" (function
-    | "Proj/project.pje" ->
-        {|
-          SourceDir = "Source"
-          SystemSource = {
-            "System\System.inc",
-          }
-          Source = {
-            "game.inc",
-          }
-        |}
-    | "Proj/Source/System/System.inc" ->
-        {|
-          Source = {
-            "system.jaf",
-            "SACT\SACT.inc",
-          }
-        |}
-    | "Proj/Source/System/SACT/SACT.inc" ->
-        {|
-          Source = {
-            "main\sact.jaf",
-            "SACT2.hll", "SACT"
-          }
-        |}
-    | "Proj/Source/game.inc" ->
-        {|
-          Source = {
-            "main.jaf",
-          }
-        |}
-    | f -> failwith ("unexpected file: " ^ f));
+  pje_load_test "Proj/project.pje" (fun path ->
+      match unix_path path with
+      | "Proj/project.pje" ->
+          {|
+            SourceDir = "Source"
+            SystemSource = {
+              "System\System.inc",
+            }
+            Source = {
+              "game.inc",
+            }
+          |}
+      | "Proj/Source/System/System.inc" ->
+          {|
+            Source = {
+              "system.jaf",
+              "SACT\SACT.inc",
+            }
+          |}
+      | "Proj/Source/System/SACT/SACT.inc" ->
+          {|
+            Source = {
+              "main\sact.jaf",
+              "SACT2.hll", "SACT"
+            }
+          |}
+      | "Proj/Source/game.inc" ->
+          {|
+            Source = {
+              "main.jaf",
+            }
+          |}
+      | f -> failwith ("unexpected file: " ^ f));
   [%expect
     {|
       System/system.jaf
