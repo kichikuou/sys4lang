@@ -16,6 +16,7 @@
 
 open Core
 open Sys4cLib
+open Cmdliner
 
 let read_text_file input_encoding file =
   let content =
@@ -85,52 +86,70 @@ let do_build pje_file input_encoding =
     (fun file -> Hashtbl.find ctx.files file)
 
 let cmd_compile_jaf =
-  Command.basic ~summary:"Compile .jaf files"
-    ~readme:(fun () -> "Compile .jaf files.")
-    Command.Let_syntax.(
-      let%map_open sources =
-        anon (sequence ("source files" %: Filename_unix.arg_type))
-      and output =
-        flag "-output"
-          (optional_with_default "out.ain" Filename_unix.arg_type)
-          ~doc:"out-file The output .ain file"
-      and major =
-        flag "-ain-version"
-          (optional_with_default 4 int)
-          ~doc:"version The output .ain file version (default: 4)"
-      and minor =
-        flag "-ain-minor-version"
-          (optional_with_default 0 int)
-          ~doc:"version The output .ain file minor version (default: 0)"
-      and import_as =
-        flag "-import-as" (listed string)
-          ~doc:"hll_name=name Import hll_name as name"
-      and input_encoding =
-        flag "-input-encoding"
-          (optional_with_default "utf8" string)
-          ~doc:"encoding The input file encoding. sjis or utf8 (default)"
-      and test =
-        flag "-test" (optional Filename_unix.arg_type) ~doc:" Testing"
-      in
-      fun () ->
-        if Option.is_some test then
-          let ain = Ain.load (Option.value_exn test) in
-          Ain.write_file ain output
-        else do_compile sources output major minor import_as input_encoding)
+  let doc = "Compile .jaf files." in
+  let info = Cmd.info "compile" ~doc in
+  let sources =
+    let doc = "Source files to compile." in
+    Arg.(non_empty & pos_all string [] & info [] ~docv:"SOURCES" ~doc)
+  in
+  let output =
+    let doc = "The output .ain file." in
+    Arg.(value & opt string "out.ain" & info [ "output" ] ~docv:"OUT_FILE" ~doc)
+  in
+  let major =
+    let doc = "The output .ain file version." in
+    Arg.(value & opt int 4 & info [ "ain-version" ] ~docv:"MAJOR" ~doc)
+  in
+  let minor =
+    let doc = "The output .ain file minor version." in
+    Arg.(value & opt int 0 & info [ "ain-minor-version" ] ~docv:"MINOR" ~doc)
+  in
+  let import_as =
+    let doc = "Import HLL_NAME as NAME." in
+    Arg.(
+      value & opt_all string []
+      & info [ "import-as" ] ~docv:"HLL_NAME=NAME" ~doc)
+  in
+  let input_encoding =
+    let doc = "The input file encoding. sjis or utf8." in
+    Arg.(
+      value & opt string "utf8"
+      & info [ "input-encoding" ] ~docv:"ENCODING" ~doc)
+  in
+  let test =
+    let doc = "Testing." in
+    Arg.(value & opt (some string) None & info [ "test" ] ~docv:"TEST" ~doc)
+  in
+  let compile sources output major minor import_as input_encoding test =
+    if Option.is_some test then
+      let ain = Ain.load (Option.value_exn test) in
+      Ain.write_file ain output
+    else do_compile sources output major minor import_as input_encoding
+  in
+  Cmd.v info
+    Term.(
+      const compile $ sources $ output $ major $ minor $ import_as
+      $ input_encoding $ test)
 
 let cmd_build_pje =
-  Command.basic ~summary:"Build a System 4 project"
-    ~readme:(fun () -> "Build a System 4 project from a .pje file.")
-    Command.Let_syntax.(
-      let%map_open project = anon ("project file" %: Filename_unix.arg_type)
-      and input_encoding =
-        flag "-input-encoding"
-          (optional_with_default "utf8" string)
-          ~doc:"encoding The input file encoding. sjis or utf8 (default)"
-      in
-      fun () -> do_build project input_encoding)
+  let doc = "Build a System 4 project from a .pje file." in
+  let info = Cmd.info "build" ~doc in
+  let project =
+    let doc = "The project file to build." in
+    Arg.(required & pos 0 (some string) None & info [] ~docv:"PROJECT" ~doc)
+  in
+  let input_encoding =
+    let doc = "The input file encoding. sjis or utf8." in
+    Arg.(
+      value & opt string "utf8"
+      & info [ "input-encoding" ] ~docv:"ENCODING" ~doc)
+  in
+  Cmd.v info Term.(const do_build $ project $ input_encoding)
 
-let () =
-  Command_unix.run ~version:"0.1"
-    (Command.group ~summary:"System 4 Compiler"
-       [ ("compile", cmd_compile_jaf); ("build", cmd_build_pje) ])
+let cmd =
+  let doc = "System 4 Compiler" in
+  let version = "0.1" in
+  let info = Cmd.info "sys4c" ~version ~doc in
+  Cmd.group info [ cmd_compile_jaf; cmd_build_pje ]
+
+let () = Stdlib.exit (Cmd.eval cmd)

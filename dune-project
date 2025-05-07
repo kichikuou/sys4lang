@@ -13,7 +13,7 @@
    ocaml
    base
    core
-   core_unix
+   cmdliner
    stdio
    camlzip
    vector
