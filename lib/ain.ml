@@ -1377,7 +1377,7 @@ let write_file ain file = Out_channel.with_file file ~f:(write ain) ~binary:true
 
 let get_global ain name =
   Array.find ain.globals ~f:(fun g -> String.equal g.variable.name name)
-  |> Option.map ~f:(fun g -> g.variable)
+  |> Option.map ~f:(fun (g : Global.t) -> g.variable)
 
 let get_globali ain name =
   Array.findi ain.globals ~f:(fun _ g -> String.equal g.variable.name name)

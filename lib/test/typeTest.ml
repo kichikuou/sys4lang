@@ -14,7 +14,6 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Base
 open Sys4cLib
 
 let type_test input =

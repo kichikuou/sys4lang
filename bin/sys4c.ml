@@ -14,7 +14,7 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Core
+open Base
 open Sys4cLib
 open Cmdliner
 
@@ -22,7 +22,7 @@ let read_text_file input_encoding file =
   let content =
     match file with
     | "-" -> In_channel.input_all In_channel.stdin
-    | _ -> In_channel.read_all file
+    | _ -> Stdio.In_channel.read_all file
   in
   match input_encoding with
   | "utf8" -> content
@@ -33,10 +33,10 @@ let handle_errors f get_content =
   try f () with
   | CompileError.Compile_error e ->
       CompileError.print_error e get_content;
-      exit 1
+      Stdlib.exit 1
   | Sys_error msg ->
       Stdio.print_endline msg;
-      exit 1
+      Stdlib.exit 1
 
 let do_compile sources output major minor import_as input_encoding =
   let import_as =
@@ -49,7 +49,7 @@ let do_compile sources output major minor import_as input_encoding =
     List.map sources ~f:(fun f ->
         if String.is_suffix (String.lowercase f) ~suffix:".hll" then
           let import_name =
-            let hll_name = Filename.chop_extension (Filename.basename f) in
+            let hll_name = Stdlib.Filename.(chop_extension (basename f)) in
             match List.Assoc.find import_as ~equal:String.equal hll_name with
             | Some name -> name
             | None -> hll_name

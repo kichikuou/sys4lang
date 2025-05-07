@@ -2,4 +2,4 @@
  (name sys4c)
  (public_name sys4c)
  (package sys4c)
- (libraries Sys4cLib core cmdliner))
+ (libraries Sys4cLib base cmdliner))

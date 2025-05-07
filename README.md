@@ -16,7 +16,7 @@ installed. Then, run the following commands:
 ```sh
 $ git clone https://github.com/kichikuou/sys4c.git
 $ cd sys4c
-$ opam install . --deps-only
+$ opam install . --deps-only --with-test
 $ dune build
 $ dune install
 ```

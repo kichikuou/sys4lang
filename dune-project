@@ -12,7 +12,6 @@
   (depends
    ocaml
    base
-   core
    cmdliner
    stdio
    camlzip

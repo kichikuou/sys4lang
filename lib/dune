@@ -1,8 +1,6 @@
 (library
  (name Sys4cLib)
- (libraries base camlzip vector)
- (preprocess
-  (pps ppx_jane)))
+ (libraries base stdio camlzip vector))
 
 (ocamllex lexer pjeLexer)
 
