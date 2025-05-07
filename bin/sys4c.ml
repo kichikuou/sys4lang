@@ -94,7 +94,9 @@ let cmd_compile_jaf =
   in
   let output =
     let doc = "The output .ain file." in
-    Arg.(value & opt string "out.ain" & info [ "output" ] ~docv:"OUT_FILE" ~doc)
+    Arg.(
+      value & opt string "out.ain"
+      & info [ "o"; "output" ] ~docv:"OUT_FILE" ~doc)
   in
   let major =
     let doc = "The output .ain file version." in
