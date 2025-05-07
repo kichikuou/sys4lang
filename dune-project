@@ -18,4 +18,5 @@
    vector
    dune
    menhir
-   (ppx_expect :with-test)))
+   (ppx_expect :with-test)
+   (ocamlformat (= 0.27.0))))

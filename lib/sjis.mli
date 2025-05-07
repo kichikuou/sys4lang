@@ -14,14 +14,17 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-(** [from_utf8 str] converts the UTF-8 encoded string [str] to Shift_JIS encoding. *)
+(** [from_utf8 str] converts the UTF-8 encoded string [str] to Shift_JIS
+    encoding. *)
 val from_utf8 : string -> string
 
-(** [to_utf8 str] converts the Shift_JIS encoded string [str] to UTF-8 encoding. *)
+(** [to_utf8 str] converts the Shift_JIS encoded string [str] to UTF-8 encoding.
+*)
 val to_utf8 : string -> string
 
 (** [is_valid n] checks if the integer [n] is a valid Shift_JIS code point. *)
 val is_valid : int -> bool
 
-(** [from_uchar_le u] converts the Unicode character [u] to a Shift_JIS code, in little-endian order. *)
+(** [from_uchar_le u] converts the Unicode character [u] to a Shift_JIS code, in
+    little-endian order. *)
 val from_uchar_le : Uchar.t -> int option

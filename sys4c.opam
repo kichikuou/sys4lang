@@ -15,6 +15,7 @@ depends: [
   "dune" {>= "2.8"}
   "menhir"
   "ppx_expect" {with-test}
+  "ocamlformat" {= "0.27.0"}
   "odoc" {with-doc}
 ]
 build: [

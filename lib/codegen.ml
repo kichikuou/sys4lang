@@ -60,7 +60,7 @@ class jaf_compiler ain =
     val scopes = Stack.create ()
 
     (** Begin a scope. Variables created within a scope are deleted when the
-      scope ends. *)
+        scope ends. *)
     method start_scope =
       Stack.push scopes { vars = []; labels = []; gotos = [] }
 
@@ -171,7 +171,7 @@ class jaf_compiler ain =
       switch.default_address <- current_address
 
     (** Retrieves the continue address for the current loop (i.e. the address
-      that 'continue' statements should jump to). *)
+        that 'continue' statements should jump to). *)
     method get_continue_addr node =
       let rec get_first_continue = function
         | { kind = CFlowLoop addr; _ } :: _ -> addr
@@ -191,7 +191,7 @@ class jaf_compiler ain =
       | _ -> compile_error "switch case outside of switch statement" node
 
     (** Push the location of a 32-bit integer that should be updated to the
-      address of the current scope's end point. *)
+        address of the current scope's end point. *)
     method push_break_addr addr node =
       match Stack.top cflow_stmts with
       | Some stmt -> stmt.break_addrs <- addr :: stmt.break_addrs
@@ -271,8 +271,8 @@ class jaf_compiler ain =
       | _ -> ()
 
     (** Emit the code to put the value of a variable onto the stack (including
-      member variables and array elements). Assumes a page + page-index is
-      already on the stack. *)
+        member variables and array elements). Assumes a page + page-index is
+        already on the stack. *)
     method compile_dereference (t : Ain.Type.t) =
       match t.data with
       | Int | Float | Bool | LongInt | FuncType _ ->
@@ -326,8 +326,8 @@ class jaf_compiler ain =
       self#write_instruction0 DELETE
 
     (** Emit the code to put a location (variable, struct member, or array
-      element) onto the stack, e.g. to prepare for an assignment or to pass
-      a variable by reference. *)
+        element) onto the stack, e.g. to prepare for an assignment or to pass a
+        variable by reference. *)
     method compile_lvalue (e : expression) =
       let compile_lvalue_after (t : Ain.Type.t) =
         if t.is_ref then
@@ -439,15 +439,16 @@ class jaf_compiler ain =
       in
       List.iter2_exn args (Ain.Function.logical_parameters f) ~f:compile_arg
 
-    (** Emit the code to call a method. The object upon which the method is to be
-      called should already be on the stack before this code is executed. *)
+    (** Emit the code to call a method. The object upon which the method is to
+        be called should already be on the stack before this code is executed.
+    *)
     method compile_method_call args method_no =
       let f = Ain.get_function_by_index ain method_no in
       self#compile_function_arguments args f;
       self#write_instruction1 CALLMETHOD method_no
 
     (** Emit the code to compute an expression. Computing an expression produces
-      a value (of the expression's value type) on the stack. *)
+        a value (of the expression's value type) on the stack. *)
     method compile_expression (expr : expression) =
       match expr.node with
       | ConstInt i -> self#write_instruction1 PUSH i
@@ -956,7 +957,7 @@ class jaf_compiler ain =
           self#compile_pop expr.ty (ASTExpression expr)
 
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
-      state of the stack is unchanged after executing a statement. *)
+        state of the stack is unchanged after executing a statement. *)
     method compile_statement (stmt : statement) =
       (* delete locals that will be out-of-scope after this statement *)
       List.iter (List.rev stmt.delete_vars) ~f:(fun i ->
@@ -1135,9 +1136,9 @@ class jaf_compiler ain =
           self#write_instruction1 PUSH type_no;
           self#write_instruction0 OBJSWAP
 
-    (** Emit the code for a variable declaration. If the variable has an initval,
-      the initval expression is computed and assigned to the variable.
-      Otherwise a default value is assigned. *)
+    (** Emit the code for a variable declaration. If the variable has an
+        initval, the initval expression is computed and assigned to the
+        variable. Otherwise a default value is assigned. *)
     method compile_variable_declaration (decl : variable) =
       if decl.is_const then ()
       else
