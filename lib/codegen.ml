@@ -21,11 +21,11 @@ open CompileError
 
 type cflow_type = CFlowLoop of int | CFlowSwitch of Ain.Switch.t
 type cflow_stmt = { kind : cflow_type; mutable break_addrs : int list }
+type scope = { mutable vars : Ain.Variable.t list }
 
-type scope = {
-  mutable vars : Ain.Variable.t list;
-  mutable labels : (string * int) list;
-  mutable gotos : (string * int * statement) list;
+type label_data = {
+  mutable address : int option;
+  mutable gotos : (int * statement) list;
 }
 
 let is_variable_ref = function
@@ -59,33 +59,16 @@ class jaf_compiler ain =
     (* The currentl active scopes. *)
     val scopes = Stack.create ()
 
+    (* Labels/gotos record for the current function. *)
+    val labels = Hashtbl.create (module String)
+
     (** Begin a scope. Variables created within a scope are deleted when the
         scope ends. *)
-    method start_scope =
-      Stack.push scopes { vars = []; labels = []; gotos = [] }
+    method start_scope = Stack.push scopes { vars = [] }
 
     (** End a scope. Deletes variable created within the scope. *)
     method end_scope =
       let scope = Stack.pop_exn scopes in
-      (* update goto addresses *)
-      let unresolved =
-        List.filter scope.gotos ~f:(fun (name, addr_loc, _) ->
-            match
-              List.findi scope.labels ~f:(fun _ (label_name, _) ->
-                  String.equal name label_name)
-            with
-            | Some (_, (_, addr)) ->
-                self#write_address_at addr_loc addr;
-                false
-            | None -> true)
-      in
-      (* unresolved gotos are moved to parent scope *)
-      (match (Stack.top scopes, unresolved) with
-      | _, [] -> ()
-      | None, (_, _, stmt) :: _ ->
-          compile_error "Unresolved label" (ASTStatement stmt)
-      | Some parent, unresolved ->
-          parent.gotos <- List.append parent.gotos unresolved);
       (* delete scope-local variables *)
       (* NOTE: Variables are deleted automatically by the VM upon function
                return. This code is emitted only to ensure that destructors are
@@ -101,15 +84,33 @@ class jaf_compiler ain =
       | Some scope -> scope.vars <- v :: scope.vars
       | None -> compiler_bug "tried to add variable to null scope" None
 
-    (** Add a label to the current scope. *)
-    method scope_add_label name =
-      let scope = Stack.top_exn scopes in
-      scope.labels <- (name, current_address) :: scope.labels
+    (** Add a label for the current function. *)
+    method add_label name stmt =
+      Hashtbl.update labels name ~f:(function
+        | None -> { address = Some current_address; gotos = [] }
+        | Some { address = None; gotos } ->
+            { address = Some current_address; gotos }
+        | Some _ -> compile_error "Duplicate label" (ASTStatement stmt))
 
-    (** Add a goto address location to the current scope *)
-    method scope_add_goto name addr_loc stmt =
-      let scope = Stack.top_exn scopes in
-      scope.gotos <- (name, addr_loc, stmt) :: scope.gotos
+    (** Add a goto address location for the current function *)
+    method add_goto name addr_loc stmt =
+      let d =
+        Hashtbl.find_or_add labels name ~default:(fun _ ->
+            { address = None; gotos = [] })
+      in
+      d.gotos <- (addr_loc, stmt) :: d.gotos
+
+    (** Resolve all goto addresses in the current function. *)
+    method resolve_gotos =
+      Hashtbl.iter labels ~f:(fun { address; gotos } ->
+          match address with
+          | Some addr ->
+              List.iter gotos ~f:(fun (addr_loc, _) ->
+                  self#write_address_at addr_loc addr)
+          | None ->
+              compile_error "Unresolved label"
+                (ASTStatement (snd (List.last_exn gotos))));
+      Hashtbl.clear labels
 
     (** Begin a loop. *)
     method start_loop addr =
@@ -968,7 +969,7 @@ class jaf_compiler ain =
           List.iter decls.vars ~f:self#compile_variable_declaration
       | Expression e -> self#compile_expr_and_pop e
       | Compound stmts -> self#compile_block stmts
-      | Label name -> self#scope_add_label name
+      | Label name -> self#add_label name stmt
       | If (test, con, alt) ->
           self#compile_expression test;
           let ifz_addr = current_address + 2 in
@@ -1047,7 +1048,7 @@ class jaf_compiler ain =
               self#write_address_at break_addr current_address);
           self#end_loop
       | Goto name ->
-          self#scope_add_goto name (current_address + 2) stmt;
+          self#add_goto name (current_address + 2) stmt;
           self#write_instruction1 JUMP 0
       | Continue ->
           self#write_instruction1 JUMP
@@ -1279,6 +1280,7 @@ class jaf_compiler ain =
       | { class_name = None; _ } | { name = "2"; _ } ->
           self#write_instruction1 ENDFUNC index
       | _ -> ());
+      self#resolve_gotos;
       Ain.write_function ain func;
       current_function <- None
 

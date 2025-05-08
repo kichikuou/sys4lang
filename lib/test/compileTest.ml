@@ -762,6 +762,37 @@ let%expect_test "local delete" =
         124: FUNC NULL
         130: EOF |}]
 
+let%expect_test "local delete with goto" =
+  compile_test
+    {|
+      struct S {};
+      void f() {
+        S s1;
+        for (;;) {
+          S s2;
+          goto skip;
+        }
+        skip:
+      }
+    |};
+  [%expect
+    {|
+      000: FUNC f
+      006: SH_LOCALDELETE s1
+      012: SH_LOCALCREATE s1, struct(0)
+      022: SH_LOCALDELETE s2
+      028: SH_LOCALCREATE s2, struct(0)
+      038: SH_LOCALDELETE s2
+      044: JUMP 62
+      050: SH_LOCALDELETE s2
+      056: JUMP 22
+      062: RETURN
+      064: ENDFUNC f
+      070: EOF test.jaf
+      076: FUNC NULL
+      082: EOF
+    |}]
+
 let%expect_test "member pointer" =
   compile_test
     {|

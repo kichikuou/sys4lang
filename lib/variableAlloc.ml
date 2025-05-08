@@ -24,16 +24,17 @@ type var_set = (int, Int.comparator_witness) Set.t
 type scope = {
   (* variables allocated before entering the scope *)
   initial_vars : var_set;
-  (* list of labels, including the list of variables allocated at each label *)
-  (* when leaving a scope, this list is NOT inherited by the parent scope *)
-  mutable labels : (string * var_set) list;
-  (* list of unresolved goto statements *)
-  (* when leaving a scope, this list is inherited by the parent scope *)
-  mutable gotos : (statement * var_set) list;
   (* list of unresolved break statements *)
   mutable breaks : (statement * var_set) list;
   (* list of unresolved continue statements *)
   mutable continues : (statement * var_set) list;
+}
+
+type label_data = {
+  (* list of variables allocated at the label *)
+  mutable live_vars : var_set option;
+  (* list of goto statements to the label *)
+  mutable gotos : (statement * var_set) list;
 }
 
 let dummy_var_seqno = ref 0
@@ -43,44 +44,14 @@ class variable_alloc_visitor ctx =
     inherit ivisitor ctx as super
     val mutable vars : variable list = []
     val scopes = Stack.create ()
+    val labels = Hashtbl.create (module String)
 
     method start_scope =
       Stack.push scopes
-        {
-          initial_vars = self#current_var_set;
-          labels = [];
-          gotos = [];
-          breaks = [];
-          continues = [];
-        }
+        { initial_vars = self#current_var_set; breaks = []; continues = [] }
 
     method end_scope kind =
       let scope = Stack.pop_exn scopes in
-      (* resolve gotos *)
-      let unresolved =
-        List.filter scope.gotos ~f:(function
-          | ({ node = Goto name; _ } as goto), goto_vars -> (
-              match
-                List.find scope.labels ~f:(fun (label_name, _) ->
-                    String.equal name label_name)
-              with
-              | Some (_, label_vars) ->
-                  (* variables which aren't in-scope at the target label should be deleted *)
-                  goto.delete_vars <-
-                    Set.elements (Set.diff goto_vars label_vars);
-                  false
-              | None -> true)
-          | stmt, _ ->
-              compiler_bug "Invalid statement in goto list"
-                (Some (ASTStatement stmt)))
-      in
-      (* unresolved gotos are moved to the parent scope *)
-      (match (Stack.top scopes, unresolved) with
-      | _, [] -> ()
-      | None, (stmt, _) :: _ ->
-          compile_error "Unresolved label" (ASTStatement stmt)
-      | Some parent, unresolved ->
-          parent.gotos <- List.append parent.gotos unresolved);
       let update_break_continue (stmt, vars) =
         stmt.delete_vars <- Set.elements (Set.diff vars scope.initial_vars)
       in
@@ -117,6 +88,19 @@ class variable_alloc_visitor ctx =
           carry_breaks ();
           carry_continues ()
 
+    method resolve_gotos =
+      Hashtbl.iter labels ~f:(fun { live_vars; gotos } ->
+          match live_vars with
+          | Some label_vars ->
+              List.iter gotos ~f:(fun (stmt, goto_vars) ->
+                  (* variables which aren't in-scope at the target label should be deleted *)
+                  stmt.delete_vars <-
+                    Set.elements (Set.diff goto_vars label_vars))
+          | None ->
+              compile_error "Unresolved label"
+                (ASTStatement (fst (List.last_exn gotos))));
+      Hashtbl.clear labels
+
     method current_var_set =
       Set.of_list
         (module Int)
@@ -130,13 +114,19 @@ class variable_alloc_visitor ctx =
       let scope = Stack.top_exn scopes in
       scope.breaks <- (stmt, self#current_var_set) :: scope.breaks
 
-    method add_label name =
-      let scope = Stack.top_exn scopes in
-      scope.labels <- (name, self#current_var_set) :: scope.labels
+    method add_label name stmt =
+      Hashtbl.update labels name ~f:(function
+        | None -> { live_vars = Some self#current_var_set; gotos = [] }
+        | Some { live_vars = None; gotos } ->
+            { live_vars = Some self#current_var_set; gotos }
+        | Some _ -> compile_error "Duplicate label" (ASTStatement stmt))
 
-    method add_goto stmt =
-      let scope = Stack.top_exn scopes in
-      scope.gotos <- (stmt, self#current_var_set) :: scope.gotos
+    method add_goto name stmt =
+      let d =
+        Hashtbl.find_or_add labels name ~default:(fun _ ->
+            { live_vars = None; gotos = [] })
+      in
+      d.gotos <- (stmt, self#current_var_set) :: d.gotos
 
     method get_var_no name =
       match environment#get_local name with
@@ -225,8 +215,8 @@ class variable_alloc_visitor ctx =
       | While (_, _) | DoWhile (_, _) -> self#start_scope
       | For (_, _, _, _) -> self#start_scope
       | Switch (_, _) -> self#start_scope
-      | Label name -> self#add_label name
-      | Goto _ -> self#add_goto stmt
+      | Label name -> self#add_label name stmt
+      | Goto name -> self#add_goto name stmt
       | Continue -> self#add_continue stmt
       | Break -> self#add_break stmt
       | _ -> ());
@@ -255,6 +245,7 @@ class variable_alloc_visitor ctx =
         self#start_scope;
         super#visit_fundecl f;
         self#end_scope ScopeAnon;
+        self#resolve_gotos;
         (* write updated fundecl to ain file *)
         (match Ain.get_function ctx.ain (mangled_name f) with
         | Some obj ->

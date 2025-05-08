@@ -133,6 +133,18 @@ skip:
 	assert(one + 1 == 2);
 }
 
+void test_goto_child_scope()
+{
+	int one = 3;
+	goto skip;
+	one = 5;
+	if (false) {
+	skip:
+		one = 1;
+	}
+	assert(one + 1 == 2);
+}
+
 void test_break_nested()
 {
 	int i = 42;
@@ -218,6 +230,7 @@ int main()
 	test_string_switch();
 	test_ternary();
 	test_goto();
+	test_goto_child_scope();
 	test_break_nested();
 	test_continue_nested();
 	test_goto_destructor();
