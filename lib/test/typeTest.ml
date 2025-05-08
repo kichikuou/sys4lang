@@ -725,3 +725,22 @@ let%expect_test "switch type error" =
       -:4:11-20: string case in int switch
           4 |           case "a":
                         ^^^^^^^^^ |}]
+
+let%expect_test "stray case" =
+  type_test
+    {|
+      void f() {
+        switch (1) {
+          if (1) {
+            case 1:  // this is OK
+              break;
+          }
+        }
+        case 2:
+      }
+    |};
+  [%expect
+    {|
+    -:9:9-16: switch case outside of switch statement
+        9 |         case 2:
+                    ^^^^^^^ |}]

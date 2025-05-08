@@ -342,6 +342,7 @@ type_specifier
 statement
   : declaration_statement { stmt $sloc $1 }
   | label_statement { stmt $sloc $1 }
+  | switch_statement { stmt $sloc $1 }
   | compound_statement { stmt $sloc $1 }
   | expression_statement { stmt $sloc $1 }
   | selection_statement { stmt $sloc $1 }
@@ -354,9 +355,8 @@ statement
   ;
 
 switch_statement
-  : CASE constant_expression COLON { stmt $sloc (Case $2) }
-  | DEFAULT COLON { stmt $sloc Default }
-  | statement { $1 }
+  : CASE constant_expression COLON { Case $2 }
+  | DEFAULT COLON { Default }
   ;
 
 declaration_statement
@@ -385,7 +385,7 @@ selection_statement
     { If ($3, $5, stmt ($endpos, $endpos) EmptyStatement) }
   | IF LPAREN expression RPAREN statement ELSE statement
     { If ($3, $5, $7) }
-  | SWITCH LPAREN expression RPAREN LBRACE switch_statement+ RBRACE
+  | SWITCH LPAREN expression RPAREN LBRACE statement+ RBRACE
     { Switch ($3, $6) }
   ;
 
