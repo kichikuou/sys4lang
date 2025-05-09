@@ -123,6 +123,7 @@ let rec multidim_array dims t =
 %token GOTO CONTINUE BREAK RETURN JUMP JUMPS ASSERT
 %token CONST REF ARRAY WRAP FUNCTYPE DELEGATE STRUCT CLASS PRIVATE PUBLIC ENUM
 %token FILE_MACRO LINE_MACRO DATE_MACRO TIME_MACRO GLOBALGROUP UNKNOWN_FUNCTYPE
+%token UNKNOWN_DELEGATE
 
 %token EOF
 
@@ -324,8 +325,9 @@ primitive_type_specifier
   | HLL_STRUCT   { Struct("hll_struct", -1) }
   | HLL_PARAM    { HLLParam }
   | HLL_FUNC     { HLLFunc }
-  | HLL_DELEGATE { Delegate("hll_delegate", -1) }
+  | HLL_DELEGATE { Delegate (Some ("hll_delegate", -1)) }
   | UNKNOWN_FUNCTYPE { FuncType None }
+  | UNKNOWN_DELEGATE { Delegate None }
   ;
 
 atomic_type_specifier

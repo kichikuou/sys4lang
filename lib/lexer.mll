@@ -121,6 +121,7 @@ let () =
               "__TIME__",     TIME_MACRO;
               "globalgroup",  GLOBALGROUP;
               "unknown_functype", UNKNOWN_FUNCTYPE;
+              "unknown_delegate", UNKNOWN_DELEGATE;
             ]
 }
 

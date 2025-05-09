@@ -39,7 +39,8 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | IMainSystem, (IMainSystem | Int) -> true
   | FuncType (Some (_, a)), FuncType (Some (_, b)) -> a = b
   | FuncType None, FuncType None -> true
-  | Delegate (_, a), Delegate (_, b) -> a = b
+  | Delegate (Some (_, a)), Delegate (Some (_, b)) -> a = b
+  | Delegate None, Delegate None -> true
   | MemberPtr (s1, t1), MemberPtr (s2, t2) ->
       String.equal s1 s2 && type_equal t1 t2
   | NullType, (FuncType _ | Delegate _ | IMainSystem | NullType) -> true
@@ -201,17 +202,18 @@ class type_analyze_visitor ctx =
       | Ref _ -> ()
       | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
-    method check_delegate_compatible parent dg_name dg_i (expr : expression) =
-      match expr.ty with
-      | TyMethod (f_name, _) ->
+    method check_delegate_compatible parent dg (expr : expression) =
+      match (dg, expr.ty) with
+      | Some (dg_name, dg_i), TyMethod (f_name, _) ->
           let dg = Hashtbl.find_exn ctx.delegates dg_name in
           let f = Hashtbl.find_exn ctx.functions f_name in
           if not (fundecl_compatible dg f) then
-            type_error (Delegate (dg_name, dg_i)) (Some expr) parent
-      | Delegate (name, idx) ->
+            type_error (Delegate (Some (dg_name, dg_i))) (Some expr) parent
+      | Some (dg_name, dg_i), Delegate (Some (name, idx)) ->
           if not (String.equal name dg_name && dg_i = idx) then
-            type_error (Delegate (dg_name, dg_i)) (Some expr) parent
-      | _ -> type_error (TyMethod ("", -1)) (Some expr) parent
+            type_error (Delegate (Some (dg_name, dg_i))) (Some expr) parent
+      | None, Delegate None -> ()
+      | _, _ -> type_error (TyMethod ("", -1)) (Some expr) parent
 
     method check_assign parent t (rhs : expression) =
       match t with
@@ -236,7 +238,7 @@ class type_analyze_visitor ctx =
           | String -> ()
           | NullType -> rhs.ty <- t
           | _ -> type_error (TyFunction ("", -1)) (Some rhs) parent)
-      | Delegate (dn, di) -> self#check_delegate_compatible parent dn di rhs
+      | Delegate dg -> self#check_delegate_compatible parent dg rhs
       | Callback (args, ret) -> (
           match rhs.ty with
           | TyFunction (f_name, _) ->
@@ -464,8 +466,8 @@ class type_analyze_visitor ctx =
                   expr.node <- Assign (CharAssign, lhs, rhs)
               | _ -> ())
           | String, PlusAssign -> check String rhs
-          | Delegate (dn, di), (PlusAssign | MinusAssign) ->
-              self#check_delegate_compatible (ASTExpression expr) dn di rhs
+          | Delegate dg, (PlusAssign | MinusAssign) ->
+              self#check_delegate_compatible (ASTExpression expr) dg rhs
           | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
               check_numeric lhs;
               check_numeric rhs;
@@ -642,7 +644,7 @@ class type_analyze_visitor ctx =
               expr.node <-
                 Call (e, args, FuncTypeCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
-          | Delegate (name, _) ->
+          | Delegate (Some (name, _)) ->
               let f = Hashtbl.find_exn ctx.delegates name in
               let args = check_call f.name f.params args in
               expr.node <-

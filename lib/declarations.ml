@@ -181,7 +181,7 @@ class type_resolve_visitor ctx decl_only =
           | Some ft -> FuncType (Some (name, Option.value_exn ft.index))
           | None -> (
               match Hashtbl.find ctx.delegates name with
-              | Some dg -> Delegate (name, Option.value_exn dg.index)
+              | Some dg -> Delegate (Some (name, Option.value_exn dg.index))
               | None -> (
                   match name with
                   | "IMainSystem" -> IMainSystem
