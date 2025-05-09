@@ -202,18 +202,23 @@ class type_analyze_visitor ctx =
       | Ref _ -> ()
       | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
-    method check_delegate_compatible parent dg (expr : expression) =
-      match (dg, expr.ty) with
-      | Some (dg_name, dg_i), TyMethod (f_name, _) ->
-          let dg = Hashtbl.find_exn ctx.delegates dg_name in
-          let f = Hashtbl.find_exn ctx.functions f_name in
-          if not (fundecl_compatible dg f) then
-            type_error (Delegate (Some (dg_name, dg_i))) (Some expr) parent
+    method check_delegate_compatible parent delegate (expr : expression) =
+      let check dg_name f_name =
+        let dg = Hashtbl.find_exn ctx.delegates dg_name in
+        let f = Hashtbl.find_exn ctx.functions f_name in
+        if not (fundecl_compatible dg f) then
+          type_error (Delegate delegate) (Some expr) parent
+      in
+      match (delegate, expr.ty) with
+      | Some (dg_name, _), TyMethod (f_name, _) -> check dg_name f_name
+      | Some (dg_name, _), TyFunction (f_name, _) ->
+          check dg_name f_name;
+          insert_cast (Delegate delegate) expr
       | Some (dg_name, dg_i), Delegate (Some (name, idx)) ->
           if not (String.equal name dg_name && dg_i = idx) then
-            type_error (Delegate (Some (dg_name, dg_i))) (Some expr) parent
+            type_error (Delegate delegate) (Some expr) parent
       | None, Delegate None -> ()
-      | _, _ -> type_error (TyMethod ("", -1)) (Some expr) parent
+      | _, _ -> type_error (Delegate delegate) (Some expr) parent
 
     method check_assign parent t (rhs : expression) =
       match t with

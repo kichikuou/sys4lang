@@ -731,6 +731,9 @@ class jaf_compiler ain =
               self#write_instruction0 FTOS
           | String, String -> ()
           | String, Int -> self#write_instruction0 STOI
+          | TyFunction _, Delegate _ ->
+              self#write_instruction1 PUSH (-1);
+              self#write_instruction0 SWAP
           | _ ->
               compiler_bug
                 (Printf.sprintf "invalid cast from %s to %s"
