@@ -289,7 +289,7 @@ class jaf_compiler ain =
           self#write_instruction0 DG_COPY
       | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
       | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-      | IFaceWrap _ | Function _ | Method _ | NullType ->
+      | IFaceWrap _ | Function | Method | NullType ->
           compiler_bug "dereference not supported for type" None
 
     method compile_local_ref i =
@@ -425,7 +425,7 @@ class jaf_compiler ain =
       | None -> compiler_bug "missing argument" None
       | Some expr -> (
           match t with
-          | { data = Method _; _ } ->
+          | { data = Method; _ } ->
               (* XXX: for delegate builtins *)
               self#compile_expression expr
           | { data = _; is_ref = true } -> self#compile_lvalue expr
@@ -1225,7 +1225,7 @@ class jaf_compiler ain =
               | None -> self#write_instruction0 DG_CLEAR)
           | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
           | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-          | IFaceWrap _ | Function _ | Method _ | NullType ->
+          | IFaceWrap _ | Function | Method | NullType ->
               compile_error "Unimplemented variable type" (ASTVariable decl)
 
     (** Emit the code for a block of statements. *)

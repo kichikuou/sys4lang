@@ -858,8 +858,8 @@ let rec jaf_to_ain_data_type = function
   | FuncType None -> Ain.Type.FuncType (-1)
   | IMainSystem -> Ain.Type.IMainSystem
   | NullType -> Ain.Type.NullType
-  | TyFunction _ -> Ain.Type.FuncType (-1) (* ??? *)
-  | TyMethod _ -> Ain.Type.Method (-1) (* ??? *)
+  | TyFunction _ -> Ain.Type.Function
+  | TyMethod _ -> Ain.Type.Method
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
 
 and jaf_to_ain_type = function

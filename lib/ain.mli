@@ -29,8 +29,8 @@ module Type : sig
     | HLLFunc
     | Unknown98
     | IFaceWrap of int
-    | Function of int
-    | Method of int
+    | Function
+    | Method
     | NullType
 
   and t = { data : data; is_ref : bool }

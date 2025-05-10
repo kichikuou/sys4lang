@@ -31,8 +31,8 @@ module Type = struct
     | Unknown98
     | IFaceWrap of int
     (* internal compiler use *)
-    | Function of int
-    | Method of int
+    | Function
+    | Method
     | NullType
 
   and t = { data : data; is_ref : bool }
@@ -80,8 +80,8 @@ module Type = struct
             | Unknown98 -> failwith "tried to create ref array<unknown_98>"
             | IFaceWrap _ ->
                 failwith "tried to create ref array<iface_wrap<...>>"
-            | Function _ -> failwith "tried to create ref array<function>"
-            | Method _ -> failwith "tried to create ref array<method>"
+            | Function -> failwith "tried to create ref array<function>"
+            | Method -> failwith "tried to create ref array<method>"
             | NullType -> failwith "tried to create ref array<null>")
       | Wrap _ -> failwith "tried to create ref wrap<...>"
       | Option _ -> failwith "tried to create ref option<...>"
@@ -92,8 +92,8 @@ module Type = struct
       | HLLFunc -> failwith "tried to create ref hll_func"
       | Unknown98 -> failwith "tried to create ref unknown_98"
       | IFaceWrap _ -> failwith "tried to create ref iface_wrap<...>"
-      | Function _ -> failwith "tried to create ref function"
-      | Method _ -> failwith "tried to create ref method"
+      | Function -> failwith "tried to create ref function"
+      | Method -> failwith "tried to create ref method"
       | NullType -> failwith "tried to create ref null"
     else
       match o.data with
@@ -136,8 +136,8 @@ module Type = struct
             | HLLFunc -> failwith "tried to create array<hll_func>"
             | Unknown98 -> failwith "tried to create array<unknown_98>"
             | IFaceWrap _ -> failwith "tried to create array<iface_wrap<...>>"
-            | Function _ -> failwith "tried to create array<function>"
-            | Method _ -> failwith "tried to create array<method>"
+            | Function -> failwith "tried to create array<function>"
+            | Method -> failwith "tried to create array<method>"
             | NullType -> failwith "tried to create array<null>")
       | Wrap _ -> 82
       | Option _ -> 86
@@ -148,8 +148,8 @@ module Type = struct
       | HLLFunc -> 95
       | Unknown98 -> 98
       | IFaceWrap _ -> 100
-      | Function _ -> failwith "tried to create function"
-      | Method _ -> failwith "tried to create method"
+      | Function -> failwith "tried to create function"
+      | Method -> failwith "tried to create method"
       | NullType -> failwith "tried to create null"
 
   let rec int_of_struct_type ?(var = false) version o =
@@ -249,38 +249,7 @@ module Type = struct
     | 100 -> make (IFaceWrap struc)
     | n -> failwith (sprintf "Invalid or unknown data type in ain file: %d" n)
 
-  let rec equal a b =
-    let data_type_equal a b =
-      match a with
-      | Void -> ( match b with Void -> true | _ -> false)
-      | Int -> ( match b with Int -> true | _ -> false)
-      | Float -> ( match b with Float -> true | _ -> false)
-      | String -> ( match b with String -> true | _ -> false)
-      | IMainSystem -> ( match b with IMainSystem -> true | _ -> false)
-      | Bool -> ( match b with Bool -> true | _ -> false)
-      | LongInt -> ( match b with LongInt -> true | _ -> false)
-      | HLLFunc2 -> ( match b with HLLFunc2 -> true | _ -> false)
-      | HLLParam -> ( match b with HLLParam -> true | _ -> false)
-      | HLLFunc -> ( match b with HLLFunc -> true | _ -> false)
-      | Unknown98 -> ( match b with Unknown98 -> true | _ -> false)
-      | NullType -> ( match b with NullType -> true | _ -> false)
-      | Struct i_a -> ( match b with Struct i_b -> i_a = i_b | _ -> false)
-      | FuncType i_a -> ( match b with FuncType i_b -> i_a = i_b | _ -> false)
-      | Delegate i_a -> ( match b with Delegate i_b -> i_a = i_b | _ -> false)
-      | Array t_a -> ( match b with Array t_b -> equal t_a t_b | _ -> false)
-      | Wrap t_a -> ( match b with Wrap t_b -> equal t_a t_b | _ -> false)
-      | Option t_a -> ( match b with Option t_b -> equal t_a t_b | _ -> false)
-      | Unknown87 t_a -> (
-          match b with Unknown87 t_b -> equal t_a t_b | _ -> false)
-      | IFace i_a -> ( match b with IFace i_b -> i_a = i_b | _ -> false)
-      | Enum2 i_a -> ( match b with Enum2 i_b -> i_a = i_b | _ -> false)
-      | Enum i_a -> ( match b with Enum i_b -> i_a = i_b | _ -> false)
-      | IFaceWrap i_a -> (
-          match b with IFaceWrap i_b -> i_a = i_b | _ -> false)
-      | Function i_a -> ( match b with Function i_b -> i_a = i_b | _ -> false)
-      | Method i_a -> ( match b with Function i_b -> i_a = i_b | _ -> false)
-    in
-    Bool.equal a.is_ref b.is_ref && data_type_equal a.data b.data
+  let equal (a : t) (b : t) = Poly.equal a b
 
   let rec data_to_string = function
     | Void -> "void"
@@ -308,8 +277,8 @@ module Type = struct
     | Unknown98 -> "unknown_98"
     | IFaceWrap no ->
         sprintf "interface_wrap<%d>" no (* FIXME: look up name in ain object *)
-    | Function no -> if no >= 0 then sprintf "function<%d>" no else "function"
-    | Method no -> if no >= 0 then sprintf "method<%d>" no else "method"
+    | Function -> "function"
+    | Method -> "method"
     | NullType -> "null"
 
   and to_string o =
