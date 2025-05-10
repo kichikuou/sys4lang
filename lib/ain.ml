@@ -249,8 +249,6 @@ module Type = struct
     | 100 -> make (IFaceWrap struc)
     | n -> failwith (sprintf "Invalid or unknown data type in ain file: %d" n)
 
-  let equal (a : t) (b : t) = Poly.equal a b
-
   let rec data_to_string = function
     | Void -> "void"
     | Int -> "int"
@@ -299,21 +297,12 @@ module Variable = struct
 
   let make ?(index = -1) name value_type =
     { index; name; name2 = Some ""; value_type; initval = None }
-
-  let equal a b =
-    String.equal a.name b.name
-    && Option.equal String.equal a.name2 b.name2
-    && Type.equal a.value_type b.value_type
-  (* TODO: initval *)
 end
 
 module Global = struct
   type t = { variable : Variable.t; group_index : int }
 
   let create variable group_index = { variable; group_index }
-
-  let equal a b =
-    Variable.equal a.variable b.variable && a.group_index = b.group_index
 end
 
 module Function = struct
@@ -354,15 +343,6 @@ module Function = struct
   let logical_parameters f =
     List.filter (List.take f.vars f.nr_args) ~f:(fun (v : Variable.t) ->
         match v.value_type.data with Void -> false | _ -> true)
-
-  let equal a b =
-    String.equal a.name b.name && a.nr_args = b.nr_args
-    && List.for_all2_exn
-         (List.take a.vars a.nr_args)
-         (List.take b.vars b.nr_args)
-         ~f:Variable.equal
-    && Bool.equal a.is_label b.is_label
-    && Bool.equal a.is_lambda b.is_lambda
 end
 
 module Struct = struct
@@ -388,14 +368,6 @@ module Struct = struct
       members = [];
       vmethods = [];
     }
-
-  let equal a b =
-    String.equal a.name b.name
-    && List.length a.interfaces = List.length b.interfaces
-    (* TODO: interfaces? only works if structs from same ain file *)
-    (* TODO: constructor & destructor? only works if structs from same ain file *)
-    && List.length a.members = List.length b.members
-    && List.for_all2_exn a.members b.members ~f:Variable.equal
 end
 
 module Library = struct
@@ -403,9 +375,6 @@ module Library = struct
     type t = { name : string; value_type : Type.t }
 
     let create name value_type = { name; value_type }
-
-    let equal a b =
-      String.equal a.name b.name && Type.equal a.value_type b.value_type
   end
 
   module Function = struct
@@ -419,18 +388,9 @@ module Library = struct
 
     let create name return_type arguments =
       { index = -1; lib_no = -1; name; return_type; arguments }
-
-    let equal a b =
-      String.equal a.name b.name
-      && Type.equal a.return_type b.return_type
-      && List.for_all2_exn a.arguments b.arguments ~f:Argument.equal
   end
 
   type t = { index : int; name : string; functions : Function.t list }
-
-  let equal a b =
-    String.equal a.name b.name
-    && List.for_all2_exn a.functions b.functions ~f:Function.equal
 end
 
 module Switch = struct
@@ -474,11 +434,6 @@ module FunctionType = struct
       match v.value_type.data with Void -> false | _ -> true
     in
     List.filter f.variables ~f:not_void
-
-  let equal a b =
-    String.equal a.name b.name
-    && a.nr_arguments = b.nr_arguments
-    && List.for_all2_exn a.variables b.variables ~f:Variable.equal
 end
 
 module Enum = struct

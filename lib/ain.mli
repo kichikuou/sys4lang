@@ -35,7 +35,6 @@ module Type : sig
 
   and t = { data : data; is_ref : bool }
 
-  val equal : t -> t -> bool
   val data_to_string : data -> string
   val to_string : t -> string
   val int_of_data_type : int -> t -> int
@@ -54,13 +53,10 @@ module Variable : sig
   }
 
   val make : ?index:int -> string -> Type.t -> t
-  val equal : t -> t -> bool
 end
 
 module Global : sig
   type t = { variable : Variable.t; group_index : int }
-
-  val equal : t -> t -> bool
 end
 
 module Function : sig
@@ -82,7 +78,6 @@ module Function : sig
   val set_undefined : t -> t
   val is_defined : t -> bool
   val logical_parameters : t -> Variable.t list
-  val equal : t -> t -> bool
 end
 
 module Struct : sig
@@ -97,8 +92,6 @@ module Struct : sig
     members : Variable.t list;
     vmethods : int list;
   }
-
-  val equal : t -> t -> bool
 end
 
 module Library : sig
@@ -106,7 +99,6 @@ module Library : sig
     type t = { name : string; value_type : Type.t }
 
     val create : string -> Type.t -> t
-    val equal : t -> t -> bool
   end
 
   module Function : sig
@@ -119,12 +111,9 @@ module Library : sig
     }
 
     val create : string -> Type.t -> Argument.t list -> t
-    val equal : t -> t -> bool
   end
 
   type t = { index : int; name : string; functions : Function.t list }
-
-  val equal : t -> t -> bool
 end
 
 module Switch : sig
@@ -148,7 +137,6 @@ module FunctionType : sig
   }
 
   val logical_parameters : t -> Variable.t list
-  val equal : t -> t -> bool
 end
 
 val create : int -> int -> t
