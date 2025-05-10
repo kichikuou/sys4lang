@@ -920,6 +920,7 @@ class jaf_compiler ain =
       | Null -> (
           match expr.ty with
           | FuncType _ | IMainSystem -> self#write_instruction1 PUSH 0
+          | Delegate _ -> self#write_instruction0 DG_NEW
           | String -> self#write_instruction1 S_PUSH 0
           | ty ->
               compiler_bug
@@ -1251,7 +1252,7 @@ class jaf_compiler ain =
         | Int | Bool | LongInt | FuncType _ -> self#write_instruction1 PUSH 0
         | Float -> self#write_instruction1 F_PUSH 0
         | String -> self#write_instruction1 S_PUSH 0
-        | Struct _ | Array _ -> self#write_instruction1 PUSH (-1)
+        | Struct _ | Array _ | Delegate _ -> self#write_instruction1 PUSH (-1)
         | _ ->
             compile_error "default return value not implemented for type" decl
 

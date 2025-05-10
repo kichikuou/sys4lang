@@ -818,6 +818,27 @@ let%expect_test "member pointer" =
       042: EOF
     |}]
 
+let%expect_test "dg_return_null" =
+  compile_test
+    {|
+      delegate void dg();
+      dg f() {
+        return NULL;
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: DG_NEW
+    008: RETURN
+    010: PUSH -1
+    016: RETURN
+    018: ENDFUNC f
+    024: EOF test.jaf
+    030: FUNC NULL
+    036: EOF
+    |}]
+
 let%expect_test "dg_add" =
   compile_test
     {|

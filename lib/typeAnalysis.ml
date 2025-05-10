@@ -212,6 +212,7 @@ class type_analyze_visitor ctx =
       | Some (dg_name, dg_i, _), Delegate (Some (name, idx, _)) ->
           if not (String.equal name dg_name && dg_i = idx) then
             type_error (Delegate delegate) (Some expr) parent
+      | Some _, NullType -> expr.ty <- Delegate delegate
       | None, Delegate None -> ()
       | _, _ -> type_error (Delegate delegate) (Some expr) parent
 
