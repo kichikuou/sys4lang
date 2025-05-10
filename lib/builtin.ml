@@ -84,7 +84,8 @@ let fundecl_of_syscall sys =
   | CopySaveFile -> make Int [ String; String ]
 
 (* `&NULL` expression (used as default value for callback functions) *)
-let addr_null = make_expr ~ty:(TyFunction ("NULL", 0)) (FuncAddr "NULL")
+let addr_null =
+  make_expr ~ty:(TyFunction ([], Void)) (FuncAddr ("NULL", Some 0))
 
 let fundecl_of_builtin builtin receiver_ty node_opt =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
@@ -143,7 +144,7 @@ let fundecl_of_builtin builtin receiver_ty node_opt =
               (Option.value_exn node_opt)
       in
       make Void "Sort"
-        [ Callback ([ cb_argtype; cb_argtype ], Int) ]
+        [ TyFunction ([ cb_argtype; cb_argtype ], Int) ]
         ~defaults:[ cb_default ]
   | ArraySortBy -> (
       match elem_ty with
@@ -163,7 +164,7 @@ let fundecl_of_builtin builtin receiver_ty node_opt =
               (Option.value_exn node_opt)
       in
       make Int "Find"
-        [ Int; Int; cb_argtype; Callback ([ cb_argtype; cb_argtype ], Bool) ]
+        [ Int; Int; cb_argtype; TyFunction ([ cb_argtype; cb_argtype ], Bool) ]
         ~defaults:[ None; None; None; cb_default ]
   | DelegateSet -> make Void "Set" [ t_method ]
   | DelegateAdd -> make Void "Add" [ t_method ]
@@ -194,7 +195,7 @@ let function_of_syscall sys =
 let function_of_builtin sys receiver_ty =
   jaf_to_ain_function (fundecl_of_builtin sys receiver_ty None) default_function
 
-let fundecl_of_callback args ret =
+let fundecl_of_tyfunction args ret =
   {
     name = "";
     loc = dummy_location;

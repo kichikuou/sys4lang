@@ -415,7 +415,7 @@ class jaf_compiler ain =
       | Delegate _ -> self#write_instruction0 DG_POP
       | Struct _ -> self#write_instruction0 SR_POP
       | IMainSystem | HLLParam | Array _ | Wrap _ | HLLFunc | NullType | Untyped
-      | Unresolved _ | Callback _ | MemberPtr _ ->
+      | Unresolved _ | MemberPtr _ ->
           compiler_bug
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             (Some parent)
@@ -479,10 +479,9 @@ class jaf_compiler ain =
               self#write_instruction0 PUSHLOCALPAGE;
               self#write_instruction1 PUSH i;
               self#compile_dereference t)
-      | FuncAddr _ -> (
-          match expr.ty with
-          | TyFunction (_, no) -> self#write_instruction1 PUSH no
-          | _ -> compile_error "not implemented" (ASTExpression expr))
+      | FuncAddr (_, Some no) -> self#write_instruction1 PUSH no
+      | FuncAddr (_, None) ->
+          compiler_bug "unresolved FuncAddr" (Some (ASTExpression expr))
       | MemberAddr (_, _, ClassVariable v) -> self#write_instruction1 PUSH v
       | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (

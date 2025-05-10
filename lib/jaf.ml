@@ -87,9 +87,8 @@ type jaf_type =
   | FuncType of (string * int) option
   | IMainSystem
   | NullType
-  | TyFunction of string * int
+  | TyFunction of jaf_type list * jaf_type
   | TyMethod of string * int
-  | Callback of jaf_type list * jaf_type
   | MemberPtr of string * jaf_type
 
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
@@ -149,7 +148,7 @@ and ast_expression =
   | ConstChar of string
   | ConstString of string
   | Ident of string * ident_type
-  | FuncAddr of string
+  | FuncAddr of string * int option
   | MemberAddr of string * string * member_type
   | Unary of unary_op * expression
   | Binary of binary_op * expression * expression
@@ -640,10 +639,10 @@ let rec jaf_type_to_string = function
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
   | NullType -> "null"
-  | TyFunction (name, _) | TyMethod (name, _) -> "typeof(" ^ name ^ ")"
-  | Callback (args, ret) ->
-      sprintf "%s callback(%s)" (jaf_type_to_string ret)
+  | TyFunction (args, ret) ->
+      sprintf "%s(%s)" (jaf_type_to_string ret)
         (String.concat ~sep:", " (List.map ~f:jaf_type_to_string args))
+  | TyMethod (name, _) -> "typeof(" ^ name ^ ")"
   | MemberPtr (s, t) -> s ^ "::" ^ jaf_type_to_string t
 
 let rec expr_to_string (e : expression) =
@@ -657,7 +656,7 @@ let rec expr_to_string (e : expression) =
   | ConstChar s -> sprintf "'%s'" s
   | ConstString s -> sprintf "\"%s\"" s
   | Ident (s, _) -> s
-  | FuncAddr s -> "&" ^ s
+  | FuncAddr (s, _) -> "&" ^ s
   | MemberAddr (sname, name, _) -> sprintf "&%s::%s" sname name
   | Unary (op, e) -> (
       match op with
@@ -850,9 +849,8 @@ let rec jaf_to_ain_data_type = function
   | FuncType None -> Ain.Type.FuncType (-1)
   | IMainSystem -> Ain.Type.IMainSystem
   | NullType -> Ain.Type.NullType
-  | TyFunction (_, i) -> Ain.Type.Function i
+  | TyFunction _ -> Ain.Type.FuncType (-1) (* ??? *)
   | TyMethod (_, i) -> Ain.Type.Method i
-  | Callback _ -> Ain.Type.FuncType (-1)
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
 
 and jaf_to_ain_type = function
@@ -874,7 +872,6 @@ let rec data_type_to_jaf_type = function
   | Delegate i -> Delegate (Some ("", i))
   | FuncType i -> FuncType (Some ("", i))
   | IMainSystem -> IMainSystem
-  | Function i -> TyFunction ("", i)
   | Method i -> TyMethod ("", i)
   | t ->
       Printf.failwithf "cannot convert %s to jaf type"

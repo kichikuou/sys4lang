@@ -148,21 +148,22 @@ let%expect_test "function call" =
     |};
   [%expect
     {|
-      -:19:19-20: Not an lvalue: 3
-         19 |         f_ref_int(3);     // error
+    -:19:19-20: Not an lvalue: 3
+       19 |         f_ref_int(3);     // error
+                              ^
+    -:22:21-22: Not an lvalue: 3
+       22 |         f_ref_float(3);   // error
                                 ^
-      -:22:21-22: Not an lvalue: 3
-         22 |         f_ref_float(3);   // error
-                                  ^
-      -:23:21-22: Type error: expected ref float; got int
-         23 |         f_ref_float(i);   // error
-                                  ^
-      -:24:21-23: Type error: expected ref float; got ref int
-         24 |         f_ref_float(ri);  // error
-                                  ^^
-      -:26:16-24: Type error: expected func; got typeof(f_float)
-         26 |         f_func(&f_float); // error
-                             ^^^^^^^^ |}]
+    -:23:21-22: Type error: expected ref float; got int
+       23 |         f_ref_float(i);   // error
+                                ^
+    -:24:21-23: Type error: expected ref float; got ref int
+       24 |         f_ref_float(ri);  // error
+                                ^^
+    -:26:16-24: Type error: expected func; got void(float)
+       26 |         f_func(&f_float); // error
+                           ^^^^^^^^
+    |}]
 
 let%expect_test "default parameter" =
   type_test
@@ -251,21 +252,22 @@ let%expect_test "return statement" =
     |};
   [%expect
     {|
-      -:5:16-17: Type error: expected void; got int
-          5 |         return 3;  // error
-                             ^
-      -:8:9-16: Type error: expected int; got void
-          8 |         return;      // error
-                      ^^^^^^^
-      -:11:16-19: Type error: expected int; got string
-         11 |         return "s";  // error
-                             ^^^
-      -:20:16-18: Type error: expected ref int; got ref float
-         20 |         return rf;    // error
-                             ^^
-      -:25:16-22: Type error: expected func; got typeof(f_int)
-         25 |         return &f_int;   // error
-                             ^^^^^^ |}]
+    -:5:16-17: Type error: expected void; got int
+        5 |         return 3;  // error
+                           ^
+    -:8:9-16: Type error: expected int; got void
+        8 |         return;      // error
+                    ^^^^^^^
+    -:11:16-19: Type error: expected int; got string
+       11 |         return "s";  // error
+                           ^^^
+    -:20:16-18: Type error: expected ref int; got ref float
+       20 |         return rf;    // error
+                           ^^
+    -:25:16-22: Type error: expected func; got int()
+       25 |         return &f_int;   // error
+                           ^^^^^^
+    |}]
 
 let%expect_test "variable declarations" =
   type_test
@@ -538,15 +540,16 @@ let%expect_test "jump statement" =
     |};
   [%expect
     {|
-      -:4:9-16: f is not a scenario function
-          4 |         jump f;   // error : f is not a scenario function
-                      ^^^^^^^
-      -:5:15-17: Type error: expected string; got typeof(sf)
-          5 |         jumps sf; // error: jumps expects a string
-                            ^^
-      -:8:9-16: cannot return from scenario function
-          8 |         return;   // error: return from a scenario function
-                      ^^^^^^^ |}]
+    -:4:9-16: f is not a scenario function
+        4 |         jump f;   // error : f is not a scenario function
+                    ^^^^^^^
+    -:5:15-17: Type error: expected string; got void()
+        5 |         jumps sf; // error: jumps expects a string
+                          ^^
+    -:8:9-16: cannot return from scenario function
+        8 |         return;   // error: return from a scenario function
+                    ^^^^^^^
+    |}]
 
 let%expect_test "functype assignment" =
   type_test
@@ -659,18 +662,19 @@ let%expect_test "Array.Sort() callback" =
     |};
   [%expect
     {|
-      -:9:17-27: Type error: expected int callback(int, int); got typeof(S_compare)
-          9 |         ai.Sort(&S_compare);  // error
-                              ^^^^^^^^^^
-      -:11:9-18: Wrong number of arguments to function Sort (expected 1; got 0)
-         11 |         as.Sort();  // error
-                      ^^^^^^^^^
-      -:13:17-29: Type error: expected int callback(ref S, ref S); got typeof(int_compare)
-         13 |         as.Sort(&int_compare);  // error
-                              ^^^^^^^^^^^^
-      -:15:9-18: Sort() is not supported for array@bool
-         15 |         ab.Sort();  // error
-                      ^^^^^^^^^ |}]
+    -:9:17-27: Type error: expected int(int, int); got int(ref S, ref S)
+        9 |         ai.Sort(&S_compare);  // error
+                            ^^^^^^^^^^
+    -:11:9-18: Wrong number of arguments to function Sort (expected 1; got 0)
+       11 |         as.Sort();  // error
+                    ^^^^^^^^^
+    -:13:17-29: Type error: expected int(ref S, ref S); got int(int, int)
+       13 |         as.Sort(&int_compare);  // error
+                            ^^^^^^^^^^^^
+    -:15:9-18: Sort() is not supported for array@bool
+       15 |         ab.Sort();  // error
+                    ^^^^^^^^^
+    |}]
 
 let%expect_test "Array.SortBy()" =
   type_test

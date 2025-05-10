@@ -148,7 +148,7 @@ hll
 
 primary_expression
   : IDENTIFIER { make_expr ~loc:$sloc (Ident ($1, UnresolvedIdent)) }
-  | BITAND IDENTIFIER { make_expr ~loc:$sloc (FuncAddr $2) }
+  | BITAND IDENTIFIER { make_expr ~loc:$sloc (FuncAddr ($2, None)) }
   | BITAND IDENTIFIER COCO IDENTIFIER { make_expr ~loc:$sloc (MemberAddr ($2, $4, UnresolvedMember)) }
   | THIS { make_expr ~loc:$sloc This }
   | NULL { make_expr ~loc:$sloc Null }

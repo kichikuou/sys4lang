@@ -20,6 +20,11 @@ open CompileError
 
 let sprintf = Printf.sprintf
 
+let tyfunction_of_fundecl fundecl =
+  let args = List.map fundecl.params ~f:(fun p -> p.type_spec.ty) in
+  let ret = fundecl.return.ty in
+  TyFunction (args, ret)
+
 (* Implicit dereference of variables and members. *)
 let maybe_deref (e : expression) =
   match e with
@@ -48,7 +53,6 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | Array a, Array b -> type_equal a b
   | Wrap a, Wrap b -> type_equal a b
   | HLLFunc, HLLFunc -> true
-  | TyFunction _, TyFunction _ -> true
   | TyMethod _, TyMethod _ -> true
   | Void, _
   | Ref _, _
@@ -68,7 +72,6 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | TyFunction _, _
   | TyMethod _, _
   | NullType, _
-  | Callback _, _
   | MemberPtr _, _ ->
       false
   | Untyped, _ -> compiler_bug "expected type is untyped" None
@@ -211,8 +214,11 @@ class type_analyze_visitor ctx =
       in
       match (delegate, expr.ty) with
       | Some (dg_name, _), TyMethod (f_name, _) -> check dg_name f_name
-      | Some (dg_name, _), TyFunction (f_name, _) ->
-          check dg_name f_name;
+      | Some (dg_name, _), TyFunction (args, ret) ->
+          let dg = Hashtbl.find_exn ctx.delegates dg_name in
+          let f = Builtin.fundecl_of_tyfunction args ret in
+          if not (fundecl_compatible dg f) then
+            type_error (Delegate delegate) (Some expr) parent;
           insert_cast (Delegate delegate) expr
       | Some (dg_name, dg_i), Delegate (Some (name, idx)) ->
           if not (String.equal name dg_name && dg_i = idx) then
@@ -230,9 +236,9 @@ class type_analyze_visitor ctx =
        *)
       | FuncType (Some (ft_name, _)) -> (
           match rhs.ty with
-          | TyFunction (f_name, _) ->
+          | TyFunction (args, ret) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
-              let f = Hashtbl.find_exn ctx.functions f_name in
+              let f = Builtin.fundecl_of_tyfunction args ret in
               if not (fundecl_compatible ft f) then
                 type_error t (Some rhs) parent
           | FuncType (Some (ft2_name, _)) ->
@@ -242,13 +248,13 @@ class type_analyze_visitor ctx =
                 type_error t (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
-          | _ -> type_error (TyFunction ("", -1)) (Some rhs) parent)
+          | _ -> type_error t (Some rhs) parent)
       | Delegate dg -> self#check_delegate_compatible parent dg rhs
-      | Callback (args, ret) -> (
+      | TyFunction (args, ret) -> (
           match rhs.ty with
-          | TyFunction (f_name, _) ->
-              let cb = Builtin.fundecl_of_callback args ret in
-              let f = Hashtbl.find_exn ctx.functions f_name in
+          | TyFunction (args', ret') ->
+              let cb = Builtin.fundecl_of_tyfunction args ret in
+              let f = Builtin.fundecl_of_tyfunction args' ret' in
               if not (fundecl_compatible cb f) then
                 type_error t (Some rhs) parent
           | _ -> type_error t (Some rhs) parent)
@@ -340,7 +346,7 @@ class type_analyze_visitor ctx =
               expr.ty <- g.type_spec.ty
           | ResolvedFunction f ->
               expr.node <- Ident (name, FunctionName name);
-              expr.ty <- TyFunction (name, Option.value_exn f.index)
+              expr.ty <- tyfunction_of_fundecl f
           | ResolvedMember (s, v) ->
               expr.node <-
                 Member
@@ -368,9 +374,11 @@ class type_analyze_visitor ctx =
               expr.ty <- Void
           | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
           )
-      | FuncAddr name -> (
+      | FuncAddr (name, _) -> (
           match Hashtbl.find ctx.functions name with
-          | Some f -> expr.ty <- TyFunction (name, Option.value_exn f.index)
+          | Some f ->
+              expr.node <- FuncAddr (name, f.index);
+              expr.ty <- tyfunction_of_fundecl f
           | None -> undefined_variable_error name (ASTExpression expr))
       | MemberAddr (sname, name, _) -> (
           match environment#resolve_qualified sname name with
@@ -432,9 +440,9 @@ class type_analyze_visitor ctx =
               | FuncType (Some (_, ft_i)), FuncType (Some (_, ft_j)) ->
                   if ft_i <> ft_j then
                     type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (Some (ft_name, _)), TyFunction (f_name, _) ->
+              | FuncType (Some (ft_name, _)), TyFunction (args, ret) ->
                   let ft = Hashtbl.find_exn ctx.functypes ft_name in
-                  let f = Hashtbl.find_exn ctx.functions f_name in
+                  let f = Builtin.fundecl_of_tyfunction args ret in
                   if not (fundecl_compatible ft f) then
                     type_error a.ty (Some b) (ASTExpression expr)
               | FuncType _, NullType -> b.ty <- a.ty
@@ -519,7 +527,7 @@ class type_analyze_visitor ctx =
           match Bytecode.syscall_of_string syscall_name with
           | Some sys ->
               expr.node <- Member (e, syscall_name, SystemFunction sys);
-              expr.ty <- TyFunction ("", 0)
+              expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error ("system." ^ syscall_name)
@@ -530,7 +538,7 @@ class type_analyze_visitor ctx =
           match find_hll_function ctx lib_name fun_name with
           | Some _ ->
               expr.node <- Member (e, fun_name, HLLFunction (lib_name, fun_name));
-              expr.ty <- TyFunction ("", 0)
+              expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error
@@ -542,7 +550,7 @@ class type_analyze_visitor ctx =
           match builtin_of_string e.ty name with
           | Some builtin ->
               expr.node <- Member (e, name, BuiltinMethod builtin);
-              expr.ty <- TyFunction ("", 0)
+              expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error name (ASTExpression expr))
