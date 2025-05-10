@@ -842,3 +842,33 @@ let%expect_test "dg_add" =
       046: FUNC NULL
       052: EOF
     |}]
+
+let%expect_test "dg_erase" =
+  compile_test
+    {|
+      delegate void dg();
+      void f() {
+        dg d;
+        d.Erase(&f);
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: PUSHLOCALPAGE
+    008: PUSH 0
+    014: REF
+    016: DG_CLEAR
+    018: PUSHLOCALPAGE
+    020: PUSH 0
+    026: REF
+    028: PUSH 1
+    034: PUSH -1
+    040: SWAP
+    042: DG_ERASE
+    044: RETURN
+    046: ENDFUNC f
+    052: EOF test.jaf
+    058: FUNC NULL
+    064: EOF
+    |}]

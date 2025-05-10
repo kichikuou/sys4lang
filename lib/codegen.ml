@@ -730,7 +730,7 @@ class jaf_compiler ain =
               self#write_instruction0 FTOS
           | String, String -> ()
           | String, Int -> self#write_instruction0 STOI
-          | TyFunction _, Delegate _ ->
+          | TyFunction _, TyMethod _ ->
               self#write_instruction1 PUSH (-1);
               self#write_instruction0 SWAP
           | _ ->

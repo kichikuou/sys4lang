@@ -208,7 +208,7 @@ class type_analyze_visitor ctx =
       | Some (_, _, TyMethod dt), TyMethod ft -> check dt ft
       | Some (_, _, TyMethod dt), TyFunction ft ->
           check dt ft;
-          insert_cast (Delegate delegate) expr
+          insert_cast (TyMethod dt) expr
       | Some (dg_name, dg_i, _), Delegate (Some (name, idx, _)) ->
           if not (String.equal name dg_name && dg_i = idx) then
             type_error (Delegate delegate) (Some expr) parent
@@ -243,10 +243,13 @@ class type_analyze_visitor ctx =
           | TyFunction f ->
               if not (ft_compatible cb f) then type_error t (Some rhs) parent
           | _ -> type_error t (Some rhs) parent)
-      | TyMethod cb -> (
+      | TyMethod ft -> (
           match rhs.ty with
-          | TyMethod f ->
-              if not (ft_compatible cb f) then type_error t (Some rhs) parent
+          | TyMethod m ->
+              if not (ft_compatible ft m) then type_error t (Some rhs) parent
+          | TyFunction f ->
+              if not (ft_compatible ft f) then type_error t (Some rhs) parent;
+              insert_cast (TyMethod ft) rhs
           | _ -> type_error t (Some rhs) parent)
       | Int | LongInt | Bool | Float ->
           type_check_numeric parent rhs;
