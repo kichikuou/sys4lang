@@ -213,6 +213,7 @@ class type_analyze_visitor ctx =
           if not (String.equal name dg_name && dg_i = idx) then
             type_error (Delegate delegate) (Some expr) parent
       | Some _, NullType -> expr.ty <- Delegate delegate
+      | Some _, String -> ()
       | None, Delegate None -> ()
       | _, _ -> type_error (Delegate delegate) (Some expr) parent
 
@@ -488,7 +489,7 @@ class type_analyze_visitor ctx =
               compiler_bug "unexpected CharAssign" (Some (ASTExpression expr)));
           (* XXX: Nothing is left on stack after assigning method to delegate *)
           match (lhs.ty, rhs.ty) with
-          | Delegate _, TyMethod _ -> expr.ty <- Void
+          | Delegate _, (TyMethod _ | String) -> expr.ty <- Void
           | _ -> expr.ty <- rhs.ty)
       | Seq (_, e) -> expr.ty <- e.ty
       | Ternary (test, con, alt) ->

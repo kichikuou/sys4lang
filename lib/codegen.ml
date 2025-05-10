@@ -681,11 +681,23 @@ class jaf_compiler ctx =
               | FuncType (Some (_, ft_i)) ->
                   self#write_instruction1 PUSH ft_i;
                   self#write_instruction0 FT_ASSIGNS
+              | Delegate (Some (_, dg_i)) ->
+                  self#write_instruction1 PUSH (-1);
+                  self#write_instruction0 SWAP;
+                  self#write_instruction1 PUSH dg_i;
+                  self#write_instruction0 DG_STR_TO_METHOD;
+                  self#write_instruction0 DG_SET
               | String -> self#write_instruction0 S_ASSIGN
               | _ ->
                   compiler_bug "invalid string assignment"
                     (Some (ASTExpression expr)))
-          | PlusAssign, String -> self#write_instruction0 S_PLUSA2
+          | PlusAssign, String -> (
+              match lhs.ty with
+              (* FIXME: delegate *)
+              | String -> self#write_instruction0 S_PLUSA2
+              | _ ->
+                  compiler_bug "invalid string assignment"
+                    (Some (ASTExpression expr)))
           | EqAssign, TyMethod _ -> self#write_instruction0 DG_SET
           | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
           | PlusAssign, TyMethod _ -> self#write_instruction0 DG_ADD
@@ -1217,10 +1229,17 @@ class jaf_compiler ctx =
                 self#write_instruction1 PUSH (List.length decl.array_dim);
                 self#write_instruction0 A_ALLOC)
               else self#write_instruction0 A_FREE
-          | Delegate _ -> (
+          | Delegate dg_i -> (
               self#compile_local_ref v.index;
               self#write_instruction0 REF;
               match decl.initval with
+              | Some ({ ty = String; _ } as e) ->
+                  self#compile_expression e;
+                  self#write_instruction1 PUSH (-1);
+                  self#write_instruction0 SWAP;
+                  self#write_instruction1 PUSH dg_i;
+                  self#write_instruction0 DG_STR_TO_METHOD;
+                  self#write_instruction0 DG_SET
               | Some e ->
                   self#compile_expression e;
                   self#write_instruction0 DG_SET

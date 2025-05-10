@@ -1649,7 +1649,7 @@ let args_of_opcode = function
   | DG_MINUSA -> []
   | DG_CALLBEGIN -> [ Delegate ]
   | DG_NEW -> []
-  | DG_STR_TO_METHOD -> [ Delegate ]
+  | DG_STR_TO_METHOD -> []
   | OP_0X102 -> []
   | X_GETENV -> []
   | X_SET -> []
