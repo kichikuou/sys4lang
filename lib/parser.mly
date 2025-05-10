@@ -325,7 +325,7 @@ primitive_type_specifier
   | HLL_STRUCT   { Struct("hll_struct", -1) }
   | HLL_PARAM    { HLLParam }
   | HLL_FUNC     { HLLFunc }
-  | HLL_DELEGATE { Delegate (Some ("hll_delegate", -1, Untyped)) }
+  | HLL_DELEGATE { Delegate (Some ("hll_delegate", -1)) }
   | UNKNOWN_FUNCTYPE { FuncType None }
   | UNKNOWN_DELEGATE { Delegate None }
   ;

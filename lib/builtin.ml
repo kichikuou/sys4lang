@@ -87,11 +87,12 @@ let fundecl_of_syscall sys =
 let addr_null =
   make_expr ~ty:(TyFunction ([], Void)) (FuncAddr ("NULL", Some 0))
 
-let fundecl_of_builtin builtin receiver_ty node_opt =
+let fundecl_of_builtin ctx builtin receiver_ty node_opt =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
   let rank = array_rank receiver_ty in
   let delegate_ft = function
-    | Delegate (Some (_, _, ft)) -> ft
+    | Delegate (Some (dg_name, _)) ->
+        TyMethod (ft_of_fundecl (Hashtbl.find_exn ctx.delegates dg_name))
     | _ -> failwith ("Delegate expected, got " ^ jaf_type_to_string receiver_ty)
   in
   let make return_type name ?(defaults = []) (arg_types : jaf_type list) =
@@ -195,5 +196,7 @@ let function_of_syscall sys =
   jaf_to_ain_function (fundecl_of_syscall sys)
     { default_function with index = int_of_syscall sys }
 
-let function_of_builtin sys receiver_ty =
-  jaf_to_ain_function (fundecl_of_builtin sys receiver_ty None) default_function
+let function_of_builtin ctx sys receiver_ty =
+  jaf_to_ain_function
+    (fundecl_of_builtin ctx sys receiver_ty None)
+    default_function

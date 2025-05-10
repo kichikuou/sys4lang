@@ -39,7 +39,7 @@ let incdec_instruction = function
   | (PreDec | PostDec), _ -> DEC
   | _ -> compiler_bug "invalid inc/dec expression" None
 
-class jaf_compiler ain =
+class jaf_compiler ctx =
   object (self)
     (* The function currently being compiled. *)
     val mutable current_function : Ain.Function.t option = None
@@ -124,7 +124,7 @@ class jaf_compiler ain =
         | String -> (STRSWITCH, Ain.Switch.StringCase)
         | _ -> compiler_bug "invalid switch type" (Some node)
       in
-      let switch = Ain.add_switch ain case_type in
+      let switch = Ain.add_switch ctx.ain case_type in
       Stack.push cflow_stmts { kind = CFlowSwitch switch; break_addrs = [] };
       self#write_instruction1 op switch.index
 
@@ -144,7 +144,7 @@ class jaf_compiler ain =
     (** End the current switch statement. Updates 'break' addresses. *)
     method end_switch =
       (match Stack.top cflow_stmts with
-      | Some { kind = CFlowSwitch switch; _ } -> Ain.write_switch ain switch
+      | Some { kind = CFlowSwitch switch; _ } -> Ain.write_switch ctx.ain switch
       | _ -> compiler_bug "Mismatched start/end of control flow construct" None);
       self#end_cflow_stmt
 
@@ -159,7 +159,7 @@ class jaf_compiler ain =
                 compile_error "int case in string switch" node)
         | ConstString s -> (
             match switch.case_type with
-            | Ain.Switch.StringCase -> Ain.add_string ain s
+            | Ain.Switch.StringCase -> Ain.add_string ctx.ain s
             | Ain.Switch.IntCase ->
                 compile_error "string case in int switch" node)
         | _ -> compile_error "invalid expression in switch case" node
@@ -199,9 +199,9 @@ class jaf_compiler ain =
       | None -> compile_error "'break' statement outside of loop" node
 
     method compile_CALLHLL lib_name fun_name t parent =
-      match Ain.get_library_index ain lib_name with
+      match Ain.get_library_index ctx.ain lib_name with
       | Some lib_no -> (
-          match Ain.get_library_function_index ain lib_no fun_name with
+          match Ain.get_library_function_index ctx.ain lib_no fun_name with
           | Some fun_no -> self#write_instruction3 CALLHLL lib_no fun_no t
           | None -> compile_error "No HLL function found for built-in" parent)
       | None -> compile_error "No HLL library found for built-in" parent
@@ -211,7 +211,7 @@ class jaf_compiler ain =
       current_address <- current_address + 2
 
     method write_instruction1 op arg0 =
-      match (Ain.version_lt ain (8, 0), op) with
+      match (Ain.version_lt ctx.ain (8, 0), op) with
       | true, S_MOD ->
           self#write_instruction1 PUSH arg0;
           self#write_instruction0 S_MOD
@@ -243,7 +243,7 @@ class jaf_compiler ain =
 
     method write_buffer =
       if current_address > start_address then (
-        Ain.append_bytecode ain buffer;
+        Ain.append_bytecode ctx.ain buffer;
         CBuffer.clear buffer;
         start_address <- current_address)
 
@@ -253,12 +253,12 @@ class jaf_compiler ain =
       | None -> compiler_bug "get_local outside of function" None
 
     method compile_lock_peek =
-      if Ain.version_lt ain (6, 0) then (
+      if Ain.version_lt ctx.ain (6, 0) then (
         self#write_instruction1 CALLSYS (int_of_syscall LockPeek);
         self#write_instruction0 POP)
 
     method compile_unlock_peek =
-      if Ain.version_lt ain (6, 0) then (
+      if Ain.version_lt ctx.ain (6, 0) then (
         self#write_instruction1 CALLSYS (int_of_syscall UnlockPeek);
         self#write_instruction0 POP)
 
@@ -304,7 +304,7 @@ class jaf_compiler ain =
       match id_type with
       | LocalVariable i -> self#compile_local_ref (self#get_local i).index
       | GlobalVariable i ->
-          self#compile_global_ref (Ain.get_global_by_index ain i).index
+          self#compile_global_ref (Ain.get_global_by_index ctx.ain i).index
       | _ -> compiler_bug "Invalid identifier type" None
 
     method compile_variable_ref (e : expression) =
@@ -351,7 +351,7 @@ class jaf_compiler ain =
               self#compile_local_ref v.index;
               compile_lvalue_after v.value_type)
       | Ident (_, GlobalVariable i) -> (
-          match Ain.get_global_by_index ain i with
+          match Ain.get_global_by_index ctx.ain i with
           | { value_type = { data = String | Array _ | Struct _; _ }; _ } ->
               self#write_instruction1 SH_GLOBALREF i
           | v ->
@@ -444,7 +444,7 @@ class jaf_compiler ain =
         be called should already be on the stack before this code is executed.
     *)
     method compile_method_call args method_no =
-      let f = Ain.get_function_by_index ain method_no in
+      let f = Ain.get_function_by_index ctx.ain method_no in
       self#compile_function_arguments args f;
       self#write_instruction1 CALLMETHOD method_no
 
@@ -468,7 +468,7 @@ class jaf_compiler ain =
                 compile_error "Invalid character constant" (ASTExpression expr))
           )
       | ConstString s ->
-          let no = Ain.add_string ain s in
+          let no = Ain.add_string ctx.ain s in
           self#write_instruction1 S_PUSH no
       | Ident (_, LocalVariable i) -> (
           match (self#get_local i).value_type with
@@ -485,7 +485,7 @@ class jaf_compiler ain =
       | MemberAddr (_, _, ClassVariable v) -> self#write_instruction1 PUSH v
       | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (
-          match (Ain.get_global_by_index ain i).value_type with
+          match (Ain.get_global_by_index ctx.ain i).value_type with
           | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
             ->
               self#write_instruction1 SH_GLOBALREF i
@@ -751,7 +751,7 @@ class jaf_compiler ain =
           let struct_type =
             match e.ty with
             | Struct (_, struct_no) | Ref (Struct (_, struct_no)) ->
-                Ain.get_struct_by_index ain struct_no
+                Ain.get_struct_by_index ctx.ain struct_no
             | _ ->
                 compiler_bug "member of non-struct" (Some (ASTExpression expr))
           in
@@ -779,7 +779,7 @@ class jaf_compiler ain =
             (Some (ASTExpression expr))
       (* regular function call *)
       | Call (_, args, FunctionCall function_no) ->
-          let f = Ain.get_function_by_index ain function_no in
+          let f = Ain.get_function_by_index ctx.ain function_no in
           self#compile_function_arguments args f;
           self#write_instruction1 CALLFUNC function_no
       (* method call *)
@@ -789,7 +789,7 @@ class jaf_compiler ain =
           self#compile_method_call args method_no
       (* HLL function call *)
       | Call (_, args, HLLCall (lib_no, fun_no)) ->
-          let f = Ain.function_of_hll_function_index ain lib_no fun_no in
+          let f = Ain.function_of_hll_function_index ctx.ain lib_no fun_no in
           self#compile_function_arguments args f;
           self#write_instruction2 CALLHLL lib_no fun_no
       (* system call *)
@@ -819,7 +819,7 @@ class jaf_compiler ain =
           | Assert ->
               compiler_bug "invalid assert expression"
                 (Some (ASTExpression expr)));
-          let f = Builtin.function_of_builtin builtin !receiver_ty in
+          let f = Builtin.function_of_builtin ctx builtin !receiver_ty in
           self#compile_function_arguments args f;
           match builtin with
           | IntString -> self#write_instruction0 I_STRING
@@ -872,7 +872,7 @@ class jaf_compiler ain =
                 (Some (ASTExpression expr)))
       (* built-in function call *)
       | Call ({ node = Ident _; _ }, args, BuiltinCall builtin) -> (
-          let f = Builtin.function_of_builtin builtin Void in
+          let f = Builtin.function_of_builtin ctx builtin Void in
           self#compile_function_arguments args f;
           match builtin with
           | Assert -> self#write_instruction0 ASSERT
@@ -889,7 +889,7 @@ class jaf_compiler ain =
               self#write_instruction0 POP)
             else self#write_instruction0 SWAP
           in
-          let f = Ain.get_functype_by_index ain no in
+          let f = Ain.get_functype_by_index ctx.ain no in
           self#compile_expression e;
           List.iter2_exn args
             (Ain.FunctionType.logical_parameters f)
@@ -897,7 +897,7 @@ class jaf_compiler ain =
           self#write_instruction1 PUSH no;
           self#write_instruction0 CALLFUNC2
       | Call (e, args, DelegateCall no) ->
-          let f = Ain.function_of_delegate_index ain no in
+          let f = Ain.function_of_delegate_index ctx.ain no in
           self#compile_lvalue e;
           self#compile_function_arguments args f;
           self#write_instruction1 DG_CALLBEGIN no;
@@ -1082,7 +1082,7 @@ class jaf_compiler ain =
           | _ -> self#compile_expression e);
           self#write_instruction0 RETURN
       | Jump funcname ->
-          let no = Ain.add_string ain funcname in
+          let no = Ain.add_string ctx.ain funcname in
           self#write_instruction1 S_PUSH no;
           self#write_instruction0 CALLONJUMP;
           self#write_instruction0 SJUMP
@@ -1091,7 +1091,7 @@ class jaf_compiler ain =
           self#write_instruction0 CALLONJUMP;
           self#write_instruction0 SJUMP
       | Message msg ->
-          let msg_no = Ain.add_message ain msg in
+          let msg_no = Ain.add_message ctx.ain msg in
           self#write_instruction1 MSG msg_no
       | RefAssign (lhs, rhs) ->
           self#compile_lock_peek;
@@ -1131,7 +1131,8 @@ class jaf_compiler ain =
           self#compile_variable_ref a;
           self#compile_variable_ref b;
           let type_no =
-            Ain.Type.int_of_data_type (Ain.version ain) (jaf_to_ain_type a.ty)
+            Ain.Type.int_of_data_type (Ain.version ctx.ain)
+              (jaf_to_ain_type a.ty)
           in
           self#write_instruction1 PUSH type_no;
           self#write_instruction0 OBJSWAP
@@ -1261,7 +1262,7 @@ class jaf_compiler ain =
       let index = Option.value_exn decl.index in
       let func =
         {
-          (Ain.get_function_by_index ain index) with
+          (Ain.get_function_by_index ctx.ain index) with
           address = current_address + 6;
         }
       in
@@ -1280,12 +1281,12 @@ class jaf_compiler ain =
           self#write_instruction1 ENDFUNC index
       | _ -> ());
       self#resolve_gotos;
-      Ain.write_function ain func;
+      Ain.write_function ctx.ain func;
       current_function <- None
 
     (** Compile a list of declarations. *)
     method compile jaf_name (decls : declaration list) =
-      start_address <- Ain.code_size ain;
+      start_address <- Ain.code_size ctx.ain;
       current_address <- start_address;
       let compile_decl = function
         | Jaf.Function f -> self#compile_function f
@@ -1305,9 +1306,8 @@ class jaf_compiler ain =
       in
       List.iter decls ~f:compile_decl;
       let jaf_name = String.tr ~target:'/' ~replacement:'\\' jaf_name in
-      self#write_instruction1 EOF (Ain.add_file ain jaf_name);
+      self#write_instruction1 EOF (Ain.add_file ctx.ain jaf_name);
       self#write_buffer
   end
 
-let compile ctx jaf_name decls =
-  (new jaf_compiler ctx.ain)#compile jaf_name decls
+let compile ctx jaf_name decls = (new jaf_compiler ctx)#compile jaf_name decls

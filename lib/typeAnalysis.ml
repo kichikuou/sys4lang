@@ -39,7 +39,7 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | IMainSystem, (IMainSystem | Int) -> true
   | FuncType (Some (_, a)), FuncType (Some (_, b)) -> a = b
   | FuncType None, FuncType None -> true
-  | Delegate (Some (_, a, _)), Delegate (Some (_, b, _)) -> a = b
+  | Delegate (Some (_, a)), Delegate (Some (_, b)) -> a = b
   | Delegate None, Delegate None -> true
   | MemberPtr (s1, t1), MemberPtr (s2, t2) ->
       String.equal s1 s2 && type_equal t1 t2
@@ -200,16 +200,16 @@ class type_analyze_visitor ctx =
       | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
     method check_delegate_compatible parent delegate (expr : expression) =
-      let check dt ft =
+      let check dg_name ft needs_cast =
+        let dt = ft_of_fundecl (Hashtbl.find_exn ctx.delegates dg_name) in
         if not (ft_compatible dt ft) then
-          type_error (Delegate delegate) (Some expr) parent
+          type_error (Delegate delegate) (Some expr) parent;
+        if needs_cast then insert_cast (TyMethod dt) expr
       in
       match (delegate, expr.ty) with
-      | Some (_, _, TyMethod dt), TyMethod ft -> check dt ft
-      | Some (_, _, TyMethod dt), TyFunction ft ->
-          check dt ft;
-          insert_cast (TyMethod dt) expr
-      | Some (dg_name, dg_i, _), Delegate (Some (name, idx, _)) ->
+      | Some (dg_name, _), TyMethod ft -> check dg_name ft false
+      | Some (dg_name, _), TyFunction ft -> check dg_name ft true
+      | Some (dg_name, dg_i), Delegate (Some (name, idx)) ->
           if not (String.equal name dg_name && dg_i = idx) then
             type_error (Delegate delegate) (Some expr) parent
       | Some _, NullType -> expr.ty <- Delegate delegate
@@ -595,7 +595,8 @@ class type_analyze_visitor ctx =
       | Call (({ node = Ident (_, BuiltinFunction builtin); _ } as e), args, _)
         ->
           let f =
-            Builtin.fundecl_of_builtin builtin Void (Some (ASTExpression expr))
+            Builtin.fundecl_of_builtin ctx builtin Void
+              (Some (ASTExpression expr))
           in
           let args = check_call f.name f.params args in
           expr.node <- Call (e, args, BuiltinCall builtin);
@@ -640,7 +641,7 @@ class type_analyze_visitor ctx =
           (({ node = Member (obj, _, BuiltinMethod builtin); _ } as e), args, _)
         ->
           let f =
-            Builtin.fundecl_of_builtin builtin obj.ty
+            Builtin.fundecl_of_builtin ctx builtin obj.ty
               (Some (ASTExpression expr))
           in
           let args = check_call f.name f.params args in
@@ -655,7 +656,7 @@ class type_analyze_visitor ctx =
               expr.node <-
                 Call (e, args, FuncTypeCall (Option.value_exn f.index));
               expr.ty <- f.return.ty
-          | Delegate (Some (name, _, _)) ->
+          | Delegate (Some (name, _)) ->
               let f = Hashtbl.find_exn ctx.delegates name in
               let args = check_call f.name f.params args in
               expr.node <-

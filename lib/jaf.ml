@@ -83,7 +83,7 @@ type jaf_type =
   | Wrap of jaf_type
   | HLLParam
   | HLLFunc
-  | Delegate of (string * int * jaf_type) option
+  | Delegate of (string * int) option
   | FuncType of (string * int) option
   | IMainSystem
   | NullType
@@ -635,7 +635,7 @@ let rec jaf_type_to_string = function
   | Bool -> "bool"
   | Float -> "float"
   | String -> "string"
-  | Struct (s, _) | FuncType (Some (s, _)) | Delegate (Some (s, _, _)) -> s
+  | Struct (s, _) | FuncType (Some (s, _)) | Delegate (Some (s, _)) -> s
   | FuncType None -> "unknown_functype"
   | Delegate None -> "unknown_functype"
   | Ref t -> "ref " ^ jaf_type_to_string t
@@ -848,7 +848,7 @@ let rec jaf_to_ain_data_type = function
   | Wrap t -> Ain.Type.Wrap (Ain.Type.make (jaf_to_ain_data_type t))
   | HLLParam -> Ain.Type.HLLParam
   | HLLFunc -> Ain.Type.HLLFunc
-  | Delegate (Some (_, i, _)) -> Ain.Type.Delegate i
+  | Delegate (Some (_, i)) -> Ain.Type.Delegate i
   | Delegate None -> Ain.Type.Delegate (-1)
   | FuncType (Some (_, i)) -> Ain.Type.FuncType i
   | FuncType None -> Ain.Type.FuncType (-1)
@@ -874,7 +874,7 @@ let rec data_type_to_jaf_type = function
   | Wrap t -> Wrap (ain_to_jaf_type t)
   | HLLParam -> HLLParam
   | HLLFunc -> HLLFunc
-  | Delegate i -> Delegate (Some ("", i, Untyped))
+  | Delegate i -> Delegate (Some ("", i))
   | FuncType i -> FuncType (Some ("", i))
   | IMainSystem -> IMainSystem
   | t ->
