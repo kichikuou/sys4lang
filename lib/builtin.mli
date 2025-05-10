@@ -21,4 +21,3 @@ val fundecl_of_builtin :
 
 val function_of_syscall : Bytecode.syscall -> Ain.Function.t
 val function_of_builtin : Bytecode.builtin -> Jaf.jaf_type -> Ain.Function.t
-val fundecl_of_tyfunction : Jaf.jaf_type list -> Jaf.jaf_type -> Jaf.fundecl

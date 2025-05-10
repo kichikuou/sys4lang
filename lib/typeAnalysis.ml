@@ -200,16 +200,14 @@ class type_analyze_visitor ctx =
       | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
     method check_delegate_compatible parent delegate (expr : expression) =
-      let check dg_name args ret =
-        let dg = Hashtbl.find_exn ctx.delegates dg_name in
-        let f = Builtin.fundecl_of_tyfunction args ret in
-        if not (fundecl_compatible dg f) then
+      let check dt ft =
+        if not (ft_compatible dt ft) then
           type_error (Delegate delegate) (Some expr) parent
       in
       match (delegate, expr.ty) with
-      | Some (dg_name, _, _), TyMethod (args, ret) -> check dg_name args ret
-      | Some (dg_name, _, _), TyFunction (args, ret) ->
-          check dg_name args ret;
+      | Some (_, _, TyMethod dt), TyMethod ft -> check dt ft
+      | Some (_, _, TyMethod dt), TyFunction ft ->
+          check dt ft;
           insert_cast (Delegate delegate) expr
       | Some (dg_name, dg_i, _), Delegate (Some (name, idx, _)) ->
           if not (String.equal name dg_name && dg_i = idx) then
@@ -227,35 +225,28 @@ class type_analyze_visitor ctx =
        *)
       | FuncType (Some (ft_name, _)) -> (
           match rhs.ty with
-          | TyFunction (args, ret) ->
-              let ft = Hashtbl.find_exn ctx.functypes ft_name in
-              let f = Builtin.fundecl_of_tyfunction args ret in
-              if not (fundecl_compatible ft f) then
+          | TyFunction ft ->
+              let fd = Hashtbl.find_exn ctx.functypes ft_name in
+              if not (ft_compatible (ft_of_fundecl fd) ft) then
                 type_error t (Some rhs) parent
           | FuncType (Some (ft2_name, _)) ->
               let ft = Hashtbl.find_exn ctx.functypes ft_name in
               let ft2 = Hashtbl.find_exn ctx.functypes ft2_name in
-              if not (fundecl_compatible ft ft2) then
+              if not (ft_compatible (ft_of_fundecl ft) (ft_of_fundecl ft2)) then
                 type_error t (Some rhs) parent
           | String -> ()
           | NullType -> rhs.ty <- t
           | _ -> type_error t (Some rhs) parent)
       | Delegate dg -> self#check_delegate_compatible parent dg rhs
-      | TyFunction (args, ret) -> (
+      | TyFunction cb -> (
           match rhs.ty with
-          | TyFunction (args', ret') ->
-              let cb = Builtin.fundecl_of_tyfunction args ret in
-              let f = Builtin.fundecl_of_tyfunction args' ret' in
-              if not (fundecl_compatible cb f) then
-                type_error t (Some rhs) parent
+          | TyFunction f ->
+              if not (ft_compatible cb f) then type_error t (Some rhs) parent
           | _ -> type_error t (Some rhs) parent)
-      | TyMethod (args, ret) -> (
+      | TyMethod cb -> (
           match rhs.ty with
-          | TyMethod (args', ret') ->
-              let cb = Builtin.fundecl_of_tyfunction args ret in
-              let f = Builtin.fundecl_of_tyfunction args' ret' in
-              if not (fundecl_compatible cb f) then
-                type_error t (Some rhs) parent
+          | TyMethod f ->
+              if not (ft_compatible cb f) then type_error t (Some rhs) parent
           | _ -> type_error t (Some rhs) parent)
       | Int | LongInt | Bool | Float ->
           type_check_numeric parent rhs;
@@ -345,7 +336,7 @@ class type_analyze_visitor ctx =
               expr.ty <- g.type_spec.ty
           | ResolvedFunction f ->
               expr.node <- Ident (name, FunctionName name);
-              expr.ty <- tyfunction_of_fundecl f
+              expr.ty <- TyFunction (ft_of_fundecl f)
           | ResolvedMember (s, v) ->
               expr.node <-
                 Member
@@ -361,7 +352,7 @@ class type_analyze_visitor ctx =
                   ( make_expr ~ty:(Struct (s.name, s.index)) This,
                     name,
                     ClassMethod (fun_name, Option.value_exn f.index) );
-              expr.ty <- tymethod_of_fundecl f
+              expr.ty <- TyMethod (ft_of_fundecl f)
           | ResolvedLibrary _ ->
               expr.node <- Ident (name, HLLName);
               expr.ty <- Void
@@ -377,7 +368,7 @@ class type_analyze_visitor ctx =
           match Hashtbl.find ctx.functions name with
           | Some f ->
               expr.node <- FuncAddr (name, f.index);
-              expr.ty <- tyfunction_of_fundecl f
+              expr.ty <- TyFunction (ft_of_fundecl f)
           | None -> undefined_variable_error name (ASTExpression expr))
       | MemberAddr (sname, name, _) -> (
           match environment#resolve_qualified sname name with
@@ -439,10 +430,9 @@ class type_analyze_visitor ctx =
               | FuncType (Some (_, ft_i)), FuncType (Some (_, ft_j)) ->
                   if ft_i <> ft_j then
                     type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (Some (ft_name, _)), TyFunction (args, ret) ->
+              | FuncType (Some (ft_name, _)), TyFunction f ->
                   let ft = Hashtbl.find_exn ctx.functypes ft_name in
-                  let f = Builtin.fundecl_of_tyfunction args ret in
-                  if not (fundecl_compatible ft f) then
+                  if not (ft_compatible (ft_of_fundecl ft) f) then
                     type_error a.ty (Some b) (ASTExpression expr)
               | FuncType _, NullType -> b.ty <- a.ty
               | _ -> coerce_numerics op a b |> ignore);
@@ -584,7 +574,7 @@ class type_analyze_visitor ctx =
                       ( obj,
                         member_name,
                         ClassMethod (fun_name, Option.value_exn f.index) );
-                  expr.ty <- tymethod_of_fundecl f
+                  expr.ty <- TyMethod (ft_of_fundecl f)
               | None ->
                   (* TODO: separate error type for this? *)
                   undefined_variable_error

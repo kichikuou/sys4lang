@@ -87,11 +87,18 @@ type jaf_type =
   | FuncType of (string * int) option
   | IMainSystem
   | NullType
-  | TyFunction of jaf_type list * jaf_type
-  | TyMethod of jaf_type list * jaf_type
+  | TyFunction of function_type
+  | TyMethod of function_type
   | MemberPtr of string * jaf_type
 
+and function_type = jaf_type list * jaf_type
+
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
+
+let ft_compatible (args, ret) (args', ret') =
+  jaf_type_equal ret ret'
+  && List.length args = List.length args'
+  && List.for_all2_exn args args' ~f:jaf_type_equal
 
 let is_scalar = function
   | Int | Bool | Float | LongInt | FuncType _ -> true
@@ -228,24 +235,13 @@ type fundecl = {
   mutable class_index : int option;
 }
 
-let tyfunction_of_fundecl fundecl =
+let ft_of_fundecl fundecl =
   let args = List.map fundecl.params ~f:(fun p -> p.type_spec.ty) in
   let ret = fundecl.return.ty in
-  TyFunction (args, ret)
-
-let tymethod_of_fundecl fundecl =
-  let args = List.map fundecl.params ~f:(fun p -> p.type_spec.ty) in
-  let ret = fundecl.return.ty in
-  TyMethod (args, ret)
+  (args, ret)
 
 let is_constructor (f : fundecl) =
   match f.class_name with Some s -> String.equal f.name s | _ -> false
-
-let fundecl_compatible (f : fundecl) (g : fundecl) =
-  jaf_type_equal f.return.ty g.return.ty
-  && List.length f.params = List.length g.params
-  && List.for_all2_exn f.params g.params ~f:(fun a b ->
-         jaf_type_equal a.type_spec.ty b.type_spec.ty)
 
 let mangled_name fdecl =
   match fdecl.class_name with

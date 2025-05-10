@@ -32,7 +32,9 @@ class type_declare_visitor ctx =
         decl.index <- Some (Ain.add_function ctx.ain name).index;
       Hashtbl.update ctx.functions name ~f:(function
         | Some prev_decl ->
-            if not (fundecl_compatible decl prev_decl) then
+            if
+              not (ft_compatible (ft_of_fundecl decl) (ft_of_fundecl prev_decl))
+            then
               compile_error "Function signature mismatch"
                 (ASTDeclaration (Function decl))
             else if Option.is_some prev_decl.body then
@@ -184,7 +186,9 @@ class type_resolve_visitor ctx decl_only =
               | Some dg ->
                   Delegate
                     (Some
-                       (name, Option.value_exn dg.index, tymethod_of_fundecl dg))
+                       ( name,
+                         Option.value_exn dg.index,
+                         TyMethod (ft_of_fundecl dg) ))
               | None -> (
                   match name with
                   | "IMainSystem" -> IMainSystem

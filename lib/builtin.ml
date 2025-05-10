@@ -197,17 +197,3 @@ let function_of_syscall sys =
 
 let function_of_builtin sys receiver_ty =
   jaf_to_ain_function (fundecl_of_builtin sys receiver_ty None) default_function
-
-let fundecl_of_tyfunction args ret =
-  {
-    name = "";
-    loc = dummy_location;
-    return = { ty = ret; location = dummy_location };
-    params = make_params args [];
-    body = None;
-    is_label = false;
-    is_private = false;
-    index = None;
-    class_name = None;
-    class_index = None;
-  }
