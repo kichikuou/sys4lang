@@ -762,14 +762,9 @@ class jaf_compiler ain =
       | Member (_, _, ClassConst _) ->
           compiler_bug "class constant not eliminated"
             (Some (ASTExpression expr))
-      | Member (e, _, ClassMethod _) -> (
-          match expr.ty with
-          | TyMethod (_, no) ->
-              self#compile_lvalue e;
-              self#write_instruction1 PUSH no
-          | _ ->
-              compiler_bug "tried to compile method member expression"
-                (Some (ASTExpression expr)))
+      | Member (e, _, ClassMethod (_, no)) ->
+          self#compile_lvalue e;
+          self#write_instruction1 PUSH no
       | Member (_, _, HLLFunction (_, _)) ->
           compiler_bug "tried to compile HLL member expression"
             (Some (ASTExpression expr))
@@ -814,6 +809,7 @@ class jaf_compiler ain =
           | StringPushBack | StringPopBack | StringErase | DelegateSet
           | DelegateAdd | DelegateNumof | DelegateExist | DelegateErase
           | DelegateClear ->
+              receiver_ty := e.ty;
               self#compile_lvalue e
           | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
           | ArrayFill | ArrayPushBack | ArrayPopBack | ArrayEmpty | ArrayErase

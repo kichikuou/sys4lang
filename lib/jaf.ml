@@ -83,12 +83,12 @@ type jaf_type =
   | Wrap of jaf_type
   | HLLParam
   | HLLFunc
-  | Delegate of (string * int) option
+  | Delegate of (string * int * jaf_type) option
   | FuncType of (string * int) option
   | IMainSystem
   | NullType
   | TyFunction of jaf_type list * jaf_type
-  | TyMethod of string * int
+  | TyMethod of jaf_type list * jaf_type
   | MemberPtr of string * jaf_type
 
 let jaf_type_equal (a : jaf_type) b = Poly.equal a b
@@ -119,7 +119,7 @@ type member_type =
   | UnresolvedMember
   | ClassVariable of int
   | ClassConst of string
-  | ClassMethod of string
+  | ClassMethod of string * int
   | HLLFunction of string * string
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
@@ -227,6 +227,16 @@ type fundecl = {
   mutable class_name : string option;
   mutable class_index : int option;
 }
+
+let tyfunction_of_fundecl fundecl =
+  let args = List.map fundecl.params ~f:(fun p -> p.type_spec.ty) in
+  let ret = fundecl.return.ty in
+  TyFunction (args, ret)
+
+let tymethod_of_fundecl fundecl =
+  let args = List.map fundecl.params ~f:(fun p -> p.type_spec.ty) in
+  let ret = fundecl.return.ty in
+  TyMethod (args, ret)
 
 let is_constructor (f : fundecl) =
   match f.class_name with Some s -> String.equal f.name s | _ -> false
@@ -629,7 +639,7 @@ let rec jaf_type_to_string = function
   | Bool -> "bool"
   | Float -> "float"
   | String -> "string"
-  | Struct (s, _) | FuncType (Some (s, _)) | Delegate (Some (s, _)) -> s
+  | Struct (s, _) | FuncType (Some (s, _)) | Delegate (Some (s, _, _)) -> s
   | FuncType None -> "unknown_functype"
   | Delegate None -> "unknown_functype"
   | Ref t -> "ref " ^ jaf_type_to_string t
@@ -639,10 +649,9 @@ let rec jaf_type_to_string = function
   | HLLFunc -> "hll_func"
   | IMainSystem -> "IMainSystem"
   | NullType -> "null"
-  | TyFunction (args, ret) ->
+  | TyFunction (args, ret) | TyMethod (args, ret) ->
       sprintf "%s(%s)" (jaf_type_to_string ret)
         (String.concat ~sep:", " (List.map ~f:jaf_type_to_string args))
-  | TyMethod (name, _) -> "typeof(" ^ name ^ ")"
   | MemberPtr (s, t) -> s ^ "::" ^ jaf_type_to_string t
 
 let rec expr_to_string (e : expression) =
@@ -843,14 +852,14 @@ let rec jaf_to_ain_data_type = function
   | Wrap t -> Ain.Type.Wrap (Ain.Type.make (jaf_to_ain_data_type t))
   | HLLParam -> Ain.Type.HLLParam
   | HLLFunc -> Ain.Type.HLLFunc
-  | Delegate (Some (_, i)) -> Ain.Type.Delegate i
+  | Delegate (Some (_, i, _)) -> Ain.Type.Delegate i
   | Delegate None -> Ain.Type.Delegate (-1)
   | FuncType (Some (_, i)) -> Ain.Type.FuncType i
   | FuncType None -> Ain.Type.FuncType (-1)
   | IMainSystem -> Ain.Type.IMainSystem
   | NullType -> Ain.Type.NullType
   | TyFunction _ -> Ain.Type.FuncType (-1) (* ??? *)
-  | TyMethod (_, i) -> Ain.Type.Method i
+  | TyMethod _ -> Ain.Type.Method (-1) (* ??? *)
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
 
 and jaf_to_ain_type = function
@@ -869,10 +878,9 @@ let rec data_type_to_jaf_type = function
   | Wrap t -> Wrap (ain_to_jaf_type t)
   | HLLParam -> HLLParam
   | HLLFunc -> HLLFunc
-  | Delegate i -> Delegate (Some ("", i))
+  | Delegate i -> Delegate (Some ("", i, Untyped))
   | FuncType i -> FuncType (Some ("", i))
   | IMainSystem -> IMainSystem
-  | Method i -> TyMethod ("", i)
   | t ->
       Printf.failwithf "cannot convert %s to jaf type"
         (Ain.Type.data_to_string t)

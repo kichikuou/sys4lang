@@ -90,7 +90,10 @@ let addr_null =
 let fundecl_of_builtin builtin receiver_ty node_opt =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
   let rank = array_rank receiver_ty in
-  let t_method = TyMethod ("", 0) in
+  let delegate_ft = function
+    | Delegate (Some (_, _, ft)) -> ft
+    | _ -> failwith ("Delegate expected, got " ^ jaf_type_to_string receiver_ty)
+  in
   let make return_type name ?(defaults = []) (arg_types : jaf_type list) =
     {
       name;
@@ -166,11 +169,11 @@ let fundecl_of_builtin builtin receiver_ty node_opt =
       make Int "Find"
         [ Int; Int; cb_argtype; TyFunction ([ cb_argtype; cb_argtype ], Bool) ]
         ~defaults:[ None; None; None; cb_default ]
-  | DelegateSet -> make Void "Set" [ t_method ]
-  | DelegateAdd -> make Void "Add" [ t_method ]
+  | DelegateSet -> make Void "Set" [ delegate_ft receiver_ty ]
+  | DelegateAdd -> make Void "Add" [ delegate_ft receiver_ty ]
   | DelegateNumof -> make Int "Numof" []
-  | DelegateExist -> make Int "Exist" [ t_method ]
-  | DelegateErase -> make Void "Erase" [ t_method ]
+  | DelegateExist -> make Int "Exist" [ delegate_ft receiver_ty ]
+  | DelegateErase -> make Void "Erase" [ delegate_ft receiver_ty ]
   | DelegateClear -> make Void "Clear" []
 
 let default_function : Ain.Function.t =
