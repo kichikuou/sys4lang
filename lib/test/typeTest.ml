@@ -692,7 +692,7 @@ let%expect_test "Array.SortBy()" =
         array@S a;
         a.SortBy(&S::i);  // ok
         a.SortBy(&S::li);  // ok
-        a.SortBy(&S::s);  // error
+        a.SortBy(&S::s);  // ok
         a.SortBy(&S::rs);  // error
         a.SortBy(&T::i);  // error
         array@int ai;
@@ -701,18 +701,16 @@ let%expect_test "Array.SortBy()" =
     |};
   [%expect
     {|
-      -:15:18-23: Type error: expected S::int; got S::string
-         15 |         a.SortBy(&S::s);  // error
-                               ^^^^^
-      -:16:18-24: Type error: expected S::int; got S::ref S
-         16 |         a.SortBy(&S::rs);  // error
-                               ^^^^^^
-      -:17:18-23: Type error: expected S::int; got T::int
-         17 |         a.SortBy(&T::i);  // error
-                               ^^^^^
-      -:19:9-25: SortBy() is not supported for array@int
-         19 |         ai.SortBy(&S::i);  // error
-                      ^^^^^^^^^^^^^^^^ |}]
+    -:16:18-24: Type error: expected S::(int | string); got S::ref S
+       16 |         a.SortBy(&S::rs);  // error
+                             ^^^^^^
+    -:17:18-23: Type error: expected S::(int | string); got T::int
+       17 |         a.SortBy(&T::i);  // error
+                             ^^^^^
+    -:19:9-25: SortBy() is not supported for array@int
+       19 |         ai.SortBy(&S::i);  // error
+                    ^^^^^^^^^^^^^^^^
+    |}]
 
 let%expect_test "switch type error" =
   type_test

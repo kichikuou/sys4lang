@@ -28,6 +28,7 @@ let maybe_deref (e : expression) =
 
 let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   match (expected, actual) with
+  | TypeUnion (a, b), t -> type_equal a t || type_equal b t
   | Ref a, Ref b -> type_equal a b
   | Void, Void -> true
   | Int, (Int | Bool | LongInt) -> true

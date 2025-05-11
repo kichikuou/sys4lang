@@ -90,6 +90,7 @@ type jaf_type =
   | TyFunction of function_type
   | TyMethod of function_type
   | MemberPtr of string * jaf_type
+  | TypeUnion of jaf_type * jaf_type
 
 and function_type = jaf_type list * jaf_type
 
@@ -649,6 +650,8 @@ let rec jaf_type_to_string = function
       sprintf "%s(%s)" (jaf_type_to_string ret)
         (String.concat ~sep:", " (List.map ~f:jaf_type_to_string args))
   | MemberPtr (s, t) -> s ^ "::" ^ jaf_type_to_string t
+  | TypeUnion (a, b) ->
+      sprintf "(%s | %s)" (jaf_type_to_string a) (jaf_type_to_string b)
 
 let rec expr_to_string (e : expression) =
   let arglist_to_string args =
@@ -857,6 +860,7 @@ let rec jaf_to_ain_data_type = function
   | TyFunction _ -> Ain.Type.Function
   | TyMethod _ -> Ain.Type.Method
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
+  | TypeUnion _ -> failwith "tried to convert TypeUnion to ain data type"
 
 and jaf_to_ain_type = function
   | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)

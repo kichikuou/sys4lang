@@ -152,7 +152,8 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
         ~defaults:[ cb_default ]
   | ArraySortBy -> (
       match elem_ty with
-      | Struct (name, _) -> make Void "SortBy" [ MemberPtr (name, Int) ]
+      | Struct (name, _) ->
+          make Void "SortBy" [ MemberPtr (name, TypeUnion (Int, String)) ]
       | _ ->
           CompileError.compile_error
             ("SortBy() is not supported for array@" ^ jaf_type_to_string elem_ty)
