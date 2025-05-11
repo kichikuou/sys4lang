@@ -493,11 +493,8 @@ class type_analyze_visitor ctx =
       | Seq (_, e) -> expr.ty <- e.ty
       | Ternary (test, con, alt) ->
           check Int test;
-          (match (con.ty, alt.ty) with
-          | Ref _, Ref _ -> ()
-          | Ref _, _ -> maybe_deref con
-          | _, Ref _ -> maybe_deref alt
-          | _, _ -> ());
+          maybe_deref con;
+          maybe_deref alt;
           check_expr con alt;
           expr.ty <- con.ty
       | Cast (t, e) ->
