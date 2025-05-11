@@ -234,6 +234,12 @@ class const_eval_visitor ctx =
                   Ain.Variable.Int (Int32.of_int_exn i)
               | ConstFloat f -> Ain.Variable.Float f
               | ConstString s -> Ain.Variable.String s
+              | Ident (name, _) -> (
+                  match environment#resolve name with
+                  | ResolvedGlobal v ->
+                      Ain.Variable.Int
+                        (Int32.of_int_exn (Option.value_exn v.index))
+                  | _ -> const_error v)
               | _ -> const_error v)
         | Parameter, Some e -> (
             match e.node with

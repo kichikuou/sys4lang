@@ -1,9 +1,11 @@
 int g_int = 42;
 array@int g_array[5];
+ref array@int g_ref_array = g_array;
 
 int main()
 {
 	assert(g_int == 42);
 	assert(g_array.Numof() == 5);
+	assert(g_ref_array.Numof() == 5);
 	return 0;
 }
