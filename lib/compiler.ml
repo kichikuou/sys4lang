@@ -32,13 +32,6 @@ let parse_file ctx lexer parser file read_file =
   | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
   | e -> raise e
 
-(* Replace the struct keyword with HLL_STRUCT when lexing HLL files.
- * This is a hack to simplify the parser *)
-let hll_lexer lexbuf =
-  match Lexer.token lexbuf with
-  | Parser.STRUCT -> Parser.HLL_STRUCT
-  | tok -> tok
-
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
 let parse_pass ctx sources read_file =
   List.filter_map sources ~f:(function
@@ -51,7 +44,7 @@ let parse_pass ctx sources read_file =
           Stdio.eprintf "Warning: %s is already defined\n" f;
           None)
         else
-          let hll = parse_file ctx hll_lexer Parser.hll f read_file in
+          let hll = parse_file ctx Lexer.token Parser.hll f read_file in
           let hll_name = Stdlib.Filename.(chop_extension (basename f)) in
           Some (Hll (hll_name, import_name, hll))
     | _ -> failwith "unreachable")

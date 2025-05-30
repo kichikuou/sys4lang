@@ -36,7 +36,7 @@ let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   | LongInt, (Int | Bool | LongInt) -> true
   | Float, Float -> true
   | String, String -> true
-  | Struct (_, a), Struct (_, b) -> a = -1 (* hll_struct *) || a = b
+  | Struct (_, a), Struct (_, b) -> a = -1 (* any_struct *) || a = b
   | IMainSystem, (IMainSystem | Int) -> true
   | FuncType (Some (_, a)), FuncType (Some (_, b)) -> a = b
   | FuncType None, FuncType None -> true

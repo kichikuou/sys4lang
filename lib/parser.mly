@@ -117,7 +117,7 @@ let rec multidim_array dims t =
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
 %token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH
 /* types */
-%token VOID CHAR INT LINT FLOAT BOOL STRING HLL_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
+%token VOID CHAR INT LINT FLOAT BOOL STRING ANY_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
 /* keywords */
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN JUMP JUMPS ASSERT
@@ -322,7 +322,7 @@ primitive_type_specifier
   | FLOAT        { Float }
   | BOOL         { Bool }
   | STRING       { String }
-  | HLL_STRUCT   { Struct("hll_struct", -1) }
+  | ANY_STRUCT   { Struct("any_struct", -1) }
   | HLL_PARAM    { HLLParam }
   | HLL_FUNC     { HLLFunc }
   | HLL_DELEGATE { Delegate (Some ("hll_delegate", -1)) }
