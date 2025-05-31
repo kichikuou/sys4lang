@@ -737,6 +737,9 @@ class jaf_compiler ctx =
           | Bool, (Bool | Int) -> ()
           | Float, Float -> ()
           | Float, Int -> self#write_instruction0 FTOI
+          | Float, LongInt ->
+              self#write_instruction0 FTOI;
+              self#write_instruction0 ITOLI
           | Float, String ->
               self#write_instruction1 PUSH 6;
               self#write_instruction0 FTOS
