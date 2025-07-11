@@ -140,6 +140,7 @@ module FunctionType : sig
 end
 
 val create : int -> int -> t
+val from_pje : Pje.t -> t
 val load : string -> t
 val write : ?raw:bool -> t -> Stdio.Out_channel.t -> unit
 val write_file : t -> string -> unit

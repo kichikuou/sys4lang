@@ -441,6 +441,7 @@ module Enum = struct
 end
 
 type t = {
+  mutable is_ain2 : bool;
   mutable major_version : int;
   mutable minor_version : int;
   mutable keyc : int32;
@@ -469,6 +470,7 @@ type t = {
 
 let create major_version minor_version =
   {
+    is_ain2 = major_version >= 5;
     major_version;
     minor_version;
     keyc = 0l;
@@ -493,6 +495,11 @@ let create major_version minor_version =
     use_msg1 = false;
     string_table = Hashtbl.create (module String);
   }
+
+let from_pje (pje : Pje.t) =
+  let ain = create pje.ain_version 0 in
+  ain.is_ain2 <- pje.is_ai2_file;
+  ain
 
 let version ain = ain.major_version
 let minor_version ain = ain.minor_version
@@ -1257,7 +1264,7 @@ let to_buffer ain =
 let write ?(raw = false) ain out =
   let write_buffer buf =
     if raw then Out_channel.output_buffer out buf
-    else if version_gte ain (5, 0) then (
+    else if ain.is_ain2 then (
       let write_int32 i =
         let tmp = Bytes.create 4 in
         Stdlib.Bytes.set_int32_le tmp 0 i;
