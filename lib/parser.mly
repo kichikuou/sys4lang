@@ -16,7 +16,9 @@
 
 (* Expect the following menhir warnings when compiling this grammar:
  *
+ *  Warning: one state has shift/reduce conflicts.
  *  Warning: one state has reduce/reduce conflicts.
+ *  Warning: one shift/reduce conflict was arbitrarily resolved.
  *  Warning: 7 reduce/reduce conflicts were arbitrarily resolved.
  *)
 %{
@@ -117,7 +119,7 @@ let rec multidim_array dims t =
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
 %token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH
 /* types */
-%token VOID CHAR INT LINT FLOAT BOOL STRING ANY_STRUCT HLL_PARAM HLL_FUNC HLL_DELEGATE
+%token VOID CHAR INT LINT FLOAT BOOL STRING HLL_PARAM HLL_FUNC HLL_DELEGATE
 /* keywords */
 %token IF ELSE WHILE DO FOR SWITCH CASE DEFAULT NULL THIS NEW
 %token GOTO CONTINUE BREAK RETURN JUMP JUMPS ASSERT
@@ -322,7 +324,7 @@ primitive_type_specifier
   | FLOAT        { Float }
   | BOOL         { Bool }
   | STRING       { String }
-  | ANY_STRUCT   { Struct("any_struct", -1) }
+  | STRUCT       { Struct("struct", -1) }
   | HLL_PARAM    { HLLParam }
   | HLL_FUNC     { HLLFunc }
   | HLL_DELEGATE { Delegate (Some ("hll_delegate", -1)) }
@@ -490,7 +492,7 @@ hll_declaration
   : declaration_specifiers IDENTIFIER parameter_list(declarator) SEMICOLON
     { Function (func $sloc $1 $2 $3 None) }
 
-struct_or_class
+%inline struct_or_class
   : STRUCT { false }
   | CLASS { true }
   ;

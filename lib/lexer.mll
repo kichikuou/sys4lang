@@ -82,7 +82,6 @@ let () =
               "float",        FLOAT;
               "bool",         BOOL;
               "string",       STRING;
-              "any_struct",   ANY_STRUCT;
               "hll_param",    HLL_PARAM;
               "hll_func",     HLL_FUNC;
               "hll_delegate", HLL_DELEGATE;
