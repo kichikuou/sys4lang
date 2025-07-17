@@ -6,7 +6,7 @@ module In_channel = Stdio.In_channel
 module Out_channel = Stdio.Out_channel
 
 module Type = struct
-  type data =
+  type t =
     | Void
     | Int
     | Float
@@ -20,6 +20,7 @@ module Type = struct
     | HLLFunc2
     | HLLParam
     | Array of t
+    | Ref of t
     | Wrap of t
     | Option of t
     | Unknown87 of t
@@ -35,125 +36,120 @@ module Type = struct
     | Method
     | NullType
 
-  and t = { data : data; is_ref : bool }
-
   let rec int_of_data_type version o =
-    if o.is_ref then
-      match o.data with
-      | Void -> failwith "tried to create ref void"
-      | Int -> 18
-      | Float -> 19
-      | String -> 20
-      | Struct _ -> 21
-      | IMainSystem -> failwith "tried to create ref IMainSystem"
-      | FuncType _ -> 31
-      | Bool -> 51
-      | LongInt -> 59
-      | Delegate _ -> 67
-      | HLLFunc2 -> failwith "tried to create ref hll_func2" (* FIXME: 73? *)
-      | HLLParam -> 75
-      | Array arrtype -> (
-          if version >= 11 then 80
-          else
-            match arrtype.data with
-            | Void -> failwith "tried to create ref array<void>"
-            | Int -> 22
-            | Float -> 23
-            | String -> 24
-            | Struct _ -> 25
-            | IMainSystem -> failwith "tried to create ref array<IMainSystem>"
-            | FuncType _ -> 32
-            | Bool -> 52
-            | LongInt -> 60
-            | Delegate _ -> 69
-            | HLLFunc2 -> failwith "tried to create ref array<hll_func2>"
-            | HLLParam -> failwith "tried to create ref array<hll_param>"
-            | Array t ->
-                int_of_data_type version { data = Array t; is_ref = true }
-            | Wrap _ -> failwith "tried to create ref array<wrap<...>>"
-            | Option _ -> failwith "tried to create ref array<option<...>>"
-            | Unknown87 _ -> failwith "tried to create ref array<unknown_87>"
-            | IFace _ -> failwith "tried to create ref array<interface>"
-            | Enum2 _ -> failwith "tried to create ref array<enum2>"
-            | Enum _ -> failwith "tried to create ref array<enum>"
-            | HLLFunc -> failwith "tried to create ref array<hll_func>"
-            | Unknown98 -> failwith "tried to create ref array<unknown_98>"
-            | IFaceWrap _ ->
-                failwith "tried to create ref array<iface_wrap<...>>"
-            | Function -> failwith "tried to create ref array<function>"
-            | Method -> failwith "tried to create ref array<method>"
-            | NullType -> failwith "tried to create ref array<null>")
-      | Wrap _ -> failwith "tried to create ref wrap<...>"
-      | Option _ -> failwith "tried to create ref option<...>"
-      | Unknown87 _ -> failwith "tried to create ref unknown_87"
-      | IFace _ -> failwith "tried to create ref interface"
-      | Enum2 _ -> failwith "tried to create ref enum2"
-      | Enum _ -> 93
-      | HLLFunc -> failwith "tried to create ref hll_func"
-      | Unknown98 -> failwith "tried to create ref unknown_98"
-      | IFaceWrap _ -> failwith "tried to create ref iface_wrap<...>"
-      | Function -> failwith "tried to create ref function"
-      | Method -> failwith "tried to create ref method"
-      | NullType -> failwith "tried to create ref null"
-    else
-      match o.data with
-      | Void -> 0
-      | Int -> 10
-      | Float -> 11
-      | String -> 12
-      | Struct _ -> 13
-      | IMainSystem -> 26
-      | FuncType _ -> 27
-      | Bool -> 47
-      | LongInt -> 55
-      | Delegate _ -> 63
-      | HLLFunc2 -> 71
-      | HLLParam -> 74
-      | Array arrtype -> (
-          if version >= 11 then 79
-          else
-            match arrtype.data with
-            | Void -> failwith "tried to create array<void>"
-            | Int -> 14
-            | Float -> 15
-            | String -> 16
-            | Struct _ -> 17
-            | IMainSystem -> failwith "tried to create array<IMainSystem>"
-            | FuncType _ -> 30
-            | Bool -> 50
-            | LongInt -> 58
-            | Delegate _ -> 66
-            | HLLFunc2 -> failwith "tried to create array<hll_func2>"
-            | HLLParam -> failwith "tried to create array<hll_param>"
-            | Array t ->
-                int_of_data_type version { data = Array t; is_ref = false }
-            | Wrap _ -> failwith "tried to create array<wrap<...>>"
-            | Option _ -> failwith "tried to create array<option<...>>"
-            | Unknown87 _ -> failwith "tried to create array<unknown_87>"
-            | IFace _ -> failwith "tried to create array<interface>"
-            | Enum2 _ -> failwith "tried to create array<enum2>"
-            | Enum _ -> failwith "tried to create array<enum>"
-            | HLLFunc -> failwith "tried to create array<hll_func>"
-            | Unknown98 -> failwith "tried to create array<unknown_98>"
-            | IFaceWrap _ -> failwith "tried to create array<iface_wrap<...>>"
-            | Function -> failwith "tried to create array<function>"
-            | Method -> failwith "tried to create array<method>"
-            | NullType -> failwith "tried to create array<null>")
-      | Wrap _ -> 82
-      | Option _ -> 86
-      | Unknown87 _ -> 87
-      | IFace _ -> 89
-      | Enum2 _ -> 91
-      | Enum _ -> 92
-      | HLLFunc -> 95
-      | Unknown98 -> 98
-      | IFaceWrap _ -> 100
-      | Function -> failwith "tried to create function"
-      | Method -> failwith "tried to create method"
-      | NullType -> failwith "tried to create null"
+    match o with
+    | Ref Void -> failwith "tried to create ref void"
+    | Ref Int -> 18
+    | Ref Float -> 19
+    | Ref String -> 20
+    | Ref (Struct _) -> 21
+    | Ref IMainSystem -> failwith "tried to create ref IMainSystem"
+    | Ref (FuncType _) -> 31
+    | Ref Bool -> 51
+    | Ref LongInt -> 59
+    | Ref (Delegate _) -> 67
+    | Ref HLLFunc2 -> failwith "tried to create ref hll_func2" (* FIXME: 73? *)
+    | Ref HLLParam -> 75
+    | Ref (Array arrtype) -> (
+        if version >= 11 then 80
+        else
+          match arrtype with
+          | Void -> failwith "tried to create ref array<void>"
+          | Int -> 22
+          | Float -> 23
+          | String -> 24
+          | Struct _ -> 25
+          | IMainSystem -> failwith "tried to create ref array<IMainSystem>"
+          | FuncType _ -> 32
+          | Bool -> 52
+          | LongInt -> 60
+          | Delegate _ -> 69
+          | HLLFunc2 -> failwith "tried to create ref array<hll_func2>"
+          | HLLParam -> failwith "tried to create ref array<hll_param>"
+          | Array t -> int_of_data_type version (Ref (Array t))
+          | Ref _ -> failwith "tried to create ref array<ref<...>>"
+          | Wrap _ -> failwith "tried to create ref array<wrap<...>>"
+          | Option _ -> failwith "tried to create ref array<option<...>>"
+          | Unknown87 _ -> failwith "tried to create ref array<unknown_87>"
+          | IFace _ -> failwith "tried to create ref array<interface>"
+          | Enum2 _ -> failwith "tried to create ref array<enum2>"
+          | Enum _ -> failwith "tried to create ref array<enum>"
+          | HLLFunc -> failwith "tried to create ref array<hll_func>"
+          | Unknown98 -> failwith "tried to create ref array<unknown_98>"
+          | IFaceWrap _ -> failwith "tried to create ref array<iface_wrap<...>>"
+          | Function -> failwith "tried to create ref array<function>"
+          | Method -> failwith "tried to create ref array<method>"
+          | NullType -> failwith "tried to create ref array<null>")
+    | Ref (Wrap _) -> failwith "tried to create ref wrap<...>"
+    | Ref (Option _) -> failwith "tried to create ref option<...>"
+    | Ref (Unknown87 _) -> failwith "tried to create ref unknown_87"
+    | Ref (IFace _) -> failwith "tried to create ref interface"
+    | Ref (Enum2 _) -> failwith "tried to create ref enum2"
+    | Ref (Enum _) -> 93
+    | Ref HLLFunc -> failwith "tried to create ref hll_func"
+    | Ref Unknown98 -> failwith "tried to create ref unknown_98"
+    | Ref (IFaceWrap _) -> failwith "tried to create ref iface_wrap<...>"
+    | Ref Function -> failwith "tried to create ref function"
+    | Ref Method -> failwith "tried to create ref method"
+    | Ref NullType -> failwith "tried to create ref null"
+    | Ref (Ref _) -> failwith "tried to create ref ref"
+    | Void -> 0
+    | Int -> 10
+    | Float -> 11
+    | String -> 12
+    | Struct _ -> 13
+    | IMainSystem -> 26
+    | FuncType _ -> 27
+    | Bool -> 47
+    | LongInt -> 55
+    | Delegate _ -> 63
+    | HLLFunc2 -> 71
+    | HLLParam -> 74
+    | Array arrtype -> (
+        if version >= 11 then 79
+        else
+          match arrtype with
+          | Void -> failwith "tried to create array<void>"
+          | Int -> 14
+          | Float -> 15
+          | String -> 16
+          | Struct _ -> 17
+          | IMainSystem -> failwith "tried to create array<IMainSystem>"
+          | FuncType _ -> 30
+          | Bool -> 50
+          | LongInt -> 58
+          | Delegate _ -> 66
+          | HLLFunc2 -> failwith "tried to create array<hll_func2>"
+          | HLLParam -> failwith "tried to create array<hll_param>"
+          | Array t -> int_of_data_type version (Array t)
+          | Ref _ -> failwith "tried to create array<ref<...>>"
+          | Wrap _ -> failwith "tried to create array<wrap<...>>"
+          | Option _ -> failwith "tried to create array<option<...>>"
+          | Unknown87 _ -> failwith "tried to create array<unknown_87>"
+          | IFace _ -> failwith "tried to create array<interface>"
+          | Enum2 _ -> failwith "tried to create array<enum2>"
+          | Enum _ -> failwith "tried to create array<enum>"
+          | HLLFunc -> failwith "tried to create array<hll_func>"
+          | Unknown98 -> failwith "tried to create array<unknown_98>"
+          | IFaceWrap _ -> failwith "tried to create array<iface_wrap<...>>"
+          | Function -> failwith "tried to create array<function>"
+          | Method -> failwith "tried to create array<method>"
+          | NullType -> failwith "tried to create array<null>")
+    | Wrap _ -> 82
+    | Option _ -> 86
+    | Unknown87 _ -> 87
+    | IFace _ -> 89
+    | Enum2 _ -> 91
+    | Enum _ -> 92
+    | HLLFunc -> 95
+    | Unknown98 -> 98
+    | IFaceWrap _ -> 100
+    | Function -> failwith "tried to create function"
+    | Method -> failwith "tried to create method"
+    | NullType -> failwith "tried to create null"
 
   let rec int_of_struct_type ?(var = false) version o =
-    match o.data with
+    match o with
     | Struct no
     | FuncType no
     | Delegate no
@@ -164,16 +160,18 @@ module Type = struct
         no
     | Array t -> (
         (* XXX: preserve quirk with enum struct type in ain v12 (Rance 10) *)
-        match t.data with
+        match t with
         | Enum _ ->
             if version = 12 then -1 else int_of_struct_type version t ~var
         | _ -> int_of_struct_type version t ~var)
-    | Wrap t | Option t | Unknown87 t -> int_of_struct_type version t ~var
+    | Ref t | Wrap t | Option t | Unknown87 t ->
+        int_of_struct_type version t ~var
     | Void -> if var && version < 11 then 0 else -1
     | _ -> -1
 
   let rec int_of_rank version o =
-    match (version >= 11, o.data) with
+    match (version >= 11, o) with
+    | _, Ref t -> int_of_rank version t
     | false, Array t -> 1 + int_of_rank version t
     | true, Array _ -> 1
     | _, (Wrap _ | Option _ | Unknown87 _) -> 1
@@ -182,74 +180,70 @@ module Type = struct
   (* temporary representation *)
   type parsed = { data : int; struc : int; rank : int; subtype : parsed option }
 
-  let make ?(is_ref = false) data = { data; is_ref }
+  let is_ref = function Ref _ -> true | _ -> false
 
   let rec of_parsed parsed =
     (* constructor for old array types *)
-    let rec make_array ?(is_ref = false) data rank =
-      if rank = 0 then make data
-      else make (Array (make_array data (rank - 1))) ~is_ref
+    let rec make_array elem_t rank =
+      if rank = 0 then elem_t else Array (make_array elem_t (rank - 1))
     in
     let struc = parsed.struc in
     let rank = parsed.rank in
-    let unwrap_subtype = function
-      | Some st -> of_parsed st
-      | None -> make Void
-    in
+    let unwrap_subtype = function Some st -> of_parsed st | None -> Void in
     match parsed.data with
-    | 0 -> make Void
-    | 10 -> make Int
-    | 11 -> make Float
-    | 12 -> make String
-    | 13 -> make (Struct struc)
+    | 0 -> Void
+    | 10 -> Int
+    | 11 -> Float
+    | 12 -> String
+    | 13 -> Struct struc
     | 14 -> make_array Int rank
     | 15 -> make_array Float rank
     | 16 -> make_array String rank
     | 17 -> make_array (Struct struc) rank
-    | 18 -> make Int ~is_ref:true
-    | 19 -> make Float ~is_ref:true
-    | 20 -> make String ~is_ref:true
-    | 21 -> make (Struct struc) ~is_ref:true
-    | 22 -> make_array Int rank ~is_ref:true
-    | 23 -> make_array Float rank ~is_ref:true
-    | 24 -> make_array String rank ~is_ref:true
-    | 25 -> make_array (Struct struc) rank ~is_ref:true
-    | 26 -> make IMainSystem
-    | 27 -> make (FuncType struc)
+    | 18 -> Ref Int
+    | 19 -> Ref Float
+    | 20 -> Ref String
+    | 21 -> Ref (Struct struc)
+    | 22 -> Ref (make_array Int rank)
+    | 23 -> Ref (make_array Float rank)
+    | 24 -> Ref (make_array String rank)
+    | 25 -> Ref (make_array (Struct struc) rank)
+    | 26 -> IMainSystem
+    | 27 -> FuncType struc
     | 30 -> make_array (FuncType struc) rank
-    | 31 -> make (FuncType struc) ~is_ref:true
-    | 32 -> make_array (FuncType struc) rank ~is_ref:true
-    | 47 -> make Bool
+    | 31 -> Ref (FuncType struc)
+    | 32 -> Ref (make_array (FuncType struc) rank)
+    | 47 -> Bool
     | 50 -> make_array Bool rank
-    | 51 -> make Bool ~is_ref:true
-    | 52 -> make_array Bool rank ~is_ref:true
-    | 55 -> make LongInt
+    | 51 -> Ref Bool
+    | 52 -> Ref (make_array Bool rank)
+    | 55 -> LongInt
     | 58 -> make_array LongInt rank
-    | 59 -> make LongInt ~is_ref:true
-    | 60 -> make_array LongInt rank ~is_ref:true
-    | 63 -> make (Delegate struc)
+    | 59 -> Ref LongInt
+    | 60 -> Ref (make_array LongInt rank)
+    | 63 -> Delegate struc
     | 66 -> make_array (Delegate struc) rank
-    | 67 -> make (Delegate struc) ~is_ref:true
-    | 69 -> make_array (Delegate struc) rank ~is_ref:true
-    | 71 -> make HLLFunc2
-    | 74 -> make HLLParam
-    | 75 -> make HLLParam ~is_ref:true
+    | 67 -> Ref (Delegate struc)
+    | 69 -> Ref (make_array (Delegate struc) rank)
+    | 71 -> HLLFunc2
+    | 74 -> HLLParam
+    | 75 -> Ref HLLParam
     (* XXX: HLL function can have null subtype *)
-    | 79 -> make (Array (unwrap_subtype parsed.subtype))
-    | 80 -> make (Array (unwrap_subtype parsed.subtype)) ~is_ref:true
-    | 82 -> make (Wrap (unwrap_subtype parsed.subtype))
-    | 86 -> make (Option (unwrap_subtype parsed.subtype))
-    | 87 -> make (Unknown87 (unwrap_subtype parsed.subtype))
-    | 89 -> make (IFace struc)
-    | 91 -> make (Enum2 struc)
-    | 92 -> make (Enum struc)
-    | 93 -> make (Enum struc) ~is_ref:true
-    | 95 -> make HLLFunc
-    | 98 -> make Unknown98
-    | 100 -> make (IFaceWrap struc)
+    | 79 -> Array (unwrap_subtype parsed.subtype)
+    | 80 -> Ref (Array (unwrap_subtype parsed.subtype))
+    | 82 -> Wrap (unwrap_subtype parsed.subtype)
+    | 86 -> Option (unwrap_subtype parsed.subtype)
+    | 87 -> Unknown87 (unwrap_subtype parsed.subtype)
+    | 89 -> IFace struc
+    | 91 -> Enum2 struc
+    | 92 -> Enum struc
+    | 93 -> Ref (Enum struc)
+    | 95 -> HLLFunc
+    | 98 -> Unknown98
+    | 100 -> IFaceWrap struc
     | n -> failwith (sprintf "Invalid or unknown data type in ain file: %d" n)
 
-  let rec data_to_string = function
+  let rec to_string = function
     | Void -> "void"
     | Int -> "int"
     | Float -> "float"
@@ -264,6 +258,7 @@ module Type = struct
     | HLLFunc2 -> "hll_func2"
     | HLLParam -> "hll_param"
     | Array t -> sprintf "array<%s>" (to_string t)
+    | Ref t -> sprintf "ref<%s>" (to_string t)
     | Wrap t -> sprintf "wrap<%s>" (to_string t)
     | Option t -> sprintf "option<%s>" (to_string t)
     | Unknown87 t -> sprintf "unknown87<%s>" (to_string t)
@@ -278,10 +273,6 @@ module Type = struct
     | Function -> "function"
     | Method -> "method"
     | NullType -> "null"
-
-  and to_string o =
-    let prefix = if o.is_ref then "ref " else "" in
-    prefix ^ data_to_string o.data
 end
 
 module Variable = struct
@@ -327,7 +318,7 @@ module Function = struct
       address = -1;
       nr_args = 0;
       vars = [];
-      return_type = Type.make Void;
+      return_type = Void;
       is_label = false;
       is_lambda = false;
       crc = 0l;
@@ -342,7 +333,7 @@ module Function = struct
 
   let logical_parameters f =
     List.filter (List.take f.vars f.nr_args) ~f:(fun (v : Variable.t) ->
-        match v.value_type.data with Void -> false | _ -> true)
+        match v.value_type with Void -> false | _ -> true)
 end
 
 module Struct = struct
@@ -421,17 +412,11 @@ module FunctionType = struct
   }
 
   let create name =
-    {
-      index = -1;
-      name;
-      return_type = Type.make Void;
-      nr_arguments = 0;
-      variables = [];
-    }
+    { index = -1; name; return_type = Void; nr_arguments = 0; variables = [] }
 
   let logical_parameters f =
     let not_void (v : Variable.t) =
-      match v.value_type.data with Void -> false | _ -> true
+      match v.value_type with Void -> false | _ -> true
     in
     List.filter f.variables ~f:not_void
 end
@@ -573,11 +558,11 @@ let read_return_type buf =
 let read_variables buf count =
   let read_initval (t : Type.t) buf =
     if read_bool buf then
-      match (t.is_ref, t.data) with
-      | true, _ | false, (Struct _ | Delegate _ | Array _) -> Some Variable.Void
-      | false, String -> Some (Variable.String (read_cstring buf))
-      | false, Float -> Some (Variable.Float (read_float buf))
-      | false, _ -> Some (Variable.Int (read_int32 buf))
+      match t with
+      | Ref _ | Struct _ | Delegate _ | Array _ -> Some Variable.Void
+      | String -> Some (Variable.String (read_cstring buf))
+      | Float -> Some (Variable.Float (read_float buf))
+      | _ -> Some (Variable.Int (read_int32 buf))
     else None
   in
   let rec read_variables' count index result =
@@ -1049,7 +1034,7 @@ let rec write_variable_type ?(var = true) buf ain (t : Type.t) =
   BinBuffer.add_int buf (Type.int_of_struct_type ain.major_version t ~var);
   BinBuffer.add_int buf (Type.int_of_rank ain.major_version t);
   if version_gte ain (11, 0) then
-    match t.data with
+    match t with
     | Array t | Wrap t | Option t | Unknown87 t ->
         write_variable_type ~var buf ain t
     | _ -> ()
@@ -1340,7 +1325,7 @@ let write_new_global ain (v : Variable.t) =
 
 let add_global ain name group_index =
   let index = Array.length ain.globals in
-  let variable = Variable.make ~index name (Type.make Void) in
+  let variable = Variable.make ~index name Void in
   let g = Global.create variable group_index in
   ain.globals <- Array.append ain.globals [| g |];
   index

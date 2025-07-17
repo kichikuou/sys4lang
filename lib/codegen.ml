@@ -264,9 +264,8 @@ class jaf_compiler ctx =
 
     method compile_delete_var (v : Ain.Variable.t) =
       match v.value_type with
-      | { is_ref = true; _ } | { data = Struct _; _ } ->
-          self#write_instruction1 SH_LOCALDELETE v.index
-      | { data = Array _; _ } ->
+      | Ref _ | Struct _ -> self#write_instruction1 SH_LOCALDELETE v.index
+      | Array _ ->
           self#compile_local_ref v.index;
           self#write_instruction0 A_FREE
       | _ -> ()
@@ -275,19 +274,20 @@ class jaf_compiler ctx =
         member variables and array elements). Assumes a page + page-index is
         already on the stack. *)
     method compile_dereference (t : Ain.Type.t) =
-      match t.data with
-      | Int | Float | Bool | LongInt | FuncType _ ->
-          if t.is_ref then self#write_instruction0 REFREF;
+      match t with
+      | Ref (Int | Float | Bool | LongInt | FuncType _) ->
+          self#write_instruction0 REFREF;
           self#write_instruction0 REF
-      | String -> self#write_instruction0 S_REF
-      | Array _ ->
+      | Int | Float | Bool | LongInt | FuncType _ -> self#write_instruction0 REF
+      | String | Ref String -> self#write_instruction0 S_REF
+      | Array _ | Ref (Array _) ->
           self#write_instruction0 REF;
           self#write_instruction0 A_REF
-      | Struct no -> self#write_instruction1 SR_REF no
-      | Delegate _ ->
+      | Struct no | Ref (Struct no) -> self#write_instruction1 SR_REF no
+      | Delegate _ | Ref (Delegate _) ->
           self#write_instruction0 REF;
           self#write_instruction0 DG_COPY
-      | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
+      | Void | IMainSystem | HLLFunc2 | HLLParam | Ref _ | Wrap _ | Option _
       | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
       | IFaceWrap _ | Function | Method | NullType ->
           compiler_bug "dereference not supported for type" None
@@ -331,28 +331,32 @@ class jaf_compiler ctx =
         variable by reference. *)
     method compile_lvalue (e : expression) =
       let compile_lvalue_after (t : Ain.Type.t) =
-        if t.is_ref then
-          match t.data with
-          | Int | Float | Bool | LongInt -> self#write_instruction0 REFREF
-          | String | Array _ | Struct _ -> self#write_instruction0 REF
-          | _ -> ()
-        else
-          match t.data with
-          | String | Array _ | Struct _ | Delegate _ ->
-              self#write_instruction0 REF
-          | _ -> ()
+        match t with
+        | Ref (Int | Float | Bool | LongInt) -> self#write_instruction0 REFREF
+        | Ref (String | Array _ | Struct _) -> self#write_instruction0 REF
+        | String | Array _ | Struct _ | Delegate _ ->
+            self#write_instruction0 REF
+        | _ -> ()
       in
       match e.node with
       | Ident (_, LocalVariable i) -> (
           match self#get_local i with
-          | { value_type = { data = String | Array _ | Struct _; _ }; _ } ->
+          | {
+           value_type =
+             String | Array _ | Struct _ | Ref (String | Array _ | Struct _);
+           _;
+          } ->
               self#write_instruction1 SH_LOCALREF i
           | v ->
               self#compile_local_ref v.index;
               compile_lvalue_after v.value_type)
       | Ident (_, GlobalVariable i) -> (
           match Ain.get_global_by_index ctx.ain i with
-          | { value_type = { data = String | Array _ | Struct _; _ }; _ } ->
+          | {
+           value_type =
+             String | Array _ | Struct _ | Ref (String | Array _ | Struct _);
+           _;
+          } ->
               self#write_instruction1 SH_GLOBALREF i
           | v ->
               self#compile_global_ref v.index;
@@ -425,11 +429,11 @@ class jaf_compiler ctx =
       | None -> compiler_bug "missing argument" None
       | Some expr -> (
           match t with
-          | { data = Method; _ } ->
+          | Ref _ -> self#compile_lvalue expr
+          | Method ->
               (* XXX: for delegate builtins *)
               self#compile_expression expr
-          | { data = _; is_ref = true } -> self#compile_lvalue expr
-          | { data = Delegate _; _ } ->
+          | Delegate _ ->
               self#compile_expression expr;
               self#write_instruction0 DG_NEW_FROM_METHOD
           | _ -> self#compile_expression expr)
@@ -472,8 +476,7 @@ class jaf_compiler ctx =
           self#write_instruction1 S_PUSH no
       | Ident (_, LocalVariable i) -> (
           match (self#get_local i).value_type with
-          | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
-            ->
+          | Int | Float | Bool | LongInt | FuncType _ ->
               self#write_instruction1 SH_LOCALREF i
           | t ->
               self#write_instruction0 PUSHLOCALPAGE;
@@ -486,8 +489,7 @@ class jaf_compiler ctx =
       | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (
           match (Ain.get_global_by_index ctx.ain i).value_type with
-          | { data = Int | Float | Bool | LongInt | FuncType _; is_ref = false }
-            ->
+          | Int | Float | Bool | LongInt | FuncType _ ->
               self#write_instruction1 SH_GLOBALREF i
           | t ->
               self#write_instruction0 PUSHGLOBALPAGE;
@@ -616,7 +618,7 @@ class jaf_compiler ctx =
           | String, LTE -> self#write_instruction0 S_LTE
           | String, GTE -> self#write_instruction0 S_GTE
           | String, Modulo ->
-              let int_of_t (t : Ain.Type.data) =
+              let int_of_t (t : Ain.Type.t) =
                 match t with
                 | Int -> 2
                 | Float -> 3
@@ -627,8 +629,7 @@ class jaf_compiler ctx =
                     compiler_bug "invalid type for string formatting"
                       (Some (ASTExpression expr))
               in
-              self#write_instruction1 S_MOD
-                (int_of_t (jaf_to_ain_type b.ty).data)
+              self#write_instruction1 S_MOD (int_of_t (jaf_to_ain_type b.ty))
           | ( String,
               ( Minus | Times | Divide | BitOr | BitXor | BitAnd | LShift
               | RShift | LogOr | LogAnd ) ) ->
@@ -948,12 +949,12 @@ class jaf_compiler ctx =
           ( EqAssign,
             { node = Ident (_, LocalVariable i); _ },
             { node = ConstInt n; _ } )
-        when not (self#get_local i).value_type.is_ref ->
+        when not (Ain.Type.is_ref (self#get_local i).value_type) ->
           self#write_instruction2 SH_LOCALASSIGN i n
       | Unary
           ( ((PreInc | PostInc | PreDec | PostDec) as op),
             { node = Ident (_, LocalVariable i); _ } )
-        when (not (self#get_local i).value_type.is_ref)
+        when (not (Ain.Type.is_ref (self#get_local i).value_type))
              && Poly.(expr.ty <> LongInt) ->
           self#write_instruction1
             (match op with PreInc | PostInc -> SH_LOCALINC | _ -> SH_LOCALDEC)
@@ -1083,16 +1084,15 @@ class jaf_compiler ctx =
       | Return None -> self#write_instruction0 RETURN
       | Return (Some e) ->
           (match (Option.value_exn current_function).return_type with
-          | { is_ref = true; data = Int | Float | Bool | LongInt | FuncType _ }
-            ->
+          | Ref (Int | Float | Bool | LongInt | FuncType _) ->
               self#compile_lvalue e;
               self#write_instruction0 DUP_U2;
               self#write_instruction0 SP_INC
-          | { is_ref = true; data = String | Struct _ | Array _ } ->
+          | Ref (String | Struct _ | Array _) ->
               self#compile_lvalue e;
               self#write_instruction0 DUP;
               self#write_instruction0 SP_INC
-          | { is_ref = true; _ } ->
+          | Ref _ ->
               compile_error "return statement not implemented for ref type"
                 (ASTStatement stmt)
           | _ -> self#compile_expression e);
@@ -1161,97 +1161,96 @@ class jaf_compiler ctx =
       else
         let v = self#get_local (Option.value_exn decl.index) in
         self#scope_add_var v;
-        if v.value_type.is_ref then
-          let lhs =
-            {
-              node = Ident (decl.name, LocalVariable v.index);
-              ty = decl.type_spec.ty;
-              loc = decl.location;
-            }
-          and rhs =
+        match v.value_type with
+        | Ref _ ->
+            let lhs =
+              {
+                node = Ident (decl.name, LocalVariable v.index);
+                ty = decl.type_spec.ty;
+                loc = decl.location;
+              }
+            and rhs =
+              match decl.initval with
+              | Some e -> e
+              | None -> make_expr ~ty:decl.type_spec.ty Null
+            in
+            self#compile_statement
+              {
+                node = RefAssign (lhs, rhs);
+                delete_vars = [];
+                loc = decl.location;
+              }
+        | Int | Bool | LongInt | Float | FuncType _ | String ->
+            let lhs =
+              {
+                node = Ident (decl.name, LocalVariable v.index);
+                ty = decl.type_spec.ty;
+                loc = decl.location;
+              }
+            in
+            let rhs =
+              match decl.initval with
+              | Some e -> e
+              | None ->
+                  let value =
+                    match v.value_type with
+                    | Int | Bool | LongInt -> ConstInt 0
+                    | Float -> ConstFloat 0.0
+                    | FuncType _ | String -> Null
+                    | _ -> failwith "unreachable"
+                  in
+                  make_expr ~ty:decl.type_spec.ty value
+            in
+            self#compile_expr_and_pop
+              {
+                node = Assign (EqAssign, lhs, rhs);
+                ty = rhs.ty;
+                loc = decl.location;
+              }
+        | Struct sno -> (
+            (* FIXME: use verbose versions *)
+            self#write_instruction1 SH_LOCALDELETE v.index;
+            self#write_instruction2 SH_LOCALCREATE v.index sno;
             match decl.initval with
-            | Some e -> e
-            | None -> make_expr ~ty:decl.type_spec.ty Null
-          in
-          self#compile_statement
-            {
-              node = RefAssign (lhs, rhs);
-              delete_vars = [];
-              loc = decl.location;
-            }
-        else
-          match v.value_type.data with
-          | Int | Bool | LongInt | Float | FuncType _ | String ->
-              let lhs =
-                {
-                  node = Ident (decl.name, LocalVariable v.index);
-                  ty = decl.type_spec.ty;
-                  loc = decl.location;
-                }
-              in
-              let rhs =
-                match decl.initval with
-                | Some e -> e
-                | None ->
-                    let value =
-                      match v.value_type.data with
-                      | Int | Bool | LongInt -> ConstInt 0
-                      | Float -> ConstFloat 0.0
-                      | FuncType _ | String -> Null
-                      | _ -> failwith "unreachable"
-                    in
-                    make_expr ~ty:decl.type_spec.ty value
-              in
-              self#compile_expr_and_pop
-                {
-                  node = Assign (EqAssign, lhs, rhs);
-                  ty = rhs.ty;
-                  loc = decl.location;
-                }
-          | Struct sno -> (
-              (* FIXME: use verbose versions *)
-              self#write_instruction1 SH_LOCALDELETE v.index;
-              self#write_instruction2 SH_LOCALCREATE v.index sno;
-              match decl.initval with
-              | Some e ->
-                  self#compile_lvalue
-                    {
-                      node = Ident (decl.name, LocalVariable v.index);
-                      ty = decl.type_spec.ty;
-                      loc = decl.location;
-                    };
-                  self#compile_expression e;
-                  self#write_instruction1 PUSH sno;
-                  self#write_instruction0 SR_ASSIGN;
-                  self#compile_pop decl.type_spec.ty (ASTVariable decl)
-              | None -> ())
-          | Array _ ->
-              let has_dims = List.length decl.array_dim > 0 in
-              self#compile_local_ref v.index;
-              if has_dims then (
-                List.iter decl.array_dim ~f:self#compile_expression;
-                self#write_instruction1 PUSH (List.length decl.array_dim);
-                self#write_instruction0 A_ALLOC)
-              else self#write_instruction0 A_FREE
-          | Delegate dg_i -> (
-              self#compile_local_ref v.index;
-              self#write_instruction0 REF;
-              match decl.initval with
-              | Some ({ ty = String; _ } as e) ->
-                  self#compile_expression e;
-                  self#write_instruction1 PUSH (-1);
-                  self#write_instruction0 SWAP;
-                  self#write_instruction1 PUSH dg_i;
-                  self#write_instruction0 DG_STR_TO_METHOD;
-                  self#write_instruction0 DG_SET
-              | Some e ->
-                  self#compile_expression e;
-                  self#write_instruction0 DG_SET
-              | None -> self#write_instruction0 DG_CLEAR)
-          | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
-          | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-          | IFaceWrap _ | Function | Method | NullType ->
-              compile_error "Unimplemented variable type" (ASTVariable decl)
+            | Some e ->
+                self#compile_lvalue
+                  {
+                    node = Ident (decl.name, LocalVariable v.index);
+                    ty = decl.type_spec.ty;
+                    loc = decl.location;
+                  };
+                self#compile_expression e;
+                self#write_instruction1 PUSH sno;
+                self#write_instruction0 SR_ASSIGN;
+                self#compile_pop decl.type_spec.ty (ASTVariable decl)
+            | None -> ())
+        | Array _ ->
+            let has_dims = List.length decl.array_dim > 0 in
+            self#compile_local_ref v.index;
+            if has_dims then (
+              List.iter decl.array_dim ~f:self#compile_expression;
+              self#write_instruction1 PUSH (List.length decl.array_dim);
+              self#write_instruction0 A_ALLOC)
+            else self#write_instruction0 A_FREE
+        | Delegate dg_i -> (
+            self#compile_local_ref v.index;
+            self#write_instruction0 REF;
+            match decl.initval with
+            | Some ({ ty = String; _ } as e) ->
+                self#compile_expression e;
+                self#write_instruction1 PUSH (-1);
+                self#write_instruction0 SWAP;
+                self#write_instruction1 PUSH dg_i;
+                self#write_instruction0 DG_STR_TO_METHOD;
+                self#write_instruction0 DG_SET
+            | Some e ->
+                self#compile_expression e;
+                self#write_instruction0 DG_SET
+            | None -> self#write_instruction0 DG_CLEAR)
+        | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
+        | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
+        | IFaceWrap _ | Function | Method | NullType ->
+            compile_error "Unimplemented variable type" (ASTVariable decl)
 
     (** Emit the code for a block of statements. *)
     method compile_block (stmts : statement list) =
@@ -1261,24 +1260,17 @@ class jaf_compiler ctx =
 
     (** Emit the code for a default return value. *)
     method compile_default_return (t : Ain.Type.t) decl =
-      if t.is_ref then
-        match t.data with
-        | String | Struct _ | Array _ -> self#write_instruction1 PUSH (-1)
-        | Int | Float | Bool | LongInt ->
-            self#write_instruction1 PUSH (-1);
-            self#write_instruction1 PUSH 0
-        | _ ->
-            compile_error "default return value not implemented for ref type"
-              decl
-      else
-        match t.data with
-        | Void -> ()
-        | Int | Bool | LongInt | FuncType _ -> self#write_instruction1 PUSH 0
-        | Float -> self#write_instruction1 F_PUSH 0
-        | String -> self#write_instruction1 S_PUSH 0
-        | Struct _ | Array _ | Delegate _ -> self#write_instruction1 PUSH (-1)
-        | _ ->
-            compile_error "default return value not implemented for type" decl
+      match t with
+      | Ref (String | Struct _ | Array _) -> self#write_instruction1 PUSH (-1)
+      | Ref (Int | Float | Bool | LongInt) ->
+          self#write_instruction1 PUSH (-1);
+          self#write_instruction1 PUSH 0
+      | Void -> ()
+      | Int | Bool | LongInt | FuncType _ -> self#write_instruction1 PUSH 0
+      | Float -> self#write_instruction1 F_PUSH 0
+      | String -> self#write_instruction1 S_PUSH 0
+      | Struct _ | Array _ | Delegate _ -> self#write_instruction1 PUSH (-1)
+      | _ -> compile_error "default return value not implemented for type" decl
 
     (** Emit the code for a function. *)
     method compile_function (decl : fundecl) =

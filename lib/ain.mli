@@ -6,7 +6,7 @@ val version_gte : t -> int * int -> bool
 val version_lt : t -> int * int -> bool
 
 module Type : sig
-  type data =
+  type t =
     | Void
     | Int
     | Float
@@ -20,6 +20,7 @@ module Type : sig
     | HLLFunc2
     | HLLParam
     | Array of t
+    | Ref of t
     | Wrap of t
     | Option of t
     | Unknown87 of t
@@ -33,12 +34,9 @@ module Type : sig
     | Method
     | NullType
 
-  and t = { data : data; is_ref : bool }
-
-  val data_to_string : data -> string
   val to_string : t -> string
   val int_of_data_type : int -> t -> int
-  val make : ?is_ref:bool -> data -> t
+  val is_ref : t -> bool
 end
 
 module Variable : sig

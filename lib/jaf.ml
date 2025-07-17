@@ -837,11 +837,10 @@ let ast_to_string = function
   | ASTStructDecl d -> sdecl_to_string d
   | ASTType t -> jaf_type_to_string t.ty
 
-let rec jaf_to_ain_data_type = function
+let rec jaf_to_ain_type = function
   | Untyped -> failwith "tried to convert Untyped to ain data type"
   | Unresolved s ->
       failwith ("tried to convert Unresolved to ain data type: " ^ s)
-  | Ref _ -> failwith "tried to convert Ref to ain data type"
   | Void -> Ain.Type.Void
   | Int -> Ain.Type.Int
   | LongInt -> Ain.Type.LongInt
@@ -849,8 +848,9 @@ let rec jaf_to_ain_data_type = function
   | Float -> Ain.Type.Float
   | String -> Ain.Type.String
   | Struct (_, i) -> Ain.Type.Struct i
-  | Array t -> Ain.Type.Array (Ain.Type.make (jaf_to_ain_data_type t))
-  | Wrap t -> Ain.Type.Wrap (Ain.Type.make (jaf_to_ain_data_type t))
+  | Array t -> Ain.Type.Array (jaf_to_ain_type t)
+  | Ref t -> Ain.Type.Ref (jaf_to_ain_type t)
+  | Wrap t -> Ain.Type.Wrap (jaf_to_ain_type t)
   | HLLParam -> Ain.Type.HLLParam
   | HLLFunc -> Ain.Type.HLLFunc
   | Delegate (Some (_, i)) -> Ain.Type.Delegate i
@@ -864,11 +864,7 @@ let rec jaf_to_ain_data_type = function
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
   | TypeUnion _ -> failwith "tried to convert TypeUnion to ain data type"
 
-and jaf_to_ain_type = function
-  | Ref t -> Ain.Type.make ~is_ref:true (jaf_to_ain_data_type t)
-  | t -> Ain.Type.make (jaf_to_ain_data_type t)
-
-let rec data_type_to_jaf_type = function
+let rec ain_to_jaf_type = function
   | Ain.Type.Void -> Void
   | Int -> Int
   | LongInt -> LongInt
@@ -877,6 +873,7 @@ let rec data_type_to_jaf_type = function
   | String -> String
   | Struct i -> Struct ("", i)
   | Array t -> Array (ain_to_jaf_type t)
+  | Ref t -> Ref (ain_to_jaf_type t)
   | Wrap t -> Wrap (ain_to_jaf_type t)
   | HLLParam -> HLLParam
   | HLLFunc -> HLLFunc
@@ -884,13 +881,7 @@ let rec data_type_to_jaf_type = function
   | FuncType i -> FuncType (Some ("", i))
   | IMainSystem -> IMainSystem
   | t ->
-      Printf.failwithf "cannot convert %s to jaf type"
-        (Ain.Type.data_to_string t)
-        ()
-
-and ain_to_jaf_type t =
-  if t.is_ref then Ref (data_type_to_jaf_type t.data)
-  else data_type_to_jaf_type t.data
+      Printf.failwithf "cannot convert %s to jaf type" (Ain.Type.to_string t) ()
 
 let jaf_to_ain_variables j_p =
   let rec convert_params (params : variable list) (result : Ain.Variable.t list)
@@ -902,9 +893,7 @@ let jaf_to_ain_variables j_p =
           Ain.Variable.make ~index x.name (jaf_to_ain_type x.type_spec.ty)
         in
         if is_ref_scalar x.type_spec.ty then
-          let void =
-            Ain.Variable.make ~index:(index + 1) "<void>" (Ain.Type.make Void)
-          in
+          let void = Ain.Variable.make ~index:(index + 1) "<void>" Void in
           convert_params xs (void :: var :: result) (index + 2)
         else convert_params xs (var :: result) (index + 1)
   in
