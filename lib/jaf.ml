@@ -319,12 +319,13 @@ let ast_node_pos = function
 
 type jaf_struct = {
   name : string;
+  loc : location;
   index : int;
   members : (string, variable) Hashtbl.t;
 }
 
-let new_jaf_struct name index =
-  { name; index; members = Hashtbl.create (module String) }
+let new_jaf_struct name loc index =
+  { name; loc; index; members = Hashtbl.create (module String) }
 
 type library = { hll_name : string; functions : (string, fundecl) Hashtbl.t }
 

@@ -96,7 +96,7 @@ class type_declare_visitor ctx =
           | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
       | StructDef s -> (
           let ain_s = Ain.add_struct ctx.ain s.name in
-          let jaf_s = new_jaf_struct s.name ain_s.index in
+          let jaf_s = new_jaf_struct s.name s.loc ain_s.index in
           let next_index = ref 0 in
           let in_private = ref s.is_class in
           let visit_decl = function
