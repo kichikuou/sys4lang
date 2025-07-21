@@ -1612,6 +1612,7 @@ let function_iter ?(from = 0) ~f ain = array_iter ~from ain.functions ~f
 let struct_iter ?(from = 0) ~f ain = array_iter ~from ain.structures ~f
 let functype_iter ?(from = 0) ~f ain = array_iter ~from ain.function_types ~f
 let delegate_iter ?(from = 0) ~f ain = array_iter ~from ain.delegates ~f
+let library_iter ?(from = 0) ~f ain = array_iter ~from ain.libraries ~f
 
 exception File_error
 exception Unrecognized_format

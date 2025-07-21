@@ -206,6 +206,7 @@ val function_iter : ?from:int -> f:(Function.t -> unit) -> t -> unit
 val struct_iter : ?from:int -> f:(Struct.t -> unit) -> t -> unit
 val functype_iter : ?from:int -> f:(FunctionType.t -> unit) -> t -> unit
 val delegate_iter : ?from:int -> f:(FunctionType.t -> unit) -> t -> unit
+val library_iter : ?from:int -> f:(Library.t -> unit) -> t -> unit
 
 exception File_error
 exception Unrecognized_format
