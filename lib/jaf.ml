@@ -109,7 +109,13 @@ let is_ref_scalar = function
   | Ref (Int | Bool | Float | LongInt | FuncType _) -> true
   | _ -> false
 
-let rec array_rank = function Array t -> 1 + array_rank t | _ -> 0
+let rec array_base_and_rank = function
+  | Array t ->
+      let b, r = array_base_and_rank t in
+      (b, r + 1)
+  | b -> (b, 0)
+
+let array_rank t = snd (array_base_and_rank t)
 
 type type_specifier = { mutable ty : jaf_type; location : location }
 
@@ -643,7 +649,10 @@ let rec jaf_type_to_string = function
   | FuncType None -> "unknown_functype"
   | Delegate None -> "unknown_functype"
   | Ref t -> "ref " ^ jaf_type_to_string t
-  | Array t -> "array<" ^ jaf_type_to_string t ^ ">" (* TODO: rank *)
+  | Array _ as a -> (
+      match array_base_and_rank a with
+      | t, 1 -> "array@" ^ jaf_type_to_string t
+      | t, rank -> sprintf "array@%s@%d" (jaf_type_to_string t) rank)
   | Wrap t -> "wrap<" ^ jaf_type_to_string t ^ ">"
   | HLLParam -> "hll_param"
   | HLLFunc -> "hll_func"
