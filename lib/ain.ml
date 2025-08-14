@@ -483,6 +483,7 @@ let create major_version minor_version =
 
 let from_pje (pje : Pje.t) =
   let ain = create pje.ain_version 0 in
+  ain.keyc <- pje.key_code;
   ain.is_ain2 <- pje.is_ai2_file;
   ain
 
