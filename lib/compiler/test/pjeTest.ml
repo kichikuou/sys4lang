@@ -14,8 +14,9 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+open Common
 open Base
-open Sys4cLib
+open Compiler
 
 let unix_path = String.map ~f:(function '\\' -> '/' | c -> c)
 

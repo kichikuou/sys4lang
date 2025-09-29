@@ -14,8 +14,9 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+open Common
 open Base
-open Sys4cLib
+open Compiler
 
 let sprintf = Printf.sprintf
 
@@ -65,7 +66,7 @@ let compile_test input =
   let ctx = Jaf.context_from_ain (Ain.create 4 0) in
   let debug_info = DebugInfo.create () in
   try
-    Compiler.compile ctx [ Pje.Jaf "test.jaf" ] debug_info (fun _ -> input);
+    Compile.compile ctx [ Pje.Jaf "test.jaf" ] debug_info (fun _ -> input);
     print_disassemble ctx.ain
   with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> Some input)

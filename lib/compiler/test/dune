@@ -1,6 +1,6 @@
 (library
- (name Sys4cTest)
- (libraries Sys4cLib)
+ (name compiler_test)
+ (libraries compiler)
  (inline_tests)
  (preprocess
   (pps ppx_expect)))

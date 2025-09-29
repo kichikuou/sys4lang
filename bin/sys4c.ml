@@ -14,8 +14,9 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+open Common
 open Base
-open Sys4cLib
+open Compiler
 open Cmdliner
 
 let read_text_file input_encoding file =
@@ -67,7 +68,7 @@ let do_compile sources output major minor import_as input_encoding =
         source
       in
       let debug_info = DebugInfo.create () in
-      Compiler.compile ctx sources debug_info read_file;
+      Compile.compile ctx sources debug_info read_file;
       Ain.write_file ctx.ain output)
     (fun file -> Hashtbl.find files file)
 
@@ -92,7 +93,7 @@ let do_build pje_file input_encoding =
       in
       let sources = Pje.collect_sources pje in
       let debug_info = DebugInfo.create () in
-      Compiler.compile ctx sources debug_info read_file;
+      Compile.compile ctx sources debug_info read_file;
       Ain.write_file ctx.ain (Pje.ain_path pje);
       DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
     (fun file -> Hashtbl.find files file)

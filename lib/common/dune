@@ -1,0 +1,8 @@
+(library
+ (name common)
+ (libraries base stdio camlzip vector))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))

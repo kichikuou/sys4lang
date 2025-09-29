@@ -1,0 +1,8 @@
+(library
+ (name compiler)
+ (libraries common base stdio yojson))
+
+(ocamllex pjeLexer)
+
+(menhir
+ (modules pjeParser))
