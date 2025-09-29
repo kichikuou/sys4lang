@@ -754,7 +754,7 @@ and var_to_string' d =
     | None -> ""
     | Some e -> sprintf " = %s" (expr_to_string e)
   in
-  sprintf "%s%s%s" dims d.name init
+  sprintf "%s %s%s%s" (jaf_type_to_string d.type_spec.ty) dims d.name init
 
 and var_to_string d =
   let t = jaf_type_to_string d.type_spec.ty in
@@ -874,21 +874,24 @@ let rec jaf_to_ain_type = function
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
   | TypeUnion _ -> failwith "tried to convert TypeUnion to ain data type"
 
-let rec ain_to_jaf_type = function
+let rec ain_to_jaf_type ain = function
   | Ain.Type.Void -> Void
   | Int -> Int
   | LongInt -> LongInt
   | Bool -> Bool
   | Float -> Float
   | String -> String
-  | Struct i -> Struct ("", i)
-  | Array t -> Array (ain_to_jaf_type t)
-  | Ref t -> Ref (ain_to_jaf_type t)
-  | Wrap t -> Wrap (ain_to_jaf_type t)
+  | Struct -1 -> Struct ("struct", -1)
+  | Struct i -> Struct ((Ain.get_struct_by_index ain i).name, i)
+  | Array t -> Array (ain_to_jaf_type ain t)
+  | Ref t -> Ref (ain_to_jaf_type ain t)
+  | Wrap t -> Wrap (ain_to_jaf_type ain t)
   | HLLParam -> HLLParam
   | HLLFunc -> HLLFunc
-  | Delegate i -> Delegate (Some ("", i))
-  | FuncType i -> FuncType (Some ("", i))
+  | Delegate -1 -> Delegate None
+  | Delegate i -> Delegate (Some ((Ain.get_delegate_by_index ain i).name, i))
+  | FuncType -1 -> FuncType None
+  | FuncType i -> FuncType (Some ((Ain.get_functype_by_index ain i).name, i))
   | IMainSystem -> IMainSystem
   | t ->
       Printf.failwithf "cannot convert %s to jaf type" (Ain.Type.to_string t) ()
