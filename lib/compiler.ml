@@ -68,7 +68,7 @@ let type_resolve_pass ctx program =
 let type_check_pass ctx program =
   List.iter program ~f:(function
     | Jaf (_, jaf) ->
-        TypeAnalysis.check_types ctx jaf;
+        TypeAnalysis.check_types_exn ctx jaf;
         ConstEval.evaluate_constant_expressions ctx jaf;
         VariableAlloc.allocate_variables ctx jaf
     | Hll _ -> ())

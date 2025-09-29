@@ -302,7 +302,7 @@ class jaf_compiler ctx =
 
     method compile_identifier_ref id_type =
       match id_type with
-      | LocalVariable i -> self#compile_local_ref (self#get_local i).index
+      | LocalVariable (i, _) -> self#compile_local_ref (self#get_local i).index
       | GlobalVariable i ->
           self#compile_global_ref (Ain.get_global_by_index ctx.ain i).index
       | _ -> compiler_bug "Invalid identifier type" None
@@ -339,7 +339,7 @@ class jaf_compiler ctx =
         | _ -> ()
       in
       match e.node with
-      | Ident (_, LocalVariable i) -> (
+      | Ident (_, LocalVariable (i, _)) -> (
           match self#get_local i with
           | {
            value_type =
@@ -474,7 +474,7 @@ class jaf_compiler ctx =
       | ConstString s ->
           let no = Ain.add_string ctx.ain s in
           self#write_instruction1 S_PUSH no
-      | Ident (_, LocalVariable i) -> (
+      | Ident (_, LocalVariable (i, _)) -> (
           match (self#get_local i).value_type with
           | Int | Float | Bool | LongInt | FuncType _ ->
               self#write_instruction1 SH_LOCALREF i
@@ -947,13 +947,13 @@ class jaf_compiler ctx =
       match expr.node with
       | Assign
           ( EqAssign,
-            { node = Ident (_, LocalVariable i); _ },
+            { node = Ident (_, LocalVariable (i, _)); _ },
             { node = ConstInt n; _ } )
         when not (Ain.Type.is_ref (self#get_local i).value_type) ->
           self#write_instruction2 SH_LOCALASSIGN i n
       | Unary
           ( ((PreInc | PostInc | PreDec | PostDec) as op),
-            { node = Ident (_, LocalVariable i); _ } )
+            { node = Ident (_, LocalVariable (i, _)); _ } )
         when (not (Ain.Type.is_ref (self#get_local i).value_type))
              && Poly.(expr.ty <> LongInt) ->
           self#write_instruction1
@@ -1165,7 +1165,7 @@ class jaf_compiler ctx =
         | Ref _ ->
             let lhs =
               {
-                node = Ident (decl.name, LocalVariable v.index);
+                node = Ident (decl.name, LocalVariable (v.index, decl.location));
                 ty = decl.type_spec.ty;
                 loc = decl.location;
               }
@@ -1183,7 +1183,7 @@ class jaf_compiler ctx =
         | Int | Bool | LongInt | Float | FuncType _ | String ->
             let lhs =
               {
-                node = Ident (decl.name, LocalVariable v.index);
+                node = Ident (decl.name, LocalVariable (v.index, decl.location));
                 ty = decl.type_spec.ty;
                 loc = decl.location;
               }
@@ -1215,7 +1215,8 @@ class jaf_compiler ctx =
             | Some e ->
                 self#compile_lvalue
                   {
-                    node = Ident (decl.name, LocalVariable v.index);
+                    node =
+                      Ident (decl.name, LocalVariable (v.index, decl.location));
                     ty = decl.type_spec.ty;
                     loc = decl.location;
                   };

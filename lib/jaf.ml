@@ -121,7 +121,7 @@ type type_specifier = { mutable ty : jaf_type; location : location }
 
 type ident_type =
   | UnresolvedIdent
-  | LocalVariable of int
+  | LocalVariable of int * location
   | GlobalVariable of int
   | GlobalConstant
   | FunctionName of string

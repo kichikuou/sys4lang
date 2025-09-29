@@ -180,8 +180,9 @@ class variable_alloc_visitor ctx =
       | Ident (name, t) -> (
           (* save local variable number at identifier nodes *)
           match t with
-          | LocalVariable _ ->
-              expr.node <- Ident (name, LocalVariable (self#get_var_no name))
+          | LocalVariable (_, loc) ->
+              expr.node <-
+                Ident (name, LocalVariable (self#get_var_no name, loc))
           | _ -> ())
       | Call (_, _, calltype) -> (
           match expr.ty with
