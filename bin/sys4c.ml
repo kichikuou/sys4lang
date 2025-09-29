@@ -58,11 +58,18 @@ let do_compile sources output major minor import_as input_encoding =
         else Pje.Jaf f)
   in
   let ctx = Jaf.context_from_ain (Ain.create major minor) in
+  let files = Hashtbl.create (module String) in
   handle_errors
     (fun () ->
-      Compiler.compile ctx sources (read_text_file input_encoding);
+      let read_file file =
+        let source = read_text_file input_encoding file in
+        Hashtbl.add_exn files ~key:file ~data:source;
+        source
+      in
+      let debug_info = DebugInfo.create () in
+      Compiler.compile ctx sources debug_info read_file;
       Ain.write_file ctx.ain output)
-    (fun file -> Hashtbl.find ctx.files file)
+    (fun file -> Hashtbl.find files file)
 
 let do_build pje_file input_encoding =
   let pje =
@@ -71,6 +78,7 @@ let do_build pje_file input_encoding =
       (fun _ -> None)
   in
   let ctx = Jaf.context_from_ain (Pje.create_ain pje) in
+  let files = Hashtbl.create (module String) in
   handle_errors
     (fun () ->
       let source_dir =
@@ -78,13 +86,16 @@ let do_build pje_file input_encoding =
       in
       let read_file file =
         let file = Stdlib.Filename.(concat source_dir file) in
-        read_text_file input_encoding file
+        let source = read_text_file input_encoding file in
+        Hashtbl.add_exn files ~key:file ~data:source;
+        source
       in
       let sources = Pje.collect_sources pje in
-      Compiler.compile ctx sources read_file;
+      let debug_info = DebugInfo.create () in
+      Compiler.compile ctx sources debug_info read_file;
       Ain.write_file ctx.ain (Pje.ain_path pje);
-      DebugInfo.write_to_file ctx.debug_info (Pje.debug_info_path pje))
-    (fun file -> Hashtbl.find ctx.files file)
+      DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
+    (fun file -> Hashtbl.find files file)
 
 let cmd_compile_jaf =
   let doc = "Compile .jaf files." in

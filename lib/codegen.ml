@@ -39,7 +39,7 @@ let incdec_instruction = function
   | (PreDec | PostDec), _ -> DEC
   | _ -> compiler_bug "invalid inc/dec expression" None
 
-class jaf_compiler ctx =
+class jaf_compiler ctx debug_info =
   object (self)
     (* The function currently being compiled. *)
     val mutable current_function : Ain.Function.t option = None
@@ -975,7 +975,7 @@ class jaf_compiler ctx =
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
         state of the stack is unchanged after executing a statement. *)
     method compile_statement (stmt : statement) =
-      DebugInfo.add_loc ctx.debug_info current_address stmt.loc;
+      DebugInfo.add_loc debug_info current_address stmt.loc;
       (* delete locals that will be out-of-scope after this statement *)
       List.iter (List.rev stmt.delete_vars) ~f:(fun i ->
           self#compile_delete_var (self#get_local i));
@@ -1326,4 +1326,5 @@ class jaf_compiler ctx =
       self#write_buffer
   end
 
-let compile ctx jaf_name decls = (new jaf_compiler ctx)#compile jaf_name decls
+let compile ctx jaf_name decls debug_info =
+  (new jaf_compiler ctx debug_info)#compile jaf_name decls

@@ -23,9 +23,8 @@ type source =
 
 type program = source list
 
-let parse_file ctx lexer parser file read_file =
+let parse_file lexer parser file read_file =
   let source = read_file file in
-  Hashtbl.add_exn ctx.files ~key:file ~data:source;
   let lexbuf = Lexing.from_string source in
   Lexing.set_filename lexbuf file;
   try parser lexer lexbuf with
@@ -34,19 +33,15 @@ let parse_file ctx lexer parser file read_file =
 
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
 let parse_pass ctx sources read_file =
-  List.filter_map sources ~f:(function
+  List.map sources ~f:(function
     | Pje.Jaf f ->
-        let jaf = parse_file ctx Lexer.token Parser.jaf f read_file in
+        let jaf = parse_file Lexer.token Parser.jaf f read_file in
         Declarations.register_type_declarations ctx jaf;
-        Some (Jaf (f, jaf))
+        Jaf (f, jaf)
     | Pje.Hll (f, import_name) ->
-        if Hashtbl.mem ctx.files f then (
-          Stdio.eprintf "Warning: %s is already defined\n" f;
-          None)
-        else
-          let hll = parse_file ctx Lexer.token Parser.hll f read_file in
-          let hll_name = Stdlib.Filename.(chop_extension (basename f)) in
-          Some (Hll (hll_name, import_name, hll))
+        let hll = parse_file Lexer.token Parser.hll f read_file in
+        let hll_name = Stdlib.Filename.(chop_extension (basename f)) in
+        Hll (hll_name, import_name, hll)
     | _ -> failwith "unreachable")
 
 (* pass 2: Resolve type specifiers *)
@@ -74,16 +69,16 @@ let type_check_pass ctx program =
     | Hll _ -> ())
 
 (* pass 4: Code generation *)
-let codegen_pass ctx program =
+let codegen_pass ctx program debug_info =
   List.iter program ~f:(function
     | Jaf (jaf_name, jaf) ->
         (* TODO: disable in release builds *)
         SanityCheck.check_invariants ctx jaf;
-        Codegen.compile ctx jaf_name jaf
+        Codegen.compile ctx jaf_name jaf debug_info
     | Hll _ -> ())
 
-let compile ctx sources read_file =
+let compile ctx sources debug_info read_file =
   let program = parse_pass ctx sources read_file in
   let program = type_resolve_pass ctx program in
   type_check_pass ctx program;
-  codegen_pass ctx program
+  codegen_pass ctx program debug_info

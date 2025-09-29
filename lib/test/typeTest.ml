@@ -18,8 +18,9 @@ open Sys4cLib
 
 let type_test input =
   let ctx = Jaf.context_from_ain (Ain.create 4 0) in
+  let debug_info = DebugInfo.create () in
   try
-    Compiler.compile ctx [ Pje.Jaf "-" ] (fun _ -> input);
+    Compiler.compile ctx [ Pje.Jaf "-" ] debug_info (fun _ -> input);
     Stdio.print_endline "ok"
   with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> Some input)
