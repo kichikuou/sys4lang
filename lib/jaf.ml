@@ -345,17 +345,6 @@ type context = {
   libraries : (string, library) Hashtbl.t;
 }
 
-let context_from_ain ain =
-  {
-    ain;
-    globals = Hashtbl.create (module String);
-    structs = Hashtbl.create (module String);
-    functions = Hashtbl.create (module String);
-    functypes = Hashtbl.create (module String);
-    delegates = Hashtbl.create (module String);
-    libraries = Hashtbl.create (module String);
-  }
-
 let find_hll_function ctx lib func =
   match Hashtbl.find ctx.libraries lib with
   | Some l -> Hashtbl.find l.functions func
@@ -964,3 +953,131 @@ let jaf_to_ain_hll_function j_f =
   let return_type = jaf_to_ain_type j_f.return.ty in
   let arguments = List.map j_f.params ~f:jaf_to_ain_hll_argument in
   Ain.Library.Function.create j_f.name return_type arguments
+
+let ain_to_jaf_variable ain kind (v : Ain.Variable.t) =
+  {
+    name = v.name;
+    location = dummy_location;
+    array_dim = [] (* FIXME *);
+    is_const = false;
+    is_private = false;
+    kind;
+    type_spec =
+      { ty = ain_to_jaf_type ain v.value_type; location = dummy_location };
+    initval = None;
+    index = Some v.index;
+  }
+
+let context_from_ain ?(constants : variable list = []) ain =
+  let ain_to_jaf_functype (f : Ain.FunctionType.t) =
+    {
+      name = f.name;
+      loc = dummy_location;
+      return =
+        { ty = ain_to_jaf_type ain f.return_type; location = dummy_location };
+      params =
+        List.map (Ain.FunctionType.logical_parameters f) ~f:(fun v ->
+            ain_to_jaf_variable ain Parameter v);
+      body = None;
+      is_label = false;
+      is_private = false;
+      index = Some f.index;
+      class_name = None;
+      class_index = None;
+    }
+  in
+  let globals = Hashtbl.create (module String) in
+  let structs = Hashtbl.create (module String) in
+  let functions = Hashtbl.create (module String) in
+  let functypes = Hashtbl.create (module String) in
+  let delegates = Hashtbl.create (module String) in
+  let libraries = Hashtbl.create (module String) in
+  List.iter constants ~f:(fun v -> Hashtbl.add_exn globals ~key:v.name ~data:v);
+  Ain.global_iter ain ~f:(fun g ->
+      Hashtbl.add_exn globals ~key:g.variable.name
+        ~data:(ain_to_jaf_variable ain GlobalVar g.variable));
+  Ain.struct_iter ain ~f:(fun s ->
+      let struc =
+        {
+          name = s.name;
+          loc = dummy_location;
+          index = s.index;
+          members = Hashtbl.create (module String);
+        }
+      in
+      List.iter s.members ~f:(fun v ->
+          Hashtbl.add_exn struc.members ~key:v.name
+            ~data:(ain_to_jaf_variable ain ClassVar v));
+      Hashtbl.add_exn structs ~key:s.name ~data:struc);
+  Ain.function_iter ain ~f:(fun (f : Ain.Function.t) ->
+      let class_name, class_index =
+        match String.lsplit2 f.name ~on:'@' with
+        | None -> (None, None)
+        | Some (left, _) -> (Some left, Ain.get_struct_index ain left)
+      in
+      let func =
+        {
+          name = f.name;
+          loc = dummy_location;
+          return =
+            {
+              ty = ain_to_jaf_type ain f.return_type;
+              location = dummy_location;
+            };
+          params =
+            List.map (Ain.Function.logical_parameters f) ~f:(fun v ->
+                ain_to_jaf_variable ain Parameter v);
+          body = None;
+          is_label = f.is_label;
+          is_private = false;
+          index = Some f.index;
+          class_name;
+          class_index;
+        }
+      in
+      Hashtbl.set functions ~key:f.name ~data:func);
+  Ain.functype_iter ain ~f:(fun (f : Ain.FunctionType.t) ->
+      Hashtbl.add_exn functypes ~key:f.name ~data:(ain_to_jaf_functype f));
+  Ain.delegate_iter ain ~f:(fun (f : Ain.FunctionType.t) ->
+      Hashtbl.add_exn delegates ~key:f.name ~data:(ain_to_jaf_functype f));
+  Ain.library_iter ain ~f:(fun (l : Ain.Library.t) ->
+      let functions = Hashtbl.create (module String) in
+      List.iter l.functions ~f:(fun (f : Ain.Library.Function.t) ->
+          let func =
+            {
+              name = f.name;
+              loc = dummy_location;
+              return =
+                {
+                  ty = ain_to_jaf_type ain f.return_type;
+                  location = dummy_location;
+                };
+              params =
+                List.map f.arguments ~f:(fun v ->
+                    {
+                      name = v.name;
+                      location = dummy_location;
+                      array_dim = [] (* FIXME *);
+                      is_const = false;
+                      is_private = false;
+                      kind = Parameter;
+                      type_spec =
+                        {
+                          ty = ain_to_jaf_type ain v.value_type;
+                          location = dummy_location;
+                        };
+                      initval = None;
+                      index = None;
+                    });
+              body = None;
+              is_label = false;
+              is_private = false;
+              index = Some f.index;
+              class_name = None;
+              class_index = None;
+            }
+          in
+          Hashtbl.set functions ~key:f.name ~data:func);
+      Hashtbl.add_exn libraries ~key:l.name
+        ~data:{ hll_name = l.name; functions });
+  { ain; globals; structs; functions; functypes; delegates; libraries }
