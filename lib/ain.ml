@@ -453,12 +453,12 @@ type t = {
   string_table : (string, int) Hashtbl.t;
 }
 
-let create major_version minor_version =
+let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
   {
-    is_ain2 = major_version >= 5;
+    is_ain2 = Option.value is_ain2 ~default:(major_version >= 5);
     major_version;
     minor_version;
-    keyc = 0l;
+    keyc;
     code = Bytes.of_string "";
     functions = [| Function.create ~index:0 "NULL" |];
     globals = [||];
@@ -480,12 +480,6 @@ let create major_version minor_version =
     use_msg1 = false;
     string_table = Hashtbl.create (module String);
   }
-
-let from_pje (pje : Pje.t) =
-  let ain = create pje.ain_version 0 in
-  ain.keyc <- pje.key_code;
-  ain.is_ain2 <- pje.is_ai2_file;
-  ain
 
 let version ain = ain.major_version
 let minor_version ain = ain.minor_version
@@ -527,9 +521,8 @@ let read_cstring buf =
       let cstr =
         Stdlib.Bytes.to_string (Stdlib.Bytes.sub buf.data buf.pos len)
       in
-      (* TODO: convert to UTF-8? *)
       buf.pos <- buf.pos + (len + 1);
-      cstr
+      Sjis.to_utf8 cstr
   | None -> failwith "unterminated string"
 
 let read_some_cstring buf = Some (read_cstring buf)

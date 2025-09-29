@@ -70,7 +70,7 @@ let do_build pje_file input_encoding =
       (fun () -> Project.load_pje (read_text_file input_encoding) pje_file)
       (fun _ -> None)
   in
-  let ctx = Jaf.context_from_ain (Ain.from_pje pje) in
+  let ctx = Jaf.context_from_ain (Pje.create_ain pje) in
   handle_errors
     (fun () ->
       let source_dir =
