@@ -1,0 +1,5 @@
+(library
+ (name system4_lsp)
+ (libraries common base str lsp ppx_yojson_conv_lib)
+ (lint
+  (pps ppx_yojson_conv)))
