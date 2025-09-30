@@ -43,3 +43,26 @@ jobs:
 
       - name: Unit tests
         run: opam exec -- dune runtest
+
+      - name: Copy the build artifact
+        shell: bash
+        env:
+          SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
+        run: |
+          mkdir -p dist/sys4lang
+          cp _build/default/bin/*.exe dist/sys4lang/
+          cp README.md COPYING dist/sys4lang/
+
+      - name: Copy DLLs
+        shell: bash
+        if: matrix.os == 'windows-latest'
+        env:
+          SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
+        run: |
+          cp "${CYGWIN_ROOT}/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib1.dll" dist/sys4lang/
+
+      - name: Upload the build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sys4lang-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          path: dist
