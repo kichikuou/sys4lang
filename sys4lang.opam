@@ -10,9 +10,9 @@ programming language.
 maintainer: ["kichikuou <KichikuouChrome@gmail.com>"]
 authors: ["kichikuou <KichikuouChrome@gmail.com>"]
 license: "GPL-2.0-or-later"
-homepage: "https://github.com/kichikuou/sys4c"
-doc: "https://github.com/kichikuou/sys4c"
-bug-reports: "https://github.com/kichikuou/sys4c/issues"
+homepage: "https://github.com/kichikuou/sys4lang"
+doc: "https://github.com/kichikuou/sys4lang"
+bug-reports: "https://github.com/kichikuou/sys4lang/issues"
 depends: [
   "ocaml"
   "base"
@@ -44,4 +44,4 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/kichikuou/sys4c.git"
+dev-repo: "git+https://github.com/kichikuou/sys4lang.git"

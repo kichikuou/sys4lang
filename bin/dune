@@ -1,11 +1,11 @@
 (executable
  (name sys4c)
  (public_name sys4c)
- (package sys4c)
+ (package sys4lang)
  (libraries compiler base cmdliner))
 
 (executable
  (public_name system4-lsp)
  (name sys4lsp)
- (package sys4c)
+ (package sys4lang)
  (libraries system4_lsp linol-lwt dune-build-info))
