@@ -8,7 +8,7 @@ Games released between 2003 (Daibanchou) and 2015 (Rance 03) are currently suppo
 
 *   **sys4c (Compiler):** A compiler for System 4. This is primarily intended for building source files that were decompiled using `sys4dc`. Unlike AinDecompiler, it focuses on full builds and cannot modify only specific functions in an existing `.ain` file.
 
-*   **sys4dc (Decompiler):** A decompiler for AliceSoft's System4 game engine.
+*   **sys4dc (Decompiler):** A decompiler for System 4 `.ain` files.
 
 *   **sys4lsp (Language Server):** A language server for the System 4 programming language.
 

@@ -19,7 +19,7 @@
 
 (package
   (name sys4lang)
-  (synopsis "Compiler, decompiler and language server for the System 4 programming language")
+  (synopsis "System 4 language tool suite")
   (description "\| Compiler, decompiler and language server for AliceSoft's
                "\| System 4 programming language.
                )
