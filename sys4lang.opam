@@ -2,10 +2,10 @@
 opam-version: "2.0"
 version: "0.2.0"
 synopsis:
-  "Compiler and language server for the System 4 programming language"
+  "Compiler, decompiler and language server for the System 4 programming language"
 description: """
-A compiler and language server for AliceSoft's System 4
-programming language.
+Compiler, decompiler and language server for AliceSoft's
+System 4 programming language.
 """
 maintainer: ["kichikuou <KichikuouChrome@gmail.com>"]
 authors: ["kichikuou <KichikuouChrome@gmail.com>"]
@@ -25,9 +25,13 @@ depends: [
   "linol-lwt" {>= "0.8" & < "0.10"}
   "menhir"
   "yojson"
+  "ppx_deriving"
   "ppx_yojson_conv_lib"
   "ppx_expect" {with-test}
   "ocamlformat" {= "0.27.0"}
+  "ppx_compare"
+  "ppx_sexp_conv"
+  "sexplib"
   "odoc" {with-doc}
 ]
 build: [

@@ -1,0 +1,5 @@
+(library
+ (name decompiler)
+ (libraries base stdio doubly-linked camlzip yojson)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.enum)))

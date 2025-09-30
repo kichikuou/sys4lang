@@ -5,6 +5,12 @@
  (libraries compiler base cmdliner))
 
 (executable
+ (public_name sys4dc)
+ (name sys4dc)
+ (package sys4lang)
+ (libraries decompiler base cmdliner))
+
+(executable
  (public_name system4-lsp)
  (name sys4lsp)
  (package sys4lang)

@@ -19,9 +19,9 @@
 
 (package
   (name sys4lang)
-  (synopsis "Compiler and language server for the System 4 programming language")
-  (description "\| A compiler and language server for AliceSoft's System 4
-               "\| programming language.
+  (synopsis "Compiler, decompiler and language server for the System 4 programming language")
+  (description "\| Compiler, decompiler and language server for AliceSoft's
+               "\| System 4 programming language.
                )
   (depends
    ocaml
@@ -35,6 +35,11 @@
    (linol-lwt (and (>= "0.8") (< "0.10")))
    menhir
    yojson
+   ppx_deriving
    ppx_yojson_conv_lib
    (ppx_expect :with-test)
-   (ocamlformat (= 0.27.0))))
+   (ocamlformat (= 0.27.0))
+   ; doubly-linked dependencies
+   ppx_compare
+   ppx_sexp_conv
+   sexplib))
