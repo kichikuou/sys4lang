@@ -58,7 +58,7 @@ let genrand st =
       let y = y ^^^ (y >>> 18) in
       y)
 
-let decrypt (bytes : bytes) seed =
+let decrypt seed (bytes : bytes) =
   let st = init seed in
   let i = ref 0 in
   while !i < Bytes.length bytes do
@@ -68,3 +68,5 @@ let decrypt (bytes : bytes) seed =
     done;
     i := !i + n
   done
+
+let ain_decrypt_seed = 0x5D3E3l

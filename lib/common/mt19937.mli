@@ -14,4 +14,5 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-val decrypt : bytes -> int32 -> unit
+val decrypt : int32 -> bytes -> unit
+val ain_decrypt_seed : int32

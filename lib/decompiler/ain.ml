@@ -426,13 +426,11 @@ let readSections br =
     | tag -> failwith ("unknown tag " ^ tag)
   done
 
-let ain_decrypt_seed = 0x5D3E3l
-
 let decode bytes =
   match Stdlib.Bytes.sub_string bytes 0 4 with
   (* encrypted "VERS" *)
   | "\x7e\xf5\x02\xba" ->
-      Mt19937.decrypt bytes ain_decrypt_seed;
+      Common.Mt19937.(decrypt ain_decrypt_seed bytes);
       (bytes, false)
   (* compressed ain *)
   | "AI2\x00" ->
