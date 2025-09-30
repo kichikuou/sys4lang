@@ -92,11 +92,11 @@ let escape_dq =
   |> Staged.unstage
 
 let pr_char oc c =
-  if UtfSjis.is_sjis c then (
+  if Common.Sjis.is_valid c then (
     let buf = Buffer.create 2 in
     Buffer.add_char buf (Char.of_int_exn (c land 0xff));
     if c > 0xff then Buffer.add_char buf (Char.of_int_exn (c lsr 8));
-    fprintf oc "'%s'" (escape_sq (UtfSjis.sjis2utf (Buffer.contents buf))))
+    fprintf oc "'%s'" (escape_sq (Common.Sjis.to_utf8 (Buffer.contents buf))))
   else fprintf oc "%d" c
 
 let strip_class_name s =

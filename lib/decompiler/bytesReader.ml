@@ -62,7 +62,7 @@ let string br =
   br.pos <- br.pos + 1;
   s
 
-let sjis_string br = UtfSjis.sjis2utf (string br)
+let sjis_string br = Common.Sjis.to_utf8 (string br)
 
 let msg1_string br =
   let len = int br in
@@ -72,7 +72,7 @@ let msg1_string br =
     let c = Char.to_int (Bytes.get data i) in
     Bytes.set data i (Char.of_int_exn ((c - 0x60 - i) % 256))
   done;
-  UtfSjis.sjis2utf (Bytes.to_string data)
+  Common.Sjis.to_utf8 (Bytes.to_string data)
 
 let tag br =
   let tag = Stdlib.Bytes.sub_string br.buf br.pos 4 in
