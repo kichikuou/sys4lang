@@ -43,15 +43,14 @@ let decompile_function (f : CodeSection.function_t) =
 let inspect_function (f : CodeSection.function_t) ~print_addr =
   (BasicBlock.create f
   |> (fun bbs ->
-       Stdio.printf "BasicBlock representation:\n%s\n\n"
-         ([%show: BasicBlock.t list] bbs);
-       bbs)
+  Stdio.printf "BasicBlock representation:\n%s\n\n"
+    ([%show: BasicBlock.t list] bbs);
+  bbs)
   |> BasicBlock.generate_var_decls f.func
   |> ControlFlow.analyze
   |> (fun stmt ->
-       Stdio.printf "\nAST representation:\n%s\n"
-         ([%show: Ast.statement loc] stmt);
-       stmt)
+  Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
+  stmt)
   |> TypeAnalysis.analyze_function f.func f.struc
   |> Transform.rename_labels |> Transform.recover_loop_initializer
   |> Transform.remove_implicit_array_free
