@@ -139,14 +139,14 @@ let get_hover proj uri pos =
           make_hover loc (Jaf.jaf_type_to_string ty)
       | Jaf.ASTType { ty; location } :: _ -> (
           match jaf_base_type ty with
-          | Struct (_, i) ->
-              let s = Ain.get_struct_by_index proj.ctx.ain i in
+          | Struct (name, _) ->
+              let s = Hashtbl.find_exn proj.ctx.structs name in
               make_hover location ("class " ^ s.name)
-          | FuncType (Some (_, i)) ->
-              let ft = Ain.get_functype_by_index proj.ctx.ain i in
+          | FuncType (Some (name, _)) ->
+              let ft = Hashtbl.find_exn proj.ctx.functypes name in
               make_hover location ("functype " ^ ft.name)
-          | Delegate (Some (_, i)) ->
-              let dg = Ain.get_delegate_by_index proj.ctx.ain i in
+          | Delegate (Some (name, _)) ->
+              let dg = Hashtbl.find_exn proj.ctx.delegates name in
               make_hover location ("delegate " ^ dg.name)
           | _ -> None)
       | (Jaf.ASTStructDecl sdecl as decl) :: _ ->
