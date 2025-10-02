@@ -94,9 +94,10 @@ let collect_sources pje =
   in
   collect [] (pje.system_source @ pje.source) |> List.rev
 
-let ain_path pje =
+let ain_path ?output_dir_override pje =
   let open Stdlib.Filename in
-  concat (dirname pje.pje_path) (concat pje.output_dir pje.code_name)
+  let dir = Option.value output_dir_override ~default:(concat (dirname pje.pje_path) pje.output_dir) in
+  concat dir pje.code_name
 
 let debug_info_path pje =
   let open Stdlib.Filename in

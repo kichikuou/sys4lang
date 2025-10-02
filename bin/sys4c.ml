@@ -72,7 +72,7 @@ let do_compile sources output major minor import_as input_encoding =
       Ain.write_file ctx.ain output)
     (fun file -> Hashtbl.find files file)
 
-let do_build pje_file input_encoding =
+let do_build pje_file output_dir_override input_encoding =
   let pje =
     handle_errors
       (fun () -> Project.load_pje (read_text_file input_encoding) pje_file)
@@ -94,7 +94,7 @@ let do_build pje_file input_encoding =
       let sources = Pje.collect_sources pje in
       let debug_info = DebugInfo.create () in
       Compile.compile ctx sources debug_info read_file;
-      Ain.write_file ctx.ain (Pje.ain_path pje);
+      Ain.write_file ctx.ain (Pje.ain_path ?output_dir_override pje);
       DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
     (fun file -> Hashtbl.find files file)
 
@@ -153,13 +153,20 @@ let cmd_build_pje =
     let doc = "The project file to build." in
     Arg.(required & pos 0 (some string) None & info [] ~docv:"PROJECT" ~doc)
   in
+  let output_dir =
+    let doc = "Override the output directory specified in the pje." in
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "output-dir" ] ~docv:"OUTPUT_DIR" ~doc)
+  in
   let input_encoding =
     let doc = "The input file encoding. sjis or utf8." in
     Arg.(
       value & opt string "utf8"
       & info [ "input-encoding" ] ~docv:"ENCODING" ~doc)
   in
-  Cmd.v info Term.(const do_build $ project $ input_encoding)
+  Cmd.v info Term.(const do_build $ project $ output_dir $ input_encoding)
 
 let cmd =
   let doc = "System 4 Compiler" in
