@@ -789,6 +789,7 @@ let read_enums buf count =
          e)
 
 let decrypt = Mt19937.(decrypt ain_decrypt_seed)
+
 (* symmetric *)
 let encrypt = decrypt
 
