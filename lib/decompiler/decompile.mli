@@ -20,7 +20,7 @@ type decompiled_ain = {
   srcs : (string * CodeGen.function_t list) list;
 }
 
-val decompile : unit -> decompiled_ain
+val decompile : bool -> decompiled_ain
 val inspect : string -> print_addr:bool -> unit
 
 val export :

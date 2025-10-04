@@ -28,9 +28,8 @@ type function_t = {
   parent : Ain.Function.t option;
 }
 
-let is_overridden_function (f : function_t) =
-  f.func.address
-  <> match List.hd f.code with Some insn -> insn.addr | None -> f.end_addr
+let func_addr f =
+  match List.hd f.code with Some insn -> insn.addr | None -> f.end_addr
 
 (* In Ain v0, when a Function.t is a method, its name field contains the class
    name (the method name is not recorded anywhere). To simplify the
@@ -145,3 +144,27 @@ let parse_functions code =
     | [] -> failwith "unexpected end of code section"
   in
   aux [] code
+
+let parse code =
+  group_by_source_file code
+  |> List.map ~f:(fun (fname, code_in_file) ->
+         (fname, parse_functions code_in_file))
+
+let remove_overridden_functions ~move_to_original_file files =
+  if move_to_original_file then (
+    let addr_to_func = Hashtbl.create (module Int) in
+    List.iter files ~f:(fun (_, funcs) ->
+        List.iter funcs ~f:(fun f ->
+            Hashtbl.set addr_to_func ~key:f.func.address ~data:f));
+    List.filter_map files ~f:(fun (fname, funcs) ->
+        let funcs =
+          List.filter_map funcs ~f:(fun f ->
+              Hashtbl.find_and_remove addr_to_func f.func.address)
+        in
+        if List.is_empty funcs then None else Some (fname, funcs)))
+  else
+    List.filter_map files ~f:(fun (fname, funcs) ->
+        let funcs =
+          List.filter funcs ~f:(fun f -> f.func.address = func_addr f)
+        in
+        if List.is_empty funcs then None else Some (fname, funcs))

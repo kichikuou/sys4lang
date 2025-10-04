@@ -24,16 +24,20 @@ type function_t = {
   parent : Ain.Function.t option;
 }
 
-val is_overridden_function : function_t -> bool
-
 (* Transforms the code section of Ain v0 into a format accepted by group_by_source_file. *)
 val preprocess_ain_v0 :
   Instructions.instruction Loc.loc list -> Instructions.instruction Loc.loc list
 
-(* Splits the code section by source file. *)
-val group_by_source_file :
-  Instructions.instruction Loc.loc list ->
-  (string * Instructions.instruction Loc.loc list) list
+(* Splits the code section by source file, and then splits each source file
+   into functions. *)
+val parse :
+  Instructions.instruction Loc.loc list -> (string * function_t list) list
 
-(* Splits the code within a source file into functions. *)
-val parse_functions : Instructions.instruction Loc.loc list -> function_t list
+(* A code section may contain multiple functions with the same ID, and the last
+   one is the effective one. This function removes ineffective functions.
+   When [move_to_original_file] is true, the effective definition is moved to
+   the location where the function was first defined. *)
+val remove_overridden_functions :
+  move_to_original_file:bool ->
+  (string * function_t list) list ->
+  (string * function_t list) list

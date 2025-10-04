@@ -108,11 +108,14 @@ type decompiled_ain = {
   srcs : (string * CodeGen.function_t list) list;
 }
 
-let decompile () =
+let decompile move_to_original_file =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
-  let files = CodeSection.group_by_source_file code in
+  let files =
+    CodeSection.parse code
+    |> CodeSection.remove_overridden_functions ~move_to_original_file
+  in
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->
         CodeGen.
@@ -120,12 +123,7 @@ let decompile () =
   in
   let globals = ref (to_variable_list Ain.ain.glob) in
   let srcs =
-    List.map files ~f:(fun (fname, code_in_file) ->
-        let funcs = CodeSection.parse_functions code_in_file in
-        let funcs =
-          List.filter funcs ~f:(fun f ->
-              not (CodeSection.is_overridden_function f))
-        in
+    List.map files ~f:(fun (fname, funcs) ->
         let decompiled_funcs = ref [] in
         let rec process_func func =
           let f = decompile_function func in
@@ -160,11 +158,14 @@ let inspect funcname =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
-  let files = CodeSection.group_by_source_file code in
+  let files =
+    CodeSection.parse code
+    |> CodeSection.remove_overridden_functions ~move_to_original_file:false
+  in
   match
-    List.find_map files ~f:(fun (_, code_in_file) ->
-        CodeSection.parse_functions code_in_file
-        |> List.find ~f:(fun f -> String.equal f.CodeSection.func.name funcname))
+    List.find_map files ~f:(fun (_, funcs) ->
+        List.find funcs ~f:(fun f ->
+            String.equal f.CodeSection.func.name funcname))
   with
   | None -> failwith ("cannot find function " ^ funcname)
   | Some f -> inspect_function f

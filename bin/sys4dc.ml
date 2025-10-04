@@ -40,11 +40,12 @@ let output_printer_getter out_dir_opt fname f =
       f (CodeGen.create_printer outc unix_fname);
       Out_channel.close outc
 
-let sys4dc output_dir inspect_function print_addr ain_file =
+let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
+    =
   Ain.load ain_file;
   match inspect_function with
   | None ->
-      let decompiled = Decompile.decompile () in
+      let decompiled = Decompile.decompile move_to_original_file in
       Decompile.export decompiled
         (Stdlib.Filename.basename ain_file)
         (output_printer_getter output_dir)
@@ -69,12 +70,21 @@ let cmd =
     let doc = "Print addresses" in
     Cmdliner.Arg.(value & flag & info [ "address" ] ~doc)
   in
+  let move_to_original_file =
+    let doc =
+      "Move the overridden functions to the files where they were originally \
+       defined.  Useful for mods made with AinDecompiler."
+    in
+    Cmdliner.Arg.(value & flag & info [ "move-to-original-file" ] ~doc)
+  in
   let ain_file =
     let doc = "The .ain file to decompile" in
     let docv = "AIN_FILE" in
     Cmdliner.Arg.(required & pos 0 (some string) None & info [] ~docv ~doc)
   in
   Cmd.v info
-    Term.(const sys4dc $ output_dir $ inspect_function $ print_addr $ ain_file)
+    Term.(
+      const sys4dc $ output_dir $ inspect_function $ print_addr
+      $ move_to_original_file $ ain_file)
 
 let () = Stdlib.exit (Cmd.eval cmd)
