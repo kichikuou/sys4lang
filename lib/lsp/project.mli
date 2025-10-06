@@ -17,3 +17,5 @@ val get_definition :
 
 val get_type_definition :
   t -> Lsp.Uri.t -> Lsp.Types.Position.t -> Lsp.Types.Locations.t option
+
+val get_entrypoint : t -> Lsp.Types.Location.t option

@@ -102,6 +102,14 @@ class lsp_server =
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _ =
       get_definition project uri pos |> Lwt.return
+
+    method! on_unknown_request ~notify_back ~server_request ~id meth params =
+      if String.equal meth "system4/entryPoint" then
+        (match get_entrypoint project with
+        | Some loc -> Lsp.Types.Location.yojson_of_t loc
+        | None -> `Null)
+        |> Lwt.return
+      else super#on_unknown_request ~notify_back ~server_request ~id meth params
   end
 
 let run () =

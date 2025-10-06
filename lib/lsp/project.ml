@@ -238,3 +238,15 @@ let get_type_definition proj uri pos =
             Some (Hashtbl.find_exn proj.ctx.delegates name).loc
         | _ -> None)
     | _ -> None)
+
+let get_entrypoint proj =
+  match location_of_func proj "main" with
+  | Some loc -> (
+      let fname = (fst loc).Lexing.pos_fname in
+      match Hashtbl.find proj.documents fname with
+      | None -> None
+      | Some doc ->
+          let range = to_lsp_range doc.text loc in
+          let uri = Lsp.Types.DocumentUri.of_path fname in
+          Some (Lsp.Types.Location.create ~uri ~range))
+  | None -> None
