@@ -24,12 +24,11 @@
                "\| System 4 programming language.
                )
   (depends
-   ocaml
+   (ocaml (>= "5.2"))
    base
    cmdliner
    stdio
    camlzip
-   vector
    dune
    dune-build-info
    (linol-lwt (and (>= "0.8") (< "0.10")))

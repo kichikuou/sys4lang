@@ -1,6 +1,6 @@
 (library
  (name common)
- (libraries base stdio camlzip vector))
+ (libraries base stdio camlzip))
 
 (ocamllex lexer)
 

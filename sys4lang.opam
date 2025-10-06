@@ -13,12 +13,11 @@ homepage: "https://github.com/kichikuou/sys4lang"
 doc: "https://github.com/kichikuou/sys4lang"
 bug-reports: "https://github.com/kichikuou/sys4lang/issues"
 depends: [
-  "ocaml"
+  "ocaml" {>= "5.2"}
   "base"
   "cmdliner"
   "stdio"
   "camlzip"
-  "vector"
   "dune" {>= "3.0"}
   "dune-build-info"
   "linol-lwt" {>= "0.8" & < "0.10"}

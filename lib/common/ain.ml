@@ -4,6 +4,7 @@ let sprintf = Printf.sprintf
 
 module In_channel = Stdio.In_channel
 module Out_channel = Stdio.Out_channel
+module Dynarray = Stdlib.Dynarray
 
 module Type = struct
   type t =
@@ -434,7 +435,7 @@ type t = {
   mutable functions : Function.t array;
   mutable globals : Global.t array;
   mutable structures : Struct.t array;
-  mutable messages : string Vector.t;
+  mutable messages : string Dynarray.t;
   mutable msg1_uk : int32;
   mutable main : int;
   mutable msgf : int;
@@ -442,7 +443,7 @@ type t = {
   mutable switches : Switch.t array;
   mutable game_version : int;
   (* TODO: scenario labels *)
-  mutable strings : string Vector.t;
+  mutable strings : string Dynarray.t;
   mutable filenames : string array;
   mutable ojmp : int;
   mutable function_types : FunctionType.t array;
@@ -463,14 +464,14 @@ let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
     functions = [| Function.create ~index:0 "NULL" |];
     globals = [||];
     structures = [||];
-    messages = Vector.make 1 ~dummy:"";
+    messages = Dynarray.make 1 "";
     msg1_uk = 0l;
     main = 0;
     msgf = 0;
     libraries = [||];
     switches = [||];
     game_version = 0;
-    strings = Vector.make 1 ~dummy:"";
+    strings = Dynarray.make 1 "";
     filenames = [||];
     ojmp = -1;
     function_types = [||];
@@ -823,13 +824,12 @@ let load filename =
         buf.ain.structures <- Array.of_list (read_structures buf count)
     | "MSG0" ->
         let count = read_int buf in
-        buf.ain.messages <- Vector.of_list ~dummy:"" (read_cstrings buf count);
+        buf.ain.messages <- Dynarray.of_list (read_cstrings buf count);
         buf.ain.use_msg1 <- false
     | "MSG1" ->
         let count = read_int buf in
         buf.ain.msg1_uk <- read_int32 buf;
-        buf.ain.messages <-
-          Vector.of_list ~dummy:"" (read_msg1_strings buf count);
+        buf.ain.messages <- Dynarray.of_list (read_msg1_strings buf count);
         buf.ain.use_msg1 <- true
     | "MAIN" -> buf.ain.main <- read_int buf
     | "MSGF" -> buf.ain.msgf <- read_int buf
@@ -842,7 +842,7 @@ let load filename =
     | "SLBL" -> failwith "scenario labels not implemented"
     | "STR0" ->
         let count = read_int buf in
-        buf.ain.strings <- Vector.of_list ~dummy:"" (read_cstrings buf count)
+        buf.ain.strings <- Dynarray.of_list (read_cstrings buf count)
     | "FNAM" ->
         let count = read_int buf in
         buf.ain.filenames <- Array.of_list (read_cstrings buf count)
@@ -1107,13 +1107,13 @@ let to_buffer ain =
   Array.iter ain.structures ~f:(write_structure buf ain);
   if not ain.use_msg1 then (
     BB.add_string buf "MSG0";
-    BB.add_int buf (Vector.length ain.messages);
-    Vector.iter (BB.add_cstring buf) ain.messages)
+    BB.add_int buf (Dynarray.length ain.messages);
+    Dynarray.iter (BB.add_cstring buf) ain.messages)
   else (
     BB.add_string buf "MSG1";
-    BB.add_int buf (Vector.length ain.messages);
+    BB.add_int buf (Dynarray.length ain.messages);
     BB.add_int32 buf ain.msg1_uk;
-    Vector.iter (write_msg1_string buf) ain.messages);
+    Dynarray.iter (write_msg1_string buf) ain.messages);
   BB.add_string buf "MAIN";
   BB.add_int buf ain.main;
   if ain.major_version < 12 then (
@@ -1129,8 +1129,8 @@ let to_buffer ain =
   BB.add_int buf ain.game_version;
   (* TODO: scenario labels *)
   BB.add_string buf "STR0";
-  BB.add_int buf (Vector.length ain.strings);
-  Vector.iter (BB.add_cstring buf) ain.strings;
+  BB.add_int buf (Dynarray.length ain.strings);
+  Dynarray.iter (BB.add_cstring buf) ain.strings;
   if ain.major_version < 12 then (
     BB.add_string buf "FNAM";
     BB.add_int buf (Array.length ain.filenames);
@@ -1451,12 +1451,12 @@ let function_of_delegate_index ain no =
 
 (* FIXME: this shouldn't return an option? *)
 let get_string ain no =
-  let open Vector in
+  let open Dynarray in
   if no >= length ain.strings then None else Some (get ain.strings no)
 
 let init_string_table ain =
   if Hashtbl.length ain.string_table = 0 then
-    Vector.iteri
+    Dynarray.iteri
       (fun index str ->
         match Hashtbl.add ain.string_table ~key:str ~data:index with
         | `Duplicate -> ()
@@ -1468,8 +1468,8 @@ let add_string ain str =
   match Hashtbl.find ain.string_table str with
   | Some index -> index
   | None ->
-      let index = Vector.length ain.strings in
-      Vector.push ain.strings str;
+      let index = Dynarray.length ain.strings in
+      Dynarray.add_last ain.strings str;
       Hashtbl.add_exn ain.string_table ~key:str ~data:index;
       index
 
@@ -1479,12 +1479,12 @@ let get_string_no ain str =
 
 (* FIXME: this shouldn't return an option? *)
 let get_message ain no =
-  let open Vector in
+  let open Dynarray in
   if no >= length ain.messages then None else Some (get ain.messages no)
 
 let add_message ain str =
-  let index = Vector.length ain.messages in
-  Vector.push ain.messages str;
+  let index = Dynarray.length ain.messages in
+  Dynarray.add_last ain.messages str;
   index
 
 let get_file ain no =
