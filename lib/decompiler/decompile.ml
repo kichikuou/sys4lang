@@ -108,6 +108,16 @@ type decompiled_ain = {
   srcs : (string * CodeGen.function_t list) list;
 }
 
+let is_rance7_bad_function (f : CodeGen.function_t) =
+  match f with
+  | {
+      struc = Some {name = "tagBusho"; _};
+      name = "getSp";
+      body = { txt = (Block [{txt = Return (Some (Deref (PageRef (StructPage, {name = "m_sName"; _ })))); _ }]); _ }; _
+    } -> true
+  | _ -> false
+[@@ocamlformat "disable"]
+
 let decompile move_to_original_file =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
@@ -139,6 +149,9 @@ let decompile move_to_original_file =
                     s.methods <- f :: s.methods;
                     let body = Transform.remove_array_initializer_call f.body in
                     decompiled_funcs := { f with body } :: !decompiled_funcs)
+              else if is_rance7_bad_function f then
+                Stdio.eprintf
+                  "Warning: Removing ill-typed tagBusho::getSp() function\n"
               else (
                 if not f.func.is_lambda then s.methods <- f :: s.methods;
                 decompiled_funcs := f :: !decompiled_funcs)
