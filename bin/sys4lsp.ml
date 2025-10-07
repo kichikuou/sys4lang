@@ -1,5 +1,4 @@
 open Base
-open Lwt.Syntax
 open System4_lsp
 open Types
 open Project
@@ -13,12 +12,13 @@ let show_error notify_back message =
 
 let show_exn notify_back e =
   let msg = Stdlib.Printexc.to_string e in
-  Lwt.join
+  Eio.Fiber.all
     [
-      show_error notify_back msg;
+      (fun () -> show_error notify_back msg);
       (* Also notify the backtrace with logMessage. *)
-      notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Error
-        (msg ^ "\n" ^ Backtrace.to_string (Backtrace.Exn.most_recent ()));
+      (fun () ->
+        notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Error
+          (msg ^ "\n" ^ Backtrace.to_string (Backtrace.Exn.most_recent ())));
     ]
 
 (* The default exception printer escapes utf-8 sequences. Try to prevent that
@@ -30,11 +30,11 @@ let () =
 
 class lsp_server =
   object (self)
-    inherit Linol_lwt.Jsonrpc2.server as super
+    inherit Linol_eio.Jsonrpc2.server as super
     val project = Project.create ()
-    method spawn_query_handler f = Linol_lwt.spawn f
+    method spawn_query_handler f = Linol_eio.spawn f
 
-    method private _on_doc ~(notify_back : Linol_lwt.Jsonrpc2.notify_back)
+    method private _on_doc ~(notify_back : Linol_eio.Jsonrpc2.notify_back)
         (uri : Lsp.Types.DocumentUri.t) (contents : string) =
       try
         let diagnostics = update_document project uri contents in
@@ -53,35 +53,33 @@ class lsp_server =
       { c with typeDefinitionProvider = Some (`Bool true) }
 
     method! on_request_unhandled : type r.
-        notify_back:Linol_lwt.Jsonrpc2.notify_back ->
-        id:Linol_lwt.Jsonrpc2.Req_id.t ->
+        notify_back:Linol_eio.Jsonrpc2.notify_back ->
+        id:Linol_eio.Jsonrpc2.Req_id.t ->
         r Lsp.Client_request.t ->
-        r Lwt.t =
+        r Linol_eio.t =
       fun ~notify_back ~id -> function
         | Lsp.Client_request.TextDocumentTypeDefinition
             { textDocument; position; _ } ->
-            get_type_definition project textDocument.uri position |> Lwt.return
+            get_type_definition project textDocument.uri position
         | r -> super#on_request_unhandled ~notify_back ~id r
 
     method! on_req_initialize ~notify_back i =
-      let* () =
-        let options =
-          InitializationOptions.t_of_yojson
-            (Option.value i.initializationOptions ~default:(`Assoc []))
-        in
-        try
-          Project.initialize project options;
-          (* AinDecompiler generates type definitions in classes.jaf and global
-             variables in globals.jaf. Loading these helps with Goto Definition
-             and type checking for functypes. *)
-          (try
-             load_document project "classes.jaf";
-             load_document project "globals.jaf"
-           with _ -> ());
-          notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
-            (options.ainPath ^ " loaded")
-        with e -> show_exn notify_back e
+      let options =
+        InitializationOptions.t_of_yojson
+          (Option.value i.initializationOptions ~default:(`Assoc []))
       in
+      (try
+         Project.initialize project options;
+         (* AinDecompiler generates type definitions in classes.jaf and global
+            variables in globals.jaf. Loading these helps with Goto Definition
+            and type checking for functypes. *)
+         (try
+            load_document project "classes.jaf";
+            load_document project "globals.jaf"
+          with _ -> ());
+         notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
+           (options.ainPath ^ " loaded")
+       with e -> show_exn notify_back e);
       super#on_req_initialize ~notify_back i
 
     method on_notif_doc_did_open ~notify_back d ~content =
@@ -91,32 +89,40 @@ class lsp_server =
         ~new_content =
       self#_on_doc ~notify_back d.uri new_content
 
-    method on_notif_doc_did_close ~notify_back:_ _ = Lwt.return ()
+    method on_notif_doc_did_close ~notify_back:_ _ = ()
     method! config_hover = Some (`Bool true)
 
     method! on_req_hover ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_ _ =
-      get_hover project uri pos |> Lwt.return
+      get_hover project uri pos
 
     method! config_definition = Some (`Bool true)
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _ =
-      get_definition project uri pos |> Lwt.return
+      get_definition project uri pos
 
     method! on_unknown_request ~notify_back ~server_request ~id meth params =
       if String.equal meth "system4/entryPoint" then
-        (match get_entrypoint project with
+        match get_entrypoint project with
         | Some loc -> Lsp.Types.Location.yojson_of_t loc
-        | None -> `Null)
-        |> Lwt.return
+        | None -> `Null
       else super#on_unknown_request ~notify_back ~server_request ~id meth params
   end
 
 let run () =
+  Eio_main.run @@ fun env ->
   let s = new lsp_server in
-  let server = Linol_lwt.Jsonrpc2.create_stdio ~env:() s in
-  let task = Linol_lwt.Jsonrpc2.run server in
-  Linol_lwt.run task
+  let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
+  let task () =
+    let shutdown () = Poly.(s#get_status = `ReceivedExit) in
+    Linol_eio.Jsonrpc2.run ~shutdown server
+  in
+  match task () with
+  | () -> ()
+  | exception e ->
+      let e = Stdlib.Printexc.to_string e in
+      Stdio.eprintf "error: %s\n%!" e;
+      Stdlib.exit 1
 
 let print_version () =
   Stdio.printf "system4-lsp %s\n"

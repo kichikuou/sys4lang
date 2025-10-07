@@ -14,4 +14,4 @@
  (public_name system4-lsp)
  (name sys4lsp)
  (package sys4lang)
- (libraries system4_lsp linol-lwt dune-build-info))
+ (libraries system4_lsp linol linol-eio eio_main dune-build-info))

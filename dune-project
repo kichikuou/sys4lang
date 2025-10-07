@@ -31,7 +31,8 @@
    camlzip
    dune
    dune-build-info
-   (linol-lwt (and (>= "0.8") (< "0.10")))
+   (linol-eio (and (>= "0.8") (< "0.10")))
+   eio_main
    menhir
    yojson
    ppx_deriving
