@@ -656,7 +656,7 @@ let print_inc pr srcs =
   List.iter srcs ~f:(fun src -> println pr "\t\"%s\"," src);
   println pr "}"
 
-type project_t = { name : string }
+type project_t = { name : string; output_dir : string }
 
 let print_pje pr proj =
   println pr "// Project Environment File";
@@ -678,7 +678,7 @@ let print_pje pr proj =
   println pr "SourceDir = \".\"";
   println pr "HLLDir = \"HLL\"";
   println pr "ObjDir = \"OBJ\"";
-  println pr "OutputDir = \".\"";
+  println pr "OutputDir = \"%s\"" proj.output_dir;
   print_newline pr;
   println pr "Source = {";
   println pr "\t\"main.inc\",";

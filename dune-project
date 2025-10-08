@@ -33,6 +33,7 @@
    dune-build-info
    (linol-eio (and (>= "0.8") (< "0.10")))
    eio_main
+   fpath
    menhir
    yojson
    ppx_deriving

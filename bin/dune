@@ -8,7 +8,7 @@
  (public_name sys4dc)
  (name sys4dc)
  (package sys4lang)
- (libraries decompiler base cmdliner))
+ (libraries decompiler base cmdliner fpath))
 
 (executable
  (public_name system4-lsp)

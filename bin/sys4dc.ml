@@ -46,8 +46,15 @@ let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
   match inspect_function with
   | None ->
       let decompiled = Decompile.decompile move_to_original_file in
-      Decompile.export decompiled
-        (Stdlib.Filename.basename ain_file)
+      (* reroot ain_file to output_dir if possible *)
+      let ain_path =
+        Fpath.(
+          let root = v @@ Option.value output_dir ~default:"." in
+          match relativize ~root (v ain_file) with
+          | Some p -> to_string @@ normalize p
+          | None -> ain_file)
+      in
+      Decompile.export decompiled ain_path
         (output_printer_getter output_dir)
         ~print_addr
   | Some funcname -> Decompile.inspect funcname ~print_addr

@@ -183,7 +183,7 @@ let inspect funcname =
   | None -> failwith ("cannot find function " ^ funcname)
   | Some f -> inspect_function f
 
-let export decompiled ain_name output_to_printer ~print_addr =
+let export decompiled ain_path output_to_printer ~print_addr =
   let sources = ref [] in
   let output_source fname f =
     sources := fname :: !sources;
@@ -216,8 +216,13 @@ let export decompiled ain_name output_to_printer ~print_addr =
                 CodeGen.print_newline pr)));
   output_to_printer "main.inc" (fun pr ->
       CodeGen.print_inc pr (List.rev !sources));
-  let project_name = Stdlib.Filename.remove_extension ain_name in
-  output_to_printer (project_name ^ ".pje") (fun pr ->
-      CodeGen.(print_pje pr { name = project_name }));
+  let project : CodeGen.project_t =
+    {
+      name = Stdlib.Filename.(remove_extension @@ basename ain_path);
+      output_dir = Stdlib.Filename.dirname ain_path;
+    }
+  in
+  output_to_printer (project.name ^ ".pje") (fun pr ->
+      CodeGen.(print_pje pr project));
   output_to_printer "debug_info.json" (fun pr ->
       CodeGen.print_debug_info pr dbginfo)

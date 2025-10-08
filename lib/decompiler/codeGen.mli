@@ -31,7 +31,7 @@ type struct_t = {
   mutable methods : function_t list;
 }
 
-type project_t = { name : string }
+type project_t = { name : string; output_dir : string }
 type debug_info
 
 val create_debug_info : unit -> debug_info
