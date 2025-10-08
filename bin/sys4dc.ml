@@ -26,22 +26,22 @@ let rec mkdir_p path =
   else if not (Stdlib.Sys.is_directory path) then
     failwith (path ^ " exists but is not a directory")
 
-let output_printer_getter out_dir_opt fname f =
-  match out_dir_opt with
-  | None ->
-      Stdio.printf "FILE %s\n\n" fname;
-      f (CodeGen.create_printer Stdio.stdout "")
-  | Some out_dir ->
-      let fname_components = String.split fname ~on:'\\' in
-      let unix_fname = String.concat ~sep:"/" fname_components in
-      let output_path = Stdlib.Filename.concat out_dir unix_fname in
-      mkdir_p (Stdlib.Filename.dirname output_path);
-      let outc = Stdio.Out_channel.create output_path in
-      f (CodeGen.create_printer outc unix_fname);
-      Out_channel.close outc
+let output_printer_getter out_dir fname f =
+  if String.(out_dir = "-") then (
+    Stdio.printf "FILE %s\n\n" fname;
+    f (CodeGen.create_printer Stdio.stdout ""))
+  else
+    let fname_components = String.split fname ~on:'\\' in
+    let unix_fname = String.concat ~sep:"/" fname_components in
+    let output_path = Stdlib.Filename.concat out_dir unix_fname in
+    mkdir_p (Stdlib.Filename.dirname output_path);
+    let outc = Stdio.Out_channel.create output_path in
+    f (CodeGen.create_printer outc unix_fname);
+    Out_channel.close outc
 
 let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
     =
+  let output_dir = Option.value output_dir ~default:"." in
   Ain.load ain_file;
   match inspect_function with
   | None ->
@@ -49,7 +49,9 @@ let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
       (* reroot ain_file to output_dir if possible *)
       let ain_path =
         Fpath.(
-          let root = v @@ Option.value output_dir ~default:"." in
+          let root =
+            v @@ if String.(output_dir = "-") then "." else output_dir
+          in
           match relativize ~root (v ain_file) with
           | Some p -> to_string @@ normalize p
           | None -> ain_file)
@@ -63,7 +65,7 @@ let cmd =
   let doc = "Decompile an .ain file" in
   let info = Cmd.info "sys4dc" ~doc in
   let output_dir =
-    let doc = "Output directory" in
+    let doc = "Output directory. Use '-' to print everything to stdout." in
     let docv = "DIRECTORY" in
     Cmdliner.Arg.(value & opt (some string) None & info [ "o" ] ~docv ~doc)
   in
