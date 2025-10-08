@@ -670,7 +670,6 @@ let print_pje pr proj =
   println pr "#define _ISAI2FILE %B" Ain.ain.is_ai2;
   if Ain.ain.vers >= 6 then
     println pr "#define _USESMSG1 %B" (Option.is_some Ain.ain.msg1_uk);
-  println pr "#define _OPTIMIZE_IFTHEN %B" Ain.ain.ifthen_optimized;
   print_newline pr;
   println pr "GameVersion = %ld" Ain.ain.gver;
   print_newline pr;
