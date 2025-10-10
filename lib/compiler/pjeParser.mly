@@ -29,15 +29,18 @@ type toplevel =
   | SyncFolder of (string * string) list
   | HashDefine of (string * value)
 
-let to_unix_path = Base.String.tr ~target:'\\' ~replacement:'/'
-
-let to_pje toplevels path =
-  let pje = default_pje path
+let to_pje toplevels path initial_encoding =
+  let pje = default_pje path initial_encoding in
+  let decode s =
+    match pje.encoding with
+    | UTF8 -> s
+    | SJIS -> Common.Sjis.to_utf8 s
   in
+  let to_unix_path s = Base.String.tr ~target:'\\' ~replacement:'/' (decode s) in
   List.iter (function
-    | KeyValue ("ProjectName", String v) -> pje.project_name <- v
-    | KeyValue ("Encoding", String v) -> pje.encoding <- v
-    | KeyValue ("CodeName", String v) -> pje.code_name <- v
+    | KeyValue ("ProjectName", String v) -> pje.project_name <- decode v
+    | KeyValue ("Encoding", String v) -> pje.encoding <- encoding_of_string v
+    | KeyValue ("CodeName", String v) -> pje.code_name <- decode v
     | KeyValue ("GameVersion", Int v) -> pje.game_version <- v
     | KeyValue ("SourceDir", String v) -> pje.source_dir <- to_unix_path v
     | KeyValue ("HLLDir", String v) -> pje.hll_dir <- to_unix_path v
@@ -45,15 +48,16 @@ let to_pje toplevels path =
     | KeyValue ("OutputDir", String v) -> pje.output_dir <- to_unix_path v
     | KeyValue ("Source", List v) -> pje.source <- List.map (fun s -> Jaf (to_unix_path s)) v
     | KeyValue ("SystemSource", List v) -> pje.system_source <- List.map (fun s -> Jaf (to_unix_path s)) v
-    | KeyValue ("HLL", List v) -> pje.hll <- v
+    | KeyValue ("HLL", List v) -> pje.hll <- List.map decode v
     | KeyValue ("CopyToDLL", List v) -> pje.copy_to_dll <- List.map to_unix_path v
     | KeyValue ("CopyToRun", List v) -> pje.copy_to_run <- List.map to_unix_path v
     | KeyValue ("CopyToDP", List v) -> pje.copy_to_dp <- List.map to_unix_path v
     | SyncFolder pairs -> pje.sync_folder <- List.map (fun (k, v) -> (to_unix_path k, to_unix_path v)) pairs
-    | KeyValue ("ScenarioFuncA", List v) -> pje.scenario_func_a <- v
-    | KeyValue ("ScenarioFuncR", List v) -> pje.scenario_func_r <- v
-    | KeyValue ("ScenarioFuncNAME", List v) -> pje.scenario_func_name <- v
-    | Formation (name, defs) -> pje.formations <- { name; defs } :: pje.formations
+    | KeyValue ("ScenarioFuncA", List v) -> pje.scenario_func_a <- List.map decode v
+    | KeyValue ("ScenarioFuncR", List v) -> pje.scenario_func_r <- List.map decode v
+    | KeyValue ("ScenarioFuncNAME", List v) -> pje.scenario_func_name <- List.map decode v
+    | Formation (name, defs) ->
+        pje.formations <- { name = decode name; defs = List.map decode defs } :: pje.formations
     | KeyValue ("SyncLock", Bool v) -> pje.sync_lock <- v
     | KeyValue ("UpdateIDEPath", String v) -> pje.update_ide_path <- Some (to_unix_path v)
     | KeyValue (k, _) -> raise (KeyError k)
@@ -80,7 +84,7 @@ let to_pje toplevels path =
 %token EOF
 
 %start pje
-%type <Pje.t> pje
+%type <Pje.encoding -> Pje.t> pje
 
 %%
 

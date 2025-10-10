@@ -19,16 +19,13 @@ open Base
 open Compiler
 open Cmdliner
 
-let read_text_file input_encoding file =
+let read_text_file ?(encoding = Pje.UTF8) file =
   let content =
     match file with
     | "-" -> In_channel.input_all In_channel.stdin
     | _ -> Stdio.In_channel.read_all file
   in
-  match input_encoding with
-  | "utf8" -> content
-  | "sjis" -> Sjis.to_utf8 content
-  | _ -> failwith ("unsupported character encoding: " ^ input_encoding)
+  match encoding with Pje.UTF8 -> content | Pje.SJIS -> Sjis.to_utf8 content
 
 let handle_errors f get_content =
   try f () with
@@ -63,7 +60,7 @@ let do_compile sources output major minor import_as input_encoding =
   handle_errors
     (fun () ->
       let read_file file =
-        let source = read_text_file input_encoding file in
+        let source = read_text_file ~encoding:input_encoding file in
         Hashtbl.add_exn files ~key:file ~data:source;
         source
       in
@@ -72,10 +69,10 @@ let do_compile sources output major minor import_as input_encoding =
       Ain.write_file ctx.ain output)
     (fun file -> Hashtbl.find files file)
 
-let do_build pje_file output_dir_override input_encoding =
+let do_build pje_file output_dir_override =
   let pje =
     handle_errors
-      (fun () -> Project.load_pje (read_text_file input_encoding) pje_file)
+      (fun () -> Project.load_pje read_text_file pje_file)
       (fun _ -> None)
   in
   let ctx = Jaf.context_from_ain (Pje.create_ain pje) in
@@ -87,7 +84,7 @@ let do_build pje_file output_dir_override input_encoding =
       in
       let read_file file =
         let file = Stdlib.Filename.(concat source_dir file) in
-        let source = read_text_file input_encoding file in
+        let source = read_text_file ~encoding:pje.encoding file in
         Hashtbl.add_exn files ~key:file ~data:source;
         source
       in
@@ -97,6 +94,16 @@ let do_build pje_file output_dir_override input_encoding =
       Ain.write_file ctx.ain (Pje.ain_path ?output_dir_override pje);
       DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
     (fun file -> Hashtbl.find files file)
+
+let encoding_conv =
+  let parse s =
+    try Ok (Pje.encoding_of_string s)
+    with Pje.KeyError msg -> Error (`Msg msg)
+  in
+  let print ppf e =
+    Stdlib.Format.pp_print_string ppf (Pje.string_of_encoding e)
+  in
+  Arg.conv (parse, print)
 
 let cmd_compile_jaf =
   let doc = "Compile .jaf files." in
@@ -126,9 +133,9 @@ let cmd_compile_jaf =
       & info [ "import-as" ] ~docv:"HLL_NAME=NAME" ~doc)
   in
   let input_encoding =
-    let doc = "The input file encoding. sjis or utf8." in
+    let doc = "The input file encoding. Shift_JIS or UTF-8." in
     Arg.(
-      value & opt string "utf8"
+      value & opt encoding_conv Pje.UTF8
       & info [ "input-encoding" ] ~docv:"ENCODING" ~doc)
   in
   let test =
@@ -160,13 +167,7 @@ let cmd_build_pje =
       & opt (some string) None
       & info [ "output-dir" ] ~docv:"OUTPUT_DIR" ~doc)
   in
-  let input_encoding =
-    let doc = "The input file encoding. sjis or utf8." in
-    Arg.(
-      value & opt string "utf8"
-      & info [ "input-encoding" ] ~docv:"ENCODING" ~doc)
-  in
-  Cmd.v info Term.(const do_build $ project $ output_dir $ input_encoding)
+  Cmd.v info Term.(const do_build $ project $ output_dir)
 
 let cmd =
   let doc = "System 4 Compiler" in

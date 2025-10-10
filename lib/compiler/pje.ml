@@ -19,11 +19,21 @@ open Base
 
 exception KeyError of string
 
+type encoding = SJIS | UTF8
+
+let encoding_of_string name =
+  match String.lowercase name with
+  | "sjis" | "shift_jis" -> SJIS
+  | "utf8" | "utf-8" -> UTF8
+  | _ -> raise (KeyError ("Unknown encoding: " ^ name))
+
+let string_of_encoding e = match e with SJIS -> "Shift_JIS" | UTF8 -> "UTF-8"
+
 type formation = { name : string; defs : string list }
 
 type t = {
   mutable pje_path : string;
-  mutable encoding : string;
+  mutable encoding : encoding;
   mutable project_name : string;
   mutable code_name : string;
   mutable game_version : int;
@@ -54,10 +64,10 @@ type t = {
 
 and source = Jaf of string | Hll of (string * string) | Include of t
 
-let default_pje path =
+let default_pje path encoding =
   {
     pje_path = path;
-    encoding = "UTF-8";
+    encoding;
     project_name = "";
     code_name = "code.jab";
     game_version = 100;

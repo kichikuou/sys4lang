@@ -18,12 +18,12 @@ open Common
 open Base
 open Pje
 
-let rec load read_file pje_file =
+let rec load read_file pje_file initial_encoding =
   let pje_text = read_file pje_file in
   let lexbuf = Lexing.from_string pje_text in
   Lexing.set_filename lexbuf pje_file;
   let pje =
-    try PjeParser.pje PjeLexer.token lexbuf with
+    try PjeParser.pje PjeLexer.token lexbuf initial_encoding with
     | PjeLexer.Error | PjeParser.Error -> CompileError.syntax_error lexbuf
     | Pje.KeyError key ->
         CompileError.raise ("Invalid name: " ^ key)
@@ -53,7 +53,8 @@ let rec load read_file pje_file =
                 ("No import name for " ^ f)
                 (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf)
         else if String.is_suffix f_lower ~suffix:".inc" then
-          Include (load read_file (resolve f)) :: analyze_source_list rest
+          Include (load read_file (resolve f) pje.encoding)
+          :: analyze_source_list rest
         else Jaf (resolve f) :: analyze_source_list rest
     | _ -> failwith "unreachable"
   in
@@ -67,6 +68,6 @@ let load_pje read_file pje_file =
     | "." -> read_file
     | dir -> fun file -> read_file (Stdlib.Filename.concat dir file)
   in
-  let pje = load read_file (Stdlib.Filename.basename pje_file) in
+  let pje = load read_file (Stdlib.Filename.basename pje_file) Pje.SJIS in
   pje.pje_path <- pje_file;
   pje
