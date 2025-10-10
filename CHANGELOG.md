@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 - 2025-10-10
+- Compiler: Respects `Encoding` field in `.pje`
+- Decompiler: Outputs to current directory if `-o` is not specified
+- Decompiler: Sets `OutputDir` of `.pje` to the directory of original ain file
+
 ## 0.3.0 - 2025-10-07
 - Compiler: Added `--output-dir` option to override `OutputDir` in `.pje`
 - Decompiler: Added `--move-to-original-file` flag which is useful for mods made with AinDecompiler
