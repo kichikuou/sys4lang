@@ -2,13 +2,13 @@
  (name sys4c)
  (public_name sys4c)
  (package sys4lang)
- (libraries compiler base cmdliner))
+ (libraries compiler base cmdliner dune-build-info))
 
 (executable
  (public_name sys4dc)
  (name sys4dc)
  (package sys4lang)
- (libraries decompiler base cmdliner fpath))
+ (libraries decompiler base cmdliner dune-build-info fpath))
 
 (executable
  (public_name system4-lsp)

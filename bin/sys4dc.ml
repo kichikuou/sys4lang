@@ -62,8 +62,11 @@ let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
   | Some funcname -> Decompile.inspect funcname ~print_addr
 
 let cmd =
+  let version =
+    Option.map (Build_info.V1.version ()) ~f:Build_info.V1.Version.to_string
+  in
   let doc = "Decompile an .ain file" in
-  let info = Cmd.info "sys4dc" ~doc in
+  let info = Cmd.info "sys4dc" ?version ~doc in
   let output_dir =
     let doc = "Output directory. Use '-' to print everything to stdout." in
     let docv = "DIRECTORY" in

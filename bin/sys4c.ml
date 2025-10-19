@@ -171,8 +171,10 @@ let cmd_build_pje =
 
 let cmd =
   let doc = "System 4 Compiler" in
-  let version = "0.1" in
-  let info = Cmd.info "sys4c" ~version ~doc in
+  let version =
+    Option.map (Build_info.V1.version ()) ~f:Build_info.V1.Version.to_string
+  in
+  let info = Cmd.info "sys4c" ?version ~doc in
   Cmd.group info [ cmd_compile_jaf; cmd_build_pje ]
 
 let () = Stdlib.exit (Cmd.eval cmd)
