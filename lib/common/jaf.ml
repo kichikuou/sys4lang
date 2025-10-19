@@ -1005,9 +1005,11 @@ let context_from_ain ?(constants : variable list = []) ain =
           members = Hashtbl.create (module String);
         }
       in
-      List.iter s.members ~f:(fun v ->
-          Hashtbl.add_exn struc.members ~key:v.name
-            ~data:(ain_to_jaf_variable ain ClassVar v));
+      List.iter s.members ~f:(function
+        | { value_type = Void; _ } -> () (* dummy slot *)
+        | v ->
+            Hashtbl.add_exn struc.members ~key:v.name
+              ~data:(ain_to_jaf_variable ain ClassVar v));
       Hashtbl.add_exn structs ~key:s.name ~data:struc);
   Ain.function_iter ain ~f:(fun (f : Ain.Function.t) ->
       let class_name, class_index =
