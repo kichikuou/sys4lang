@@ -558,7 +558,7 @@ let reduce_do_while cfg marker_node =
                   [
                     {
                       txt = DoWhile (body, { term with txt = negate expr });
-                      addr = body.addr;
+                      addr = body.end_addr;
                       end_addr = bbk.end_addr;
                     };
                   ] );
@@ -567,6 +567,27 @@ let reduce_do_while cfg marker_node =
             }
       | _ -> failwith "cannot happen")
   | _ -> failwith "cannot happen"
+
+(* In Pastel Chime 3, there is code that jumps from within a nested for-loop to
+   the inc clause of the outer for-loop. Since the inc clause cannot have a
+   label, insert a label at the end of the (outer) for-loop body. *)
+let insert_label_for_inc nr_jump_to_inc bc_record addr body =
+  if bc_record.nr_continues + 1 = nr_jump_to_inc then body
+  else
+    match body.txt with
+    | Block stmts ->
+        {
+          body with
+          txt =
+            Block
+              ({
+                 txt = Label (Address addr);
+                 addr = body.addr;
+                 end_addr = body.addr;
+               }
+              :: stmts);
+        }
+    | _ -> failwith "insert_label_for_inc: not implemented"
 
 let reduce_forward_branch cfg node0 branch_target =
   let bb0 = CFG.value_exn node0 in
@@ -677,6 +698,7 @@ let reduce_forward_branch cfg node0 branch_target =
               addr = label1';
               code = { txt = Jump label0; _ }, inc;
               end_addr = label3';
+              nr_jump_srcs = nr_jump_to_inc;
               _;
             } )
           when label0 = bb0.addr && label1 = label1' && label3 = label3' ->
@@ -697,15 +719,18 @@ let reduce_forward_branch cfg node0 branch_target =
             CFG.set node_before_branch_target
               (remove_jump bb_before_branch_target);
             decrement_nr_jump_srcs (CFG.value_exn (CFG.next cfg node2)) 1;
+            let bc_record =
+              {
+                break_continue_record with
+                continue_addr = label1;
+                break_addr = branch_target_addr;
+              }
+            in
             let body =
               CFG.splice cfg (CFG.next cfg node2) branch_target
-              |> generate_break_continue
-                   {
-                     break_continue_record with
-                     continue_addr = label1;
-                     break_addr = branch_target_addr;
-                   }
+              |> generate_break_continue bc_record
               |> collapse
+              |> insert_label_for_inc nr_jump_to_inc bc_record label1
             in
             CFG.set node0
               {
