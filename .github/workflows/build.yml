@@ -35,6 +35,24 @@ jobs:
           dune-cache: true
 
       - name: Install dependencies
+        run: opam install . --deps-only
+
+      - name: Copy license files
+        shell: bash
+        env:
+          SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
+        run: |
+          mkdir -p dist/sys4lang/licenses
+          eval $(opam env)
+          cd "$OPAM_SWITCH_PREFIX/doc"
+          find -type f -name 'LICENSE*' -print0 | while IFS= read -r -d '' file; do
+            echo "$file"
+            dest="${GITHUB_WORKSPACE}/dist/sys4lang/licenses/${file}"
+            mkdir -p "$(dirname "$dest")"
+            cp -- "$file" "$dest"
+          done
+
+      - name: Install test dependencies
         run: opam install . --deps-only --with-test
 
       - name: Build
@@ -48,7 +66,6 @@ jobs:
         env:
           SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
         run: |
-          mkdir -p dist/sys4lang
           cp _build/default/bin/*.exe dist/sys4lang/
           cp README.md CHANGELOG.md COPYING dist/sys4lang/
 
