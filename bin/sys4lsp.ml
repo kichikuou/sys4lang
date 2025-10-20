@@ -110,6 +110,7 @@ class lsp_server =
   end
 
 let run () =
+  Common.TypeAnalysis.loose_functype_check := true;
   Eio_main.run @@ fun env ->
   let s = new lsp_server in
   let server = Linol_eio.Jsonrpc2.create_stdio ~env s in

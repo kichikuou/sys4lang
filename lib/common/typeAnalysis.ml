@@ -18,6 +18,10 @@ open Base
 open Jaf
 open CompileError
 
+(* When true, FuncType None and Delegate None will match any function types.
+   This is necessary for the LSP contexts where functype/delegate information
+   read from ain file is incomplete. *)
+let loose_functype_check = ref false
 let sprintf = Printf.sprintf
 
 (* Implicit dereference of variables and members. *)
@@ -200,6 +204,30 @@ class type_analyze_visitor ctx =
       | Ref _ -> ()
       | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
 
+    (*
+     * Assigning to a functype or delegate variable is special.
+     * The RHS should be an expression like &foo, which has type
+     * 'ref function'. This is then converted into the declared
+     * functype of the variable (if the prototypes match).
+     *)
+    method check_functype_compatible parent functype (expr : expression) =
+      match (functype, expr.ty) with
+      | Some (ft_name, _), TyFunction ft ->
+          let fd = Hashtbl.find_exn ctx.functypes ft_name in
+          if not (ft_compatible (ft_of_fundecl fd) ft) then
+            type_error (FuncType functype) (Some expr) parent
+      | Some (ft_name, _), FuncType (Some (ft2_name, _)) ->
+          let ft = Hashtbl.find_exn ctx.functypes ft_name in
+          let ft2 = Hashtbl.find_exn ctx.functypes ft2_name in
+          if not (ft_compatible (ft_of_fundecl ft) (ft_of_fundecl ft2)) then
+            type_error (FuncType functype) (Some expr) parent
+      | Some _, String -> ()
+      | Some _, NullType -> expr.ty <- FuncType functype
+      | None, (TyFunction _ | FuncType _ | String | NullType)
+        when !loose_functype_check ->
+          ()
+      | _ -> type_check parent (FuncType functype) expr
+
     method check_delegate_compatible parent delegate (expr : expression) =
       let check dg_name ft needs_cast =
         let dt = ft_of_fundecl (Hashtbl.find_exn ctx.delegates dg_name) in
@@ -216,30 +244,14 @@ class type_analyze_visitor ctx =
       | Some _, NullType -> expr.ty <- Delegate delegate
       | Some _, String -> ()
       | None, Delegate None -> ()
+      | None, (TyMethod _ | TyFunction _ | Delegate _ | String | NullType)
+        when !loose_functype_check ->
+          ()
       | _, _ -> type_error (Delegate delegate) (Some expr) parent
 
     method check_assign parent t (rhs : expression) =
       match t with
-      (*
-       * Assigning to a functype or delegate variable is special.
-       * The RHS should be an expression like &foo, which has type
-       * 'ref function'. This is then converted into the declared
-       * functype of the variable (if the prototypes match).
-       *)
-      | FuncType (Some (ft_name, _)) -> (
-          match rhs.ty with
-          | TyFunction ft ->
-              let fd = Hashtbl.find_exn ctx.functypes ft_name in
-              if not (ft_compatible (ft_of_fundecl fd) ft) then
-                type_error t (Some rhs) parent
-          | FuncType (Some (ft2_name, _)) ->
-              let ft = Hashtbl.find_exn ctx.functypes ft_name in
-              let ft2 = Hashtbl.find_exn ctx.functypes ft2_name in
-              if not (ft_compatible (ft_of_fundecl ft) (ft_of_fundecl ft2)) then
-                type_error t (Some rhs) parent
-          | String -> ()
-          | NullType -> rhs.ty <- t
-          | _ -> type_error t (Some rhs) parent)
+      | FuncType ft -> self#check_functype_compatible parent ft rhs
       | Delegate dg -> self#check_delegate_compatible parent dg rhs
       | TyFunction cb -> (
           match rhs.ty with

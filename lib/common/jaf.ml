@@ -632,7 +632,7 @@ let rec jaf_type_to_string = function
   | String -> "string"
   | Struct (s, _) | FuncType (Some (s, _)) | Delegate (Some (s, _)) -> s
   | FuncType None -> "unknown_functype"
-  | Delegate None -> "unknown_functype"
+  | Delegate None -> "unknown_delegate"
   | Ref t -> "ref " ^ jaf_type_to_string t
   | Array _ as a -> (
       match array_base_and_rank a with
