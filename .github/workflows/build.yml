@@ -61,6 +61,9 @@ jobs:
       - name: Unit tests
         run: opam exec -- dune runtest
 
+      - name: Ocamlformat check
+        run: opam exec -- dune build @fmt
+
       - name: Copy the build artifact
         shell: bash
         env:
