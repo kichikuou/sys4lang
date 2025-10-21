@@ -854,18 +854,17 @@ let analyze ctx =
         emit_expression ctx (pop ctx)
     | DG_NUMOF -> builtin2 ctx DG_NUMOF 0
     | DG_NEW_FROM_METHOD -> convert_stack_top_to_delegate ctx
-    | DG_SET -> (
+    | (DG_SET | DG_ADD) as op -> (
         match take_stack ctx with
         | [ func; obj; Deref lvalue ] ->
-            emit_expression ctx
-              (AssignOp (DG_SET, lvalue, delegate_value obj func))
-        | stack -> unexpected_stack "DG_SET" stack)
-    | (DG_ADD | DG_ERASE) as op -> (
-        match take_stack ctx with
-        | [ func; obj; Deref lvalue ] ->
-            emit_expression ctx
-              (Call (Builtin (op, lvalue), [ delegate_value obj func ]))
+            emit_expression ctx (AssignOp (op, lvalue, delegate_value obj func))
         | stack -> unexpected_stack (show_instruction op) stack)
+    | DG_ERASE -> (
+        match take_stack ctx with
+        | [ func; obj; Deref lvalue ] ->
+            emit_expression ctx
+              (Call (Builtin (DG_ERASE, lvalue), [ delegate_value obj func ]))
+        | stack -> unexpected_stack "DG_ERASE" stack)
     | DG_EXIST ->
         update_stack ctx (function
           | Number func_no :: obj :: delg :: stack ->

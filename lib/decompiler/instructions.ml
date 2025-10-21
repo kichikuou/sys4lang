@@ -771,7 +771,6 @@ let builtin_method_name = function
   | A_REVERSE -> "Reverse"
   | DG_CLEAR -> "Clear"
   | DG_EXIST -> "Exist"
-  | DG_ADD -> "Add"
   | FTOS -> "String"
   | insn -> failwith ("no builtin for " ^ show_instruction insn)
 

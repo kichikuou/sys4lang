@@ -142,7 +142,7 @@ let operator insn =
   | DG_SET | PSEUDO_FT_ASSIGNS _ ->
       make_op "=" PREC_ASSIGN Right
   | PSEUDO_REF_ASSIGN -> make_op "<-" PREC_ASSIGN Right
-  | PLUSA | F_PLUSA | LI_PLUSA | S_PLUSA | S_PLUSA2 | DG_PLUSA ->
+  | PLUSA | F_PLUSA | LI_PLUSA | S_PLUSA | S_PLUSA2 | DG_PLUSA | DG_ADD ->
       make_op "+=" PREC_ASSIGN Right
   | MINUSA | F_MINUSA | LI_MINUSA | DG_MINUSA -> make_op "-=" PREC_ASSIGN Right
   | MULA | F_MULA | LI_MULA -> make_op "*=" PREC_ASSIGN Right
