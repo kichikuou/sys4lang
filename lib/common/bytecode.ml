@@ -1302,8 +1302,6 @@ type builtin =
   | ArraySortBy
   | ArrayReverse
   | ArrayFind
-  | DelegateSet
-  | DelegateAdd
   | DelegateNumof
   | DelegateExist
   | DelegateErase
@@ -1347,8 +1345,6 @@ let array_builtin_of_string = function
   | _ -> None
 
 let delegate_builtin_of_string = function
-  | "Set" -> Some DelegateSet
-  | "Add" -> Some DelegateAdd
   | "Numof" -> Some DelegateNumof
   | "Exist" -> Some DelegateExist
   | "Erase" -> Some DelegateErase

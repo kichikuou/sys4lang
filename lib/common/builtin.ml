@@ -171,8 +171,6 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
       make Int "Find"
         [ Int; Int; cb_argtype; TyFunction ([ cb_argtype; cb_argtype ], Bool) ]
         ~defaults:[ None; None; None; cb_default ]
-  | DelegateSet -> make Void "Set" [ delegate_ft receiver_ty ]
-  | DelegateAdd -> make Void "Add" [ delegate_ft receiver_ty ]
   | DelegateNumof -> make Int "Numof" []
   | DelegateExist -> make Int "Exist" [ delegate_ft receiver_ty ]
   | DelegateErase -> make Void "Erase" [ delegate_ft receiver_ty ]

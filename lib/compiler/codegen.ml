@@ -823,9 +823,8 @@ class jaf_compiler ctx debug_info =
           | IntString | FloatString | StringInt | StringLength
           | StringLengthByte | StringEmpty | StringFind | StringGetPart ->
               self#compile_expression e
-          | StringPushBack | StringPopBack | StringErase | DelegateSet
-          | DelegateAdd | DelegateNumof | DelegateExist | DelegateErase
-          | DelegateClear ->
+          | StringPushBack | StringPopBack | StringErase | DelegateNumof
+          | DelegateExist | DelegateErase | DelegateClear ->
               receiver_ty := e.ty;
               self#compile_lvalue e
           | ArrayAlloc | ArrayRealloc | ArrayFree | ArrayNumof | ArrayCopy
@@ -878,8 +877,6 @@ class jaf_compiler ctx debug_info =
           | ArraySortBy -> self#write_instruction0 A_SORT_MEM
           | ArrayReverse -> self#write_instruction0 A_REVERSE
           | ArrayFind -> self#write_instruction0 A_FIND
-          | DelegateSet -> self#write_instruction0 DG_SET
-          | DelegateAdd -> self#write_instruction0 DG_ADD
           | DelegateNumof -> self#write_instruction0 DG_NUMOF
           | DelegateExist -> self#write_instruction0 DG_EXIST
           | DelegateErase -> self#write_instruction0 DG_ERASE
