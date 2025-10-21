@@ -912,6 +912,38 @@ let%expect_test "dg_set_string" =
     094: EOF
     |}]
 
+let%expect_test "dg_add_string" =
+  compile_test
+    {|
+      delegate void dg();
+      void f() {
+        dg d;
+        d += "f";
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: PUSHLOCALPAGE
+    008: PUSH 0
+    014: REF
+    016: DG_CLEAR
+    018: PUSHLOCALPAGE
+    020: PUSH 0
+    026: REF
+    028: S_PUSH "f"
+    034: PUSH -1
+    040: SWAP
+    042: PUSH 0
+    048: DG_STR_TO_METHOD
+    050: DG_ADD
+    052: RETURN
+    054: ENDFUNC f
+    060: EOF test.jaf
+    066: FUNC NULL
+    072: EOF
+    |}]
+
 let%expect_test "dg_erase" =
   compile_test
     {|

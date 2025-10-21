@@ -695,7 +695,12 @@ class jaf_compiler ctx debug_info =
                     (Some (ASTExpression expr)))
           | PlusAssign, String -> (
               match lhs.ty with
-              (* FIXME: delegate *)
+              | Delegate (Some (_, dg_i)) ->
+                  self#write_instruction1 PUSH (-1);
+                  self#write_instruction0 SWAP;
+                  self#write_instruction1 PUSH dg_i;
+                  self#write_instruction0 DG_STR_TO_METHOD;
+                  self#write_instruction0 DG_ADD
               | String -> self#write_instruction0 S_PLUSA2
               | _ ->
                   compiler_bug "invalid string assignment"
