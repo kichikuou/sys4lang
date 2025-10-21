@@ -247,7 +247,7 @@ class type_analyze_visitor ctx =
       | None, (TyMethod _ | TyFunction _ | Delegate _ | String | NullType)
         when !loose_functype_check ->
           ()
-      | _, _ -> type_error (Delegate delegate) (Some expr) parent
+      | _ -> type_check parent (Delegate delegate) expr
 
     method check_assign parent t (rhs : expression) =
       match t with

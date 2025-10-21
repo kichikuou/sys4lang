@@ -827,6 +827,9 @@ let%expect_test "dg_return_null" =
       dg f() {
         return NULL;
       }
+      unknown_delegate g() {
+        return NULL;
+      }
     |};
   [%expect
     {|
@@ -836,9 +839,15 @@ let%expect_test "dg_return_null" =
     010: PUSH -1
     016: RETURN
     018: ENDFUNC f
-    024: EOF test.jaf
-    030: FUNC NULL
-    036: EOF
+    024: FUNC g
+    030: DG_NEW
+    032: RETURN
+    034: PUSH -1
+    040: RETURN
+    042: ENDFUNC g
+    048: EOF test.jaf
+    054: FUNC NULL
+    060: EOF
     |}]
 
 let%expect_test "dg_add" =
