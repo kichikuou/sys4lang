@@ -24,7 +24,8 @@ let decompile_function (f : CodeSection.function_t) =
       |> BasicBlock.generate_var_decls f.func
       |> ControlFlow.analyze
       |> TypeAnalysis.analyze_function f.func f.struc
-      |> Transform.rename_labels |> Transform.recover_loop_initializer
+      |> Transform.expand_else_scope |> Transform.rename_labels
+      |> Transform.recover_loop_initializer
       |> Transform.remove_implicit_array_free
       |> Transform.remove_array_free_for_dead_arrays
       |> Transform.remove_generated_lockpeek
@@ -32,8 +33,7 @@ let decompile_function (f : CodeSection.function_t) =
       |> Transform.remove_dummy_variable_assignment
       |> Transform.remove_vardecl_default_rhs
       |> Transform.fold_newline_func_to_msg
-      |> Transform.remove_optional_arguments
-      |> if Ain.ain.vers >= 6 then Transform.simplify_boolean_expr else Fn.id
+      |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
     in
     CodeGen.{ func = f.func; struc = f.struc; name = f.name; body }
   with e ->
@@ -41,7 +41,7 @@ let decompile_function (f : CodeSection.function_t) =
     raise e
 
 let inspect_function (f : CodeSection.function_t) ~print_addr =
-  (BasicBlock.create f
+  BasicBlock.create f
   |> (fun bbs ->
   Stdio.printf "BasicBlock representation:\n%s\n\n"
     ([%show: BasicBlock.t list] bbs);
@@ -52,14 +52,13 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
   |> TypeAnalysis.analyze_function f.func f.struc
-  |> Transform.rename_labels |> Transform.recover_loop_initializer
-  |> Transform.remove_implicit_array_free
+  |> Transform.expand_else_scope |> Transform.rename_labels
+  |> Transform.recover_loop_initializer |> Transform.remove_implicit_array_free
   |> Transform.remove_array_free_for_dead_arrays
   |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
   |> Transform.remove_dummy_variable_assignment
   |> Transform.remove_vardecl_default_rhs |> Transform.fold_newline_func_to_msg
-  |> Transform.remove_optional_arguments
-  |> if Ain.ain.vers >= 6 then Transform.simplify_boolean_expr else Fn.id)
+  |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
   |> fun body ->
   Stdio.printf "\nDecompiled code:\n";
   CodeGen.(

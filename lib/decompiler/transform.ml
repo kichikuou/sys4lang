@@ -20,6 +20,101 @@ open Loc
 
 type ast_transform = statement loc -> statement loc
 
+(* Rewrites
+      if (cond) { /*empty*/ } else {
+        <else-body>
+      }
+   to
+      if (cond)
+        goto label;
+      <else-body>
+      label:
+   if <else-body> contains declarations for variables used in the rest of the function. *)
+let expand_else_scope stmt =
+  let live_vars = ref Set.Poly.empty in
+  let process_expr =
+    walk_expr ~lvalue_cb:(function
+      | PageRef (LocalPage, v) -> live_vars := Set.Poly.add !live_vars v
+      | _ -> ())
+  in
+  let process_expr_opt = Option.iter ~f:process_expr in
+  let rec process_stmt stmt =
+    let return txt = [ { stmt with txt } ] in
+    match stmt.txt with
+    | VarDecl (_, None) -> [ stmt ]
+    | VarDecl (_, Some (_, e)) ->
+        process_expr e;
+        [ stmt ]
+    | Expression e ->
+        process_expr e;
+        [ stmt ]
+    | Label _ -> [ stmt ]
+    | IfElse (e, ({ txt = Block []; _ } as stmt1), stmt2) -> (
+        let live_vars_after_else = !live_vars in
+        let has_decls_for_live_vars { txt; _ } =
+          match txt with
+          | VarDecl (v, _) ->
+              if Set.Poly.mem live_vars_after_else v then true else false
+          | _ -> false
+        in
+        match rec_stmt stmt2 with
+        | { txt = Block stmts; _ } as stmt2
+          when List.exists stmts ~f:has_decls_for_live_vars ->
+            let goto_stmt = { stmt1 with txt = Goto (stmt2.end_addr, -1) } in
+            let else_block = { stmt1 with txt = Block [] } in
+            let label =
+              {
+                txt = Label (Address stmt2.end_addr);
+                addr = stmt2.end_addr;
+                end_addr = stmt2.end_addr;
+              }
+            in
+            let if_stmt =
+              { stmt with txt = IfElse (e, goto_stmt, else_block) }
+            in
+            (label :: stmts) @ [ if_stmt ]
+        | _ -> return (IfElse (e, stmt1, stmt2)))
+    | IfElse (e, stmt1, stmt2) ->
+        let stmt1 = rec_stmt stmt1 in
+        let stmt2 = rec_stmt stmt2 in
+        return @@ IfElse (e, stmt1, stmt2)
+    | While (cond, body) ->
+        let body = rec_stmt body in
+        process_expr cond;
+        return @@ While (cond, body)
+    | DoWhile (body, cond) ->
+        process_expr cond.txt;
+        let body = rec_stmt body in
+        return @@ DoWhile (body, cond)
+    | For (init, cond, inc, body) ->
+        let body = rec_stmt body in
+        process_expr_opt init;
+        process_expr_opt cond;
+        process_expr_opt inc;
+        return @@ For (init, cond, inc, body)
+    | Break -> [ stmt ]
+    | Continue -> [ stmt ]
+    | Goto _ -> [ stmt ]
+    | Return e ->
+        process_expr_opt e;
+        [ stmt ]
+    | ScenarioJump _ -> [ stmt ]
+    | Msg (_, e) ->
+        process_expr_opt e;
+        [ stmt ]
+    | Assert e ->
+        process_expr e;
+        [ stmt ]
+    | Block stmts ->
+        return @@ Block (List.concat (List.map stmts ~f:process_stmt))
+        (* reversed order *)
+    | Switch (id, e, stmt) ->
+        let stmt = rec_stmt stmt in
+        process_expr e;
+        return @@ Switch (id, e, stmt)
+  and rec_stmt stmt = make_block (process_stmt stmt) in
+  if Ain.ain.ifthen_optimized then rec_stmt stmt else stmt
+
 let rename_labels stmt =
   let targets = ref [] in
   walk_statement stmt ~f:(function
@@ -31,13 +126,16 @@ let rename_labels stmt =
     |> List.mapi ~f:(fun i addr -> (addr, i))
     |> Hashtbl.of_alist_exn (module Int)
   in
+  let last_label_addr = ref (-1) in
   let rec update stmt =
     let txt =
       match stmt.txt with
       | Label (Address addr) -> (
           match Hashtbl.find targets addr with
-          | Some i -> Label (Address i)
-          | None -> Block [] (* remove unused label *))
+          | Some i when addr <> !last_label_addr ->
+              last_label_addr := addr;
+              Label (Address i)
+          | _ -> Block [] (* remove unused or duplicate labels *))
       | IfElse (e, stmt1, stmt2) -> IfElse (e, update stmt1, update stmt2)
       | While (cond, body) -> While (cond, update body)
       | DoWhile (body, cond) -> DoWhile (update body, cond)
@@ -234,13 +332,15 @@ let remove_optional_arguments =
     | Call ((Builtin2 (FTOS, _) as f), [ Number -1l ]) -> Call (f, [])
     | expr -> expr)
 
-let simplify_boolean_expr =
-  map_expr ~f:(function
-    | UnaryOp (NOT, BinaryOp (GT, e1, e2)) -> BinaryOp (LTE, e1, e2)
-    | UnaryOp (NOT, BinaryOp (LT, e1, e2)) -> BinaryOp (GTE, e1, e2)
-    | UnaryOp (NOT, BinaryOp (GTE, e1, e2)) -> BinaryOp (LT, e1, e2)
-    | UnaryOp (NOT, BinaryOp (LTE, e1, e2)) -> BinaryOp (GT, e1, e2)
-    | UnaryOp (NOT, BinaryOp (EQUALE, e1, e2)) -> BinaryOp (NOTE, e1, e2)
-    | UnaryOp (NOT, BinaryOp (NOTE, e1, e2)) -> BinaryOp (EQUALE, e1, e2)
-    | BinaryOp (NOTE, e, Boolean false) -> e
-    | expr -> expr)
+let simplify_boolean_expr stmt =
+  if Ain.ain.vers < 6 then stmt
+  else
+    map_expr stmt ~f:(function
+      | UnaryOp (NOT, BinaryOp (GT, e1, e2)) -> BinaryOp (LTE, e1, e2)
+      | UnaryOp (NOT, BinaryOp (LT, e1, e2)) -> BinaryOp (GTE, e1, e2)
+      | UnaryOp (NOT, BinaryOp (GTE, e1, e2)) -> BinaryOp (LT, e1, e2)
+      | UnaryOp (NOT, BinaryOp (LTE, e1, e2)) -> BinaryOp (GT, e1, e2)
+      | UnaryOp (NOT, BinaryOp (EQUALE, e1, e2)) -> BinaryOp (NOTE, e1, e2)
+      | UnaryOp (NOT, BinaryOp (NOTE, e1, e2)) -> BinaryOp (EQUALE, e1, e2)
+      | BinaryOp (NOTE, e, Boolean false) -> e
+      | expr -> expr)

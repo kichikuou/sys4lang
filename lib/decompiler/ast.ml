@@ -271,8 +271,7 @@ let map_expr stmt ~f =
   in
   rec_stmt stmt
 
-let walk ?(stmt_cb = fun _ -> ()) ?(expr_cb = fun _ -> ())
-    ?(lvalue_cb = fun _ -> ()) stmt =
+let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
   let rec rec_expr expr =
     expr_cb expr;
     match expr with
@@ -338,6 +337,11 @@ let walk ?(stmt_cb = fun _ -> ()) ?(expr_cb = fun _ -> ())
     | Builtin (_, lval) -> rec_lvalue lval
     | Builtin2 (_, expr) -> rec_expr expr
   in
+  rec_expr
+
+let walk ?(stmt_cb = fun _ -> ()) ?(expr_cb = fun _ -> ())
+    ?(lvalue_cb = fun _ -> ()) stmt =
+  let rec_expr = walk_expr ~expr_cb ~lvalue_cb in
   let rec rec_stmt { txt = stmt; _ } =
     stmt_cb stmt;
     match stmt with

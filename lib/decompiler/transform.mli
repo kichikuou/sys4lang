@@ -19,6 +19,8 @@ open Loc
 
 type ast_transform = statement loc -> statement loc
 
+val expand_else_scope : ast_transform
+
 (* Assigns sequential numbers to labels, and removes unnecessary labels. *)
 val rename_labels : ast_transform
 
