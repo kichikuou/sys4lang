@@ -643,6 +643,29 @@ let%expect_test "wrong constructor name" =
           3 |         X();
                       ^^^^ |}]
 
+let%expect_test "forbidden array expressions" =
+  type_test
+    {|
+      void f(ref array@int ra) {
+        array@int a;
+        a;
+        for (;; a) {}
+        ra, 1;
+      }
+    |};
+  [%expect
+    {|
+    -:4:9-10: array expression not allowed here
+        4 |         a;
+                    ^
+    -:5:17-18: array expression not allowed here
+        5 |         for (;; a) {}
+                            ^
+    -:6:9-11: array expression not allowed here
+        6 |         ra, 1;
+                    ^^
+    |}]
+
 let%expect_test "Array.Sort() callback" =
   type_test
     {|

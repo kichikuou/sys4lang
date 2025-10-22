@@ -129,6 +129,12 @@ let type_check_member_lhs parent (actual : expression) =
       compiler_bug "tried to type check untyped expression" (Some parent)
   | _ -> type_error (Struct ("struct", 0)) (Some actual) parent
 
+let check_not_array e =
+  match e.ty with
+  | Array _ | Ref (Array _) ->
+      compile_error "array expression not allowed here" (ASTExpression e)
+  | _ -> ()
+
 let is_builtin = function
   | Int | Float | String | Array _ | Delegate _ -> true
   | Ref (Int | Float | String | Array _ | Delegate _) -> true
@@ -504,7 +510,9 @@ class type_analyze_visitor ctx =
           match (lhs.ty, rhs.ty) with
           | Delegate _, (TyMethod _ | String) -> expr.ty <- Void
           | _ -> expr.ty <- rhs.ty)
-      | Seq (_, e) -> expr.ty <- e.ty
+      | Seq (e1, e2) ->
+          check_not_array e1;
+          expr.ty <- e2.ty
       | Ternary (test, con, alt) ->
           check Int test;
           maybe_deref con;
@@ -705,13 +713,14 @@ class type_analyze_visitor ctx =
               in
               self#visit_expression expr;
               stmt.node <- Expression expr
-          | Expression _ -> ()
+          | Expression e -> check_not_array e
           | Compound _ -> ()
           | Label _ -> ()
           | If (test, _, _) | While (test, _) | DoWhile (test, _) ->
               type_check (ASTStatement stmt) Int test
-          | For (_, Some test, _, _) -> type_check (ASTStatement stmt) Int test
-          | For (_, None, _, _) -> ()
+          | For (_, test, inc, _) ->
+              Option.iter ~f:(type_check (ASTStatement stmt) Int) test;
+              Option.iter ~f:check_not_array inc
           | Goto _ -> ()
           | Continue -> ()
           | Break -> ()
