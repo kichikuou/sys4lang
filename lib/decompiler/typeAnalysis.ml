@@ -361,9 +361,14 @@ let analyze_function (func : Ain.Function.t) (struc : Ain.Struct.t option) stmt
                   (Ain.FuncType.to_type Ain.ain.fnct.(ft_id))
             | _ -> ());
             VarDecl (var, Some (insn, expr'))
-        | Expression expr ->
-            let expr', _ = analyze_expr Any expr in
-            Expression expr'
+        | Expression expr -> (
+            match analyze_expr Any expr with
+            | _, Array _ ->
+                Stdio.eprintf
+                  "Warning: %s: Removing array expression at statement position:\n"
+                  func.name;
+                Block []
+            | expr, _ -> Expression expr)
         | Label _ as stmt -> stmt
         | Block stmts -> Block (List.map stmts ~f:analyze_statement)
         | IfElse (cond, stmt1, stmt2) ->
