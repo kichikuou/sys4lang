@@ -647,8 +647,14 @@ let print_hll_function pr (func : Ain.HLL.function_t) =
 
 let print_hll_inc pr =
   println pr "SystemSource = {";
+  let printed = Hash_set.create (module String) in
   Array.iter Ain.ain.hll0 ~f:(fun hll ->
-      println pr "\t\"%s.hll\",\t\"%s\"," hll.name hll.name);
+      if Hash_set.mem printed hll.name then
+        Stdio.eprintf "Warning: %s: Removing duplicate HLL include for %s.hll\n"
+          pr.file hll.name
+      else (
+        Hash_set.add printed hll.name;
+        println pr "\t\"%s.hll\",\t\"%s\"," hll.name hll.name));
   println pr "}"
 
 let print_inc pr srcs =
