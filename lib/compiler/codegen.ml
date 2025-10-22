@@ -434,9 +434,11 @@ class jaf_compiler ctx debug_info =
           | Method ->
               (* XXX: for delegate builtins *)
               self#compile_expression expr
-          | Delegate _ ->
+          | Delegate _ -> (
               self#compile_expression expr;
-              self#write_instruction0 DG_NEW_FROM_METHOD
+              match expr.ty with
+              | TyMethod _ -> self#write_instruction0 DG_NEW_FROM_METHOD
+              | _ -> ())
           | _ -> self#compile_expression expr)
 
     method compile_function_arguments args (f : Ain.Function.t) =

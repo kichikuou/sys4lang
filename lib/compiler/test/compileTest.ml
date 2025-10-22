@@ -850,7 +850,7 @@ let%expect_test "dg_return_null" =
     060: EOF
     |}]
 
-let%expect_test "dg_add" =
+let%expect_test "dg_set" =
   compile_test
     {|
       delegate void dg();
@@ -972,4 +972,39 @@ let%expect_test "dg_erase" =
     052: EOF test.jaf
     058: FUNC NULL
     064: EOF
+    |}]
+
+let%expect_test "dg_argument" =
+  compile_test
+    {|
+      delegate void dg();
+      class C {
+        void f() {
+          g(this.f);
+        }
+        void g(dg d) {
+          g(d);
+        }
+      };
+    |};
+  [%expect
+    {|
+    000: FUNC C@f
+    006: PUSHSTRUCTPAGE
+    008: PUSHSTRUCTPAGE
+    010: PUSH 1
+    016: DG_NEW_FROM_METHOD
+    018: CALLMETHOD C@g
+    024: RETURN
+    026: FUNC C@g
+    032: PUSHSTRUCTPAGE
+    034: PUSHLOCALPAGE
+    036: PUSH 0
+    042: REF
+    044: DG_COPY
+    046: CALLMETHOD C@g
+    052: RETURN
+    054: EOF test.jaf
+    060: FUNC NULL
+    066: EOF
     |}]
