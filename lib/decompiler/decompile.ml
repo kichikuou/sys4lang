@@ -110,7 +110,11 @@ type decompiled_ain = {
 let remove_known_broken_functions =
   let is_broken_function = function
     (* Rance 03: Calling GlobalGameTimer::setSkipFunction(string) with (int, string) *)
-    | "DJCPP\\tester\\_TestLibrary.jaf", "test_Timer" -> true
+    | "DJCPP\\tester\\_TestLibrary.jaf", "test_Timer"
+    (* Evenicle: Calling array@int.Find() with string argument *)
+    | "プログラム\\汎用クラス\\簡略処理.jaf", "FindStringArray"
+    | "プログラム\\汎用クラス\\簡略処理.jaf", "EraseValueStringArray" ->
+        true
     | _ -> false
   in
   List.map ~f:(fun (fname, funcs) ->
