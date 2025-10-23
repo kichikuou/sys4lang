@@ -48,7 +48,7 @@ val print_struct_decl : printer -> struct_t -> unit
 val print_functype_decl : printer -> string -> Ain.FuncType.t -> unit
 val print_globals : printer -> variable list -> unit
 val print_constants : printer -> unit
-val print_hll_function : printer -> Ain.HLL.function_t -> unit
+val print_hll : printer -> Ain.HLL.function_t array -> unit
 val print_hll_inc : printer -> unit
 val print_inc : printer -> string list -> unit
 val print_pje : printer -> project_t -> unit

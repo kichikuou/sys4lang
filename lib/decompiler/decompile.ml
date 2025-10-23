@@ -204,9 +204,7 @@ let export decompiled ain_path output_to_printer ~print_addr =
   Array.iter Ain.ain.hll0 ~f:(fun hll ->
       output_to_printer
         ("HLL/" ^ hll.name ^ ".hll")
-        (fun pr ->
-          Array.iter hll.functions ~f:(fun func ->
-              CodeGen.print_hll_function pr func)));
+        (fun pr -> CodeGen.print_hll pr hll.functions));
   output_source "HLL\\hll.inc" (fun pr -> CodeGen.print_hll_inc pr);
   List.iter decompiled.srcs ~f:(fun (fname, funcs) ->
       if not (List.is_empty funcs) then

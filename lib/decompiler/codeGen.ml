@@ -647,6 +647,14 @@ let print_hll_function pr (func : Ain.HLL.function_t) =
   | [] -> println pr "(void);"
   | args -> println pr "(%a);" (pr_param_list (pr_vardecl pr)) args
 
+let print_hll pr (funcs : Ain.HLL.function_t array) =
+  let printed = Hash_set.create (module String) in
+  Array.iter funcs ~f:(fun func ->
+      if Hash_set.mem printed func.name then
+        print_string pr.oc "// (duplicated) "
+      else Hash_set.add printed func.name;
+      print_hll_function pr func)
+
 let print_hll_inc pr =
   println pr "SystemSource = {";
   let printed = Hash_set.create (module String) in
