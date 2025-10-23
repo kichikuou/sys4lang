@@ -166,6 +166,8 @@ let operator insn =
   | GTE | F_GTE | S_GTE -> make_op ">=" PREC_ORDER Left
   | LSHIFT -> make_op "<<" PREC_BITSHIFT Left
   | RSHIFT -> make_op ">>" PREC_BITSHIFT Left
+  | LSHIFTA -> make_op "<<=" PREC_ASSIGN Right
+  | RSHIFTA -> make_op ">>=" PREC_ASSIGN Right
   | ADD | F_ADD | LI_ADD | S_ADD -> make_op "+" PREC_ADD Left
   | SUB | F_SUB | LI_SUB -> make_op "-" PREC_ADD Left
   | MUL | F_MUL | LI_MUL -> make_op "*" PREC_MUL Left
