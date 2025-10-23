@@ -117,4 +117,5 @@ let debug_info_path pje =
   concat (dirname pje.pje_path) "debug_info.json"
 
 let create_ain pje =
-  Ain.create ~is_ain2:pje.is_ai2_file ~keyc:pje.key_code pje.ain_version 0
+  Ain.create ~is_ain2:pje.is_ai2_file ~keyc:pje.key_code ~use_msg1:pje.uses_msg1
+    pje.ain_version 0

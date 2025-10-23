@@ -454,7 +454,8 @@ type t = {
   string_table : (string, int) Hashtbl.t;
 }
 
-let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
+let create ?is_ain2 ?(keyc = 0l) ?(use_msg1 = false) major_version minor_version
+    =
   {
     is_ain2 = Option.value is_ain2 ~default:(major_version >= 5);
     major_version;
@@ -478,7 +479,7 @@ let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
     delegates = [||];
     global_group_names = [||];
     enums = [||];
-    use_msg1 = false;
+    use_msg1;
     string_table = Hashtbl.create (module String);
   }
 
@@ -697,7 +698,7 @@ let read_msg1_strings buf count =
       let c = Char.to_int (Bytes.get data i) in
       Bytes.set data i (Char.of_int_exn ((c - 0x60 - i) % 256))
     done;
-    Bytes.to_string data
+    Bytes.to_string data |> Sjis.to_utf8
   in
   let rec read_msg1_strings' count result =
     if count > 0 then
@@ -936,7 +937,7 @@ module BinBuffer = struct
 end
 
 let write_msg1_string buf s =
-  let tmp = Bytes.of_string s in
+  let tmp = Bytes.of_string (Sjis.from_utf8 s) in
   let len = Bytes.length tmp in
   BinBuffer.add_int buf len;
   for i = 0 to len - 1 do
