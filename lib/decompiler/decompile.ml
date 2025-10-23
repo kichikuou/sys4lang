@@ -107,25 +107,6 @@ type decompiled_ain = {
   srcs : (string * CodeGen.function_t list) list;
 }
 
-let remove_known_broken_functions =
-  let is_broken_function = function
-    (* Rance 03: Calling GlobalGameTimer::setSkipFunction(string) with (int, string) *)
-    | "DJCPP\\tester\\_TestLibrary.jaf", "test_Timer"
-    (* Evenicle: Calling array@int.Find() with string argument *)
-    | "プログラム\\汎用クラス\\簡略処理.jaf", "FindStringArray"
-    | "プログラム\\汎用クラス\\簡略処理.jaf", "EraseValueStringArray" ->
-        true
-    | _ -> false
-  in
-  List.map ~f:(fun (fname, funcs) ->
-      ( fname,
-        List.filter funcs ~f:(fun f ->
-            if is_broken_function (fname, f.CodeSection.func.name) then (
-              Stdio.eprintf "Warning: Removing known broken function %s\n"
-                f.CodeSection.func.name;
-              false)
-            else true) ))
-
 let is_rance7_bad_function (f : CodeGen.function_t) =
   match f with
   | {
@@ -143,7 +124,7 @@ let decompile move_to_original_file =
   let files =
     CodeSection.parse code
     |> CodeSection.remove_overridden_functions ~move_to_original_file
-    |> remove_known_broken_functions
+    |> CodeSection.fix_or_remove_known_broken_functions
   in
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->

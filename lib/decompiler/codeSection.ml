@@ -168,3 +168,75 @@ let remove_overridden_functions ~move_to_original_file files =
           List.filter funcs ~f:(fun f -> f.func.address = func_addr f)
         in
         if List.is_empty funcs then None else Some (fname, funcs))
+
+(* Fix out-of-function jumps in MangaGamer Rance 6 SP_CREATE_REAL() *)
+let fix_mg_rance6_sp_create_real f =
+  let { addr = func_top_addr; _ } = List.hd_exn f.code in
+  let fixed = ref false in
+  let rec filter_code = function
+    | ({ txt = IFZ addr1; _ } as i1)
+      :: ({ txt = RETURN; _ } as i2)
+      :: ({ txt = JUMP addr2; end_addr = target; _ } as i3)
+      :: rest
+      when addr1 < func_top_addr && addr1 = addr2 ->
+        fixed := true;
+        { i1 with txt = IFZ target }
+        :: i2
+        :: { i3 with txt = JUMP target }
+        :: filter_code rest
+    | [] -> []
+    | insn :: rest -> insn :: filter_code rest
+  in
+  let code = filter_code f.code in
+  if !fixed then
+    Stdio.eprintf "Warning: Fixed jump addresses in SP_CREATE_REAL()\n";
+  { f with code }
+
+(* Fix out-of-function jumps in MangaGamer Rance 6 SP_SET_CG_REAL() *)
+let fix_mg_rance6_sp_set_cg_real f =
+  let { addr = func_top_addr; _ } = List.hd_exn f.code in
+  let fixed = ref false in
+  let rec filter_code = function
+    | ({ txt = IFZ addr1; _ } as i1)
+      :: ({ txt = PUSH 0l; _ } as i2)
+      :: ({ txt = RETURN; _ } as i3)
+      :: ({ txt = JUMP addr2; end_addr = target; _ } as i4)
+      :: rest
+      when addr1 < func_top_addr && addr1 = addr2 ->
+        fixed := true;
+        { i1 with txt = IFZ target }
+        :: i2 :: i3
+        :: { i4 with txt = JUMP target }
+        :: filter_code rest
+    | [] -> []
+    | insn :: rest -> insn :: filter_code rest
+  in
+  let code = filter_code f.code in
+  if !fixed then
+    Stdio.eprintf "Warning: Fixed jump addresses in SP_SET_CG_REAL()\n";
+  { f with code }
+
+let fix_or_remove_known_broken_functions =
+  let is_broken_function = function
+    (* Rance 03: Calling GlobalGameTimer::setSkipFunction(string) with (int, string) *)
+    | "DJCPP\\tester\\_TestLibrary.jaf", "test_Timer"
+    (* Evenicle: Calling array@int.Find() with string argument *)
+    | "プログラム\\汎用クラス\\簡略処理.jaf", "FindStringArray"
+    | "プログラム\\汎用クラス\\簡略処理.jaf", "EraseValueStringArray" ->
+        true
+    | _ -> false
+  in
+  let fix_function fname f =
+    match (fname, f.func.name) with
+    | "remaining.jaf", "SP_CREATE_REAL" -> fix_mg_rance6_sp_create_real f
+    | "remaining.jaf", "SP_SET_CG_REAL" -> fix_mg_rance6_sp_set_cg_real f
+    | _ -> f
+  in
+  List.map ~f:(fun (fname, funcs) ->
+      ( fname,
+        List.filter_map funcs ~f:(fun f ->
+            if is_broken_function (fname, f.func.name) then (
+              Stdio.eprintf "Warning: Removing known broken function %s\n"
+                f.func.name;
+              None)
+            else Some (fix_function fname f)) ))

@@ -41,3 +41,6 @@ val remove_overridden_functions :
   move_to_original_file:bool ->
   (string * function_t list) list ->
   (string * function_t list) list
+
+val fix_or_remove_known_broken_functions :
+  (string * function_t list) list -> (string * function_t list) list
