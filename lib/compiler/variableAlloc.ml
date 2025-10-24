@@ -156,7 +156,6 @@ class variable_alloc_visitor ctx =
 
     method create_dummy_var name ty =
       (* create dummy ref variable to store object for extent of statement *)
-      let index = List.length vars in
       let v =
         {
           name = Printf.sprintf "<dummy : %s : %d>" name !dummy_var_seqno;
@@ -167,13 +166,13 @@ class variable_alloc_visitor ctx =
           kind = LocalVar;
           type_spec = { ty; location = dummy_location };
           initval = None;
-          index = Some index;
+          index = None;
         }
       in
+      self#add_var v;
       environment#push_var v;
-      vars <- v :: vars;
       dummy_var_seqno := !dummy_var_seqno + 1;
-      index
+      Option.value_exn v.index
 
     method! visit_expression expr =
       super#visit_expression expr;
