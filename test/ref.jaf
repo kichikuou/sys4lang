@@ -19,9 +19,14 @@ struct S {
 	ref int a;
 };
 
-ref int ref_int()
+ref int ref_int(int val)
 {
-	return NULL;
+	return val;
+}
+
+ref int ternary(bool b)
+{
+	return b ? ref_int(42) : ref_int(43);
 }
 
 class C {
@@ -93,6 +98,9 @@ int main()
 	new_C();
 	assert(new_C().get() == 42);
 	assert(new_C().n == 42);
+
+	ra <- ternary(1);
+	assert(ra == 42);
 
 	return 0;
 }

@@ -316,6 +316,38 @@ let%expect_test "bool ? ref int : int" =
       078: EOF
     |}]
 
+let%expect_test "bool ? ref : ref" =
+  compile_test
+    {|
+      ref int f(bool b) {
+        return b ? f(b) : NULL;
+      }
+  |};
+  [%expect
+    {|
+    000: FUNC f
+    006: SH_LOCALREF b
+    012: IFZ 46
+    018: PUSHLOCALPAGE
+    020: PUSH 1
+    026: SH_LOCALREF b
+    032: CALLFUNC f
+    038: R_ASSIGN
+    040: JUMP 58
+    046: PUSH -1
+    052: PUSH 0
+    058: DUP_U2
+    060: SP_INC
+    062: RETURN
+    064: PUSH -1
+    070: PUSH 0
+    076: RETURN
+    078: ENDFUNC f
+    084: EOF test.jaf
+    090: FUNC NULL
+    096: EOF
+    |}]
+
 let%expect_test "assign this" =
   compile_test
     {|

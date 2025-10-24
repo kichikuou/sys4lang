@@ -404,6 +404,16 @@ class jaf_compiler ctx debug_info =
               compiler_bug
                 ("unimplemented: NULL lvalue of type " ^ jaf_type_to_string ty)
                 (Some (ASTExpression e)))
+      | Ternary (test, con, alt) ->
+          self#compile_expression test;
+          let ifz_addr = current_address + 2 in
+          self#write_instruction1 IFZ 0;
+          self#compile_lvalue con;
+          let jump_addr = current_address + 2 in
+          self#write_instruction1 JUMP 0;
+          self#write_address_at ifz_addr current_address;
+          self#compile_lvalue alt;
+          self#write_address_at jump_addr current_address
       | _ ->
           compiler_bug
             ("invalid lvalue: " ^ expr_to_string e)
