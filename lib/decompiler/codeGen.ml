@@ -251,6 +251,21 @@ and pr_expr ?parent_op prec oc = function
   | AssignOp (insn, lval, rhs) ->
       let op = operator insn in
       pr_binary_op parent_op prec op oc (Deref lval) rhs
+  | TernaryOp
+      ( expr1,
+        (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr2),
+        (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr3) ) ->
+      (* For Rance 9: ref_int = bool ? ref_int : ref_int
+         Add casts so that the right hand side of the assignment is an int
+         instead of a ref int *)
+      let op_prec = prec_value PREC_QUESTION in
+      open_paren prec op_prec oc;
+      fprintf oc "%a ? int(%a) : int(%a)"
+        (pr_expr (op_prec + 1))
+        expr1
+        (pr_expr (op_prec + 1))
+        expr2 (pr_expr op_prec) expr3;
+      close_paren prec op_prec oc
   | TernaryOp (expr1, expr2, expr3) ->
       let op_prec = prec_value PREC_QUESTION in
       open_paren prec op_prec oc;

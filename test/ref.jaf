@@ -41,6 +41,10 @@ ref C new_C()
 	return new C;
 }
 
+bool true() {
+	return 1;
+}
+
 int main()
 {
 	int i;
@@ -64,7 +68,8 @@ int main()
 	assert(g_ri === ra);
 	ra <- a;
 	rb <- NULL;
-	assert(a == (1 ? ra : rb));
+	assert(g_ri === (true() ? ra : rb));
+	assert(a == (true() ? (int)ra : (int)rb));
 
 	float f;
 	floatref(f);
