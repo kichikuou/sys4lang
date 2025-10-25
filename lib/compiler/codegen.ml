@@ -1105,16 +1105,17 @@ class jaf_compiler ctx debug_info =
       | Default -> self#set_switch_default (ASTStatement stmt)
       | Return None -> self#write_instruction0 RETURN
       | Return (Some e) ->
-          (match (Option.value_exn current_function).return_type with
-          | Ref (Int | Float | Bool | LongInt | FuncType _) ->
+          (match ((Option.value_exn current_function).return_type, e.node) with
+          | Ref _, Null -> self#compile_lvalue e
+          | Ref (Int | Float | Bool | LongInt | FuncType _), _ ->
               self#compile_lvalue e;
               self#write_instruction0 DUP_U2;
               self#write_instruction0 SP_INC
-          | Ref (String | Struct _ | Array _) ->
+          | Ref (String | Struct _ | Array _), _ ->
               self#compile_lvalue e;
               self#write_instruction0 DUP;
               self#write_instruction0 SP_INC
-          | Ref _ ->
+          | Ref _, _ ->
               compile_error "return statement not implemented for ref type"
                 (ASTStatement stmt)
           | _ -> self#compile_expression e);

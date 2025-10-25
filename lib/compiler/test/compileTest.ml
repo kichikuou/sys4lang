@@ -287,6 +287,38 @@ let%expect_test "function returning ref" =
       054: EOF
   |}]
 
+let%expect_test "ref_return_null" =
+  compile_test
+    {|
+      struct S {};
+      ref S f() {
+        return NULL;
+      }
+      ref int g() {
+        return NULL;
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: PUSH -1
+    012: RETURN
+    014: PUSH -1
+    020: RETURN
+    022: ENDFUNC f
+    028: FUNC g
+    034: PUSH -1
+    040: PUSH 0
+    046: RETURN
+    048: PUSH -1
+    054: PUSH 0
+    060: RETURN
+    062: ENDFUNC g
+    068: EOF test.jaf
+    074: FUNC NULL
+    080: EOF
+    |}]
+
 let%expect_test "bool ? ref int : int" =
   compile_test
     {|
