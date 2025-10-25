@@ -54,8 +54,9 @@ type t = {
   mutable formations : formation list;
   mutable sync_lock : bool;
   mutable update_ide_path : string option;
-  (* AinDecompiler extensions *)
+  (* sys4lang extensions *)
   mutable ain_version : int;
+  mutable ain_minor_version : int;
   mutable key_code : int32;
   mutable is_ai2_file : bool;
   mutable uses_msg1 : bool;
@@ -89,6 +90,7 @@ let default_pje path encoding =
     sync_lock = false;
     update_ide_path = None;
     ain_version = 4;
+    ain_minor_version = 0;
     key_code = 0l;
     is_ai2_file = false;
     uses_msg1 = false;
@@ -118,4 +120,4 @@ let debug_info_path pje =
 
 let create_ain pje =
   Ain.create ~is_ain2:pje.is_ai2_file ~keyc:pje.key_code ~use_msg1:pje.uses_msg1
-    pje.ain_version 0
+    pje.ain_version pje.ain_minor_version

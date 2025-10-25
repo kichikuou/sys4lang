@@ -62,6 +62,7 @@ let to_pje toplevels path initial_encoding =
     | KeyValue ("UpdateIDEPath", String v) -> pje.update_ide_path <- Some (to_unix_path v)
     | KeyValue (k, _) -> raise (KeyError k)
     | HashDefine ("_AINVERSION", Int v) -> pje.ain_version <- v
+    | HashDefine ("_AINMINORVERSION", Int v) -> pje.ain_minor_version <- v
     | HashDefine ("_KEYCODE", Int v) -> pje.key_code <- Int32.of_int v
     | HashDefine ("_ISAI2FILE", Bool v) -> pje.is_ai2_file <- v
     | HashDefine ("_USESMSG1", Bool v) -> pje.uses_msg1 <- v

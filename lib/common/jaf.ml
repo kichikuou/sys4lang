@@ -337,6 +337,7 @@ type library = { hll_name : string; functions : (string, fundecl) Hashtbl.t }
 
 type context = {
   ain : Ain.t;
+  version : int; (* ain_major_version * 100 + ain_minor_version *)
   globals : (string, variable) Hashtbl.t;
   structs : (string, jaf_struct) Hashtbl.t;
   functions : (string, fundecl) Hashtbl.t;
@@ -1082,4 +1083,5 @@ let context_from_ain ?(constants : variable list = []) ain =
           Hashtbl.set functions ~key:f.name ~data:func);
       Hashtbl.add_exn libraries ~key:l.name
         ~data:{ hll_name = l.name; functions });
-  { ain; globals; structs; functions; functypes; delegates; libraries }
+  let version = (Ain.version ain * 100) + Ain.minor_version ain in
+  { ain; version; globals; structs; functions; functypes; delegates; libraries }

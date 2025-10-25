@@ -346,7 +346,8 @@ class jaf_compiler ctx debug_info =
            value_type =
              String | Array _ | Struct _ | Ref (String | Array _ | Struct _);
            _;
-          } ->
+          }
+            when ctx.version < 630 ->
               self#write_instruction1 SH_LOCALREF i
           | v ->
               self#compile_local_ref v.index;
@@ -357,7 +358,8 @@ class jaf_compiler ctx debug_info =
            value_type =
              String | Array _ | Struct _ | Ref (String | Array _ | Struct _);
            _;
-          } ->
+          }
+            when ctx.version < 630 ->
               self#write_instruction1 SH_GLOBALREF i
           | v ->
               self#compile_global_ref v.index;
@@ -366,7 +368,8 @@ class jaf_compiler ctx debug_info =
           match (obj.node, e.ty) with
           | ( This,
               ( Ref (String | Array _ | Struct _)
-              | String | Array _ | Struct _ | Delegate _ ) ) ->
+              | String | Array _ | Struct _ | Delegate _ ) )
+            when ctx.version < 630 ->
               self#write_instruction1 SH_STRUCTREF member_no
           | _ ->
               self#compile_lvalue obj;
@@ -489,7 +492,8 @@ class jaf_compiler ctx debug_info =
           self#write_instruction1 S_PUSH no
       | Ident (_, LocalVariable (i, _)) -> (
           match (self#get_local i).value_type with
-          | Int | Float | Bool | LongInt | FuncType _ ->
+          | (Int | Float | Bool | LongInt | FuncType _) when ctx.version < 630
+            ->
               self#write_instruction1 SH_LOCALREF i
           | t ->
               self#write_instruction0 PUSHLOCALPAGE;
@@ -502,7 +506,8 @@ class jaf_compiler ctx debug_info =
       | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
       | Ident (_, GlobalVariable i) -> (
           match (Ain.get_global_by_index ctx.ain i).value_type with
-          | Int | Float | Bool | LongInt | FuncType _ ->
+          | (Int | Float | Bool | LongInt | FuncType _) when ctx.version < 630
+            ->
               self#write_instruction1 SH_GLOBALREF i
           | t ->
               self#write_instruction0 PUSHGLOBALPAGE;
@@ -779,7 +784,7 @@ class jaf_compiler ctx debug_info =
           | String -> self#write_instruction0 C_REF
           | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
       | Member ({ node = This; _ }, _, ClassVariable member_no)
-        when is_scalar expr.ty ->
+        when ctx.version < 630 && is_scalar expr.ty ->
           self#write_instruction1 SH_STRUCTREF member_no
       | Member (e, _, ClassVariable member_no) ->
           let struct_type =
@@ -964,12 +969,14 @@ class jaf_compiler ctx debug_info =
           ( EqAssign,
             { node = Ident (_, LocalVariable (i, _)); _ },
             { node = ConstInt n; _ } )
-        when not (Ain.Type.is_ref (self#get_local i).value_type) ->
+        when ctx.version < 630
+             && not (Ain.Type.is_ref (self#get_local i).value_type) ->
           self#write_instruction2 SH_LOCALASSIGN i n
       | Unary
           ( ((PreInc | PostInc | PreDec | PostDec) as op),
             { node = Ident (_, LocalVariable (i, _)); _ } )
-        when (not (Ain.Type.is_ref (self#get_local i).value_type))
+        when ctx.version < 630
+             && (not (Ain.Type.is_ref (self#get_local i).value_type))
              && Poly.(expr.ty <> LongInt) ->
           self#write_instruction1
             (match op with PreInc | PostInc -> SH_LOCALINC | _ -> SH_LOCALDEC)
