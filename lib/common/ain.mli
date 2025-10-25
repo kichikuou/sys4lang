@@ -137,7 +137,7 @@ module FunctionType : sig
   val logical_parameters : t -> Variable.t list
 end
 
-val create : ?is_ain2:bool -> ?keyc:int32 -> ?use_msg1:bool -> int -> int -> t
+val create : ?is_ain2:bool -> ?keyc:int32 -> int -> int -> t
 val load : string -> t
 val write : ?raw:bool -> t -> Stdio.Out_channel.t -> unit
 val write_file : t -> string -> unit

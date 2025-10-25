@@ -450,12 +450,10 @@ type t = {
   mutable delegates : FunctionType.t array;
   mutable global_group_names : string array;
   mutable enums : Enum.t array;
-  mutable use_msg1 : bool;
   string_table : (string, int) Hashtbl.t;
 }
 
-let create ?is_ain2 ?(keyc = 0l) ?(use_msg1 = false) major_version minor_version
-    =
+let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
   {
     is_ain2 = Option.value is_ain2 ~default:(major_version >= 5);
     major_version;
@@ -479,7 +477,6 @@ let create ?is_ain2 ?(keyc = 0l) ?(use_msg1 = false) major_version minor_version
     delegates = [||];
     global_group_names = [||];
     enums = [||];
-    use_msg1;
     string_table = Hashtbl.create (module String);
   }
 
@@ -825,13 +822,13 @@ let load filename =
         buf.ain.structures <- Array.of_list (read_structures buf count)
     | "MSG0" ->
         let count = read_int buf in
-        buf.ain.messages <- Dynarray.of_list (read_cstrings buf count);
-        buf.ain.use_msg1 <- false
+        buf.ain.messages <- Dynarray.of_list (read_cstrings buf count)
     | "MSG1" ->
         let count = read_int buf in
         buf.ain.msg1_uk <- read_int32 buf;
         buf.ain.messages <- Dynarray.of_list (read_msg1_strings buf count);
-        buf.ain.use_msg1 <- true
+        if buf.ain.major_version = 6 && buf.ain.minor_version < 20 then
+          buf.ain.minor_version <- 20
     | "MAIN" -> buf.ain.main <- read_int buf
     | "MSGF" -> buf.ain.msgf <- read_int buf
     | "HLL0" ->
@@ -858,7 +855,9 @@ let load filename =
         let (_ : int32) = read_int32 buf in
         (* section size *)
         let count = read_int buf in
-        buf.ain.delegates <- Array.of_list (read_function_types buf count)
+        buf.ain.delegates <- Array.of_list (read_function_types buf count);
+        if buf.ain.major_version = 6 && buf.ain.minor_version < 10 then
+          buf.ain.minor_version <- 10
     | "OBJG" ->
         let count = read_int buf in
         buf.ain.global_group_names <- Array.of_list (read_cstrings buf count)
@@ -1106,7 +1105,7 @@ let to_buffer ain =
   BB.add_string buf "STRT";
   BB.add_int buf (Array.length ain.structures);
   Array.iter ain.structures ~f:(write_structure buf ain);
-  if not ain.use_msg1 then (
+  if version_lt ain (6, 20) then (
     BB.add_string buf "MSG0";
     BB.add_int buf (Dynarray.length ain.messages);
     Dynarray.iter (BB.add_cstring buf) ain.messages)

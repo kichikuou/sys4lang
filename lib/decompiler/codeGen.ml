@@ -701,8 +701,6 @@ let print_pje pr proj =
     println pr "#define _AINMINORVERSION %d" proj.ain_minor_version;
   println pr "#define _KEYCODE 0x%08lX" Ain.ain.keyc;
   println pr "#define _ISAI2FILE %B" Ain.ain.is_ai2;
-  if Ain.ain.vers >= 6 then
-    println pr "#define _USESMSG1 %B" (Option.is_some Ain.ain.msg1_uk);
   print_newline pr;
   println pr "GameVersion = %ld" Ain.ain.gver;
   print_newline pr;

@@ -37,6 +37,7 @@ let to_pje toplevels path initial_encoding =
     | SJIS -> Common.Sjis.to_utf8 s
   in
   let to_unix_path s = Base.String.tr ~target:'\\' ~replacement:'/' (decode s) in
+  let uses_msg1 = ref false in
   List.iter (function
     | KeyValue ("ProjectName", String v) -> pje.project_name <- decode v
     | KeyValue ("Encoding", String v) -> pje.encoding <- encoding_of_string v
@@ -65,10 +66,11 @@ let to_pje toplevels path initial_encoding =
     | HashDefine ("_AINMINORVERSION", Int v) -> pje.ain_minor_version <- v
     | HashDefine ("_KEYCODE", Int v) -> pje.key_code <- Int32.of_int v
     | HashDefine ("_ISAI2FILE", Bool v) -> pje.is_ai2_file <- v
-    | HashDefine ("_USESMSG1", Bool v) -> pje.uses_msg1 <- v
-    | HashDefine ("_TARGETVM", Int v) -> pje.target_vm <- v
+    | HashDefine ("_USESMSG1", Bool v) -> uses_msg1 := v
     | HashDefine _ -> ()
   ) toplevels;
+  if !uses_msg1 && pje.ain_version = 6 && pje.ain_minor_version < 20 then
+    pje.ain_minor_version <- 20;
   pje
 
 %}

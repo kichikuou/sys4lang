@@ -59,8 +59,6 @@ type t = {
   mutable ain_minor_version : int;
   mutable key_code : int32;
   mutable is_ai2_file : bool;
-  mutable uses_msg1 : bool;
-  mutable target_vm : int;
 }
 
 and source = Jaf of string | Hll of (string * string) | Include of t
@@ -93,8 +91,6 @@ let default_pje path encoding =
     ain_minor_version = 0;
     key_code = 0l;
     is_ai2_file = false;
-    uses_msg1 = false;
-    target_vm = 0;
   }
 
 let collect_sources pje =
@@ -119,5 +115,5 @@ let debug_info_path pje =
   concat (dirname pje.pje_path) "debug_info.json"
 
 let create_ain pje =
-  Ain.create ~is_ain2:pje.is_ai2_file ~keyc:pje.key_code ~use_msg1:pje.uses_msg1
-    pje.ain_version pje.ain_minor_version
+  Ain.create ~is_ain2:pje.is_ai2_file ~keyc:pje.key_code pje.ain_version
+    pje.ain_minor_version
