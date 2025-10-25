@@ -148,7 +148,7 @@ let parse_functions code =
 let parse code =
   group_by_source_file code
   |> List.map ~f:(fun (fname, code_in_file) ->
-         (fname, parse_functions code_in_file))
+      (fname, parse_functions code_in_file))
 
 let remove_overridden_functions ~move_to_original_file files =
   if move_to_original_file then (

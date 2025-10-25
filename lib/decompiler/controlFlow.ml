@@ -87,7 +87,7 @@ let add_labels labels stmts =
   else
     stmts
     @ List.map labels ~f:(fun l ->
-          { txt = Label l.txt; addr = l.addr; end_addr = l.addr })
+        { txt = Label l.txt; addr = l.addr; end_addr = l.addr })
 
 let decrement_nr_jump_srcs bb n = bb.nr_jump_srcs <- bb.nr_jump_srcs - n
 
@@ -342,15 +342,15 @@ let has_escaping_vars cfg block_begin block_end =
     let result = ref false in
     CFG.iterate cfg block_end None (fun bb ->
         (match bb with
-        | { code = { txt = Seq | Jump _ | DoWhile0 _; _ }, stmts; _ } -> stmts
-        | { code = ({ txt = Branch (_, e); _ } as term), stmts; _ } ->
-            { term with txt = Expression e } :: stmts
-        | { code = ({ txt = Switch0 (_, e); _ } as term), stmts; _ } ->
-            { term with txt = Expression e } :: stmts)
+          | { code = { txt = Seq | Jump _ | DoWhile0 _; _ }, stmts; _ } -> stmts
+          | { code = ({ txt = Branch (_, e); _ } as term), stmts; _ } ->
+              { term with txt = Expression e } :: stmts
+          | { code = ({ txt = Switch0 (_, e); _ } as term), stmts; _ } ->
+              { term with txt = Expression e } :: stmts)
         |> make_block
         |> Ast.walk ~lvalue_cb:(function
-             | PageRef (_, v) when Stdlib.List.memq v !vars -> result := true
-             | _ -> ()));
+          | PageRef (_, v) when Stdlib.List.memq v !vars -> result := true
+          | _ -> ()));
     !result
 
 let recover_forever_loop (cfg : CFG.t) =

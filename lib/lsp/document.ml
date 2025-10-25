@@ -82,7 +82,7 @@ let create ctx ~fname text =
     let errors =
       TypeAnalysis.check_types ctx toplevel
       |> List.map ~f:(fun ce ->
-             make_error lexbuf (CompileError.Compile_error ce))
+          make_error lexbuf (CompileError.Compile_error ce))
     in
     { ctx; text = lexbuf.lex_buffer; toplevel; errors }
   with e ->

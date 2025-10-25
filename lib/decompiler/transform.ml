@@ -143,8 +143,8 @@ let rename_labels stmt =
       | Block stmts ->
           (List.map stmts ~f:update
           |> List.filter ~f:(function
-               | { txt = Block []; _ } -> false
-               | _ -> true)
+            | { txt = Block []; _ } -> false
+            | _ -> true)
           |> make_block)
             .txt
       | Switch (id, e, stmt) -> Switch (id, e, update stmt)
@@ -281,8 +281,8 @@ let remove_dummy_variable_assignment stmt =
   in
   map_expr ~f:strip_dummy_assignment stmt
   |> map_stmt ~f:(function
-       | VarDecl (v, Some (_, e)) when is_dummy_var v -> Expression e
-       | stmt -> stmt)
+    | VarDecl (v, Some (_, e)) when is_dummy_var v -> Expression e
+    | stmt -> stmt)
 
 let remove_generated_lockpeek stmt =
   let rec reduce left = function

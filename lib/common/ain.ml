@@ -786,9 +786,9 @@ let read_function_types buf count =
 let read_enums buf count =
   read_cstrings buf count
   |> List.mapi ~f:(fun index name ->
-         (* TODO: symbols *)
-         let e : Enum.t = { index; name; symbols = [] } in
-         e)
+      (* TODO: symbols *)
+      let e : Enum.t = { index; name; symbols = [] } in
+      e)
 
 let decrypt = Mt19937.(decrypt ain_decrypt_seed)
 

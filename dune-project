@@ -39,7 +39,7 @@
    ppx_deriving
    ppx_yojson_conv_lib
    (ppx_expect :with-test)
-   (ocamlformat (and (= 0.27.0) :with-test))
+   (ocamlformat (and (= 0.28.1) :with-test))
    ; doubly-linked dependencies
    ppx_compare
    ppx_sexp_conv

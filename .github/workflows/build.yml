@@ -13,7 +13,7 @@ jobs:
           - ubuntu-latest
           - windows-latest
         ocaml-compiler:
-          - 5.3
+          - 5
 
     runs-on: ${{ matrix.os }}
 
