@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 - 2025-10-25
+- The syntax for adding a function to a delegate has changed: write `delegate += f` instead of `delegate.Add(f)`
+- Compiler: Allow `ref X foo = bool ? ref X : ref X;` (#1)
+- Decompiler: Fixed isses with Rance 6 (MangaGamer), Pascha C++, Pastel Chime 3, Rance 9, Evenicle, Rance 03
+- LSP: Fixed "Type error: expected unknown_functype; ..." errors for functype arguments
+- Bugfixes
+
 ## 0.4.0 - 2025-10-10
 - Compiler: Respects `Encoding` field in `.pje`
 - Decompiler: Outputs to current directory if `-o` is not specified
