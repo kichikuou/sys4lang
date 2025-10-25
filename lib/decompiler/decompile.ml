@@ -105,7 +105,25 @@ type decompiled_ain = {
   structs : CodeGen.struct_t array;
   globals : CodeGen.variable list;
   srcs : (string * CodeGen.function_t list) list;
+  ain_minor_version : int;
 }
+
+(* Ain 6 minor versions:
+   - 6.0: Alice 2010, Shaman's Sanctuary, Daiteikoku, Rance Quest
+   - 6.10 (DELG introduced): Oyako Rankan, Pastel Chime 3, Drapeko, Rance 01
+   - 6.20 (MSG1 introduced): Rance 9, Blade Briders
+   - 6.30 (SH_LOCALREF and other instructions removed): Evenicle, Rance 03 *)
+let determine_ain_minor_version code =
+  let has_sh_localref code =
+    List.exists code ~f:(function
+      | { txt = Instructions.SH_LOCALREF _; _ } -> true
+      | _ -> false)
+  in
+  if Ain.ain.vers <> 6 then 0
+  else if Array.is_empty Ain.ain.delg then 0
+  else if Option.is_none Ain.ain.msg1_uk then 10
+  else if has_sh_localref code then 20
+  else 30
 
 let is_rance7_bad_function (f : CodeGen.function_t) =
   match f with
@@ -165,7 +183,8 @@ let decompile move_to_original_file =
         (fname, List.rev !decompiled_funcs))
   in
   Array.iter structs ~f:(fun s -> s.methods <- List.rev s.methods);
-  { srcs; structs; globals = !globals }
+  let ain_minor_version = determine_ain_minor_version code in
+  { srcs; structs; globals = !globals; ain_minor_version }
 
 let inspect funcname =
   let code = Instructions.decode Ain.ain.code in
@@ -218,6 +237,7 @@ let export decompiled ain_path output_to_printer ~print_addr =
     {
       name = Stdlib.Filename.(remove_extension @@ basename ain_path);
       output_dir = Stdlib.Filename.dirname ain_path;
+      ain_minor_version = decompiled.ain_minor_version;
     }
   in
   output_to_printer (project.name ^ ".pje") (fun pr ->

@@ -687,7 +687,7 @@ let print_inc pr srcs =
   List.iter srcs ~f:(fun src -> println pr "\t\"%s\"," src);
   println pr "}"
 
-type project_t = { name : string; output_dir : string }
+type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
 let print_pje pr proj =
   println pr "// Project Environment File";
@@ -697,6 +697,8 @@ let print_pje pr proj =
   println pr "CodeName = \"%s.ain\"" proj.name;
   print_newline pr;
   println pr "#define _AINVERSION %d" Ain.ain.vers;
+  if proj.ain_minor_version <> 0 then
+    println pr "#define _AINMINORVERSION %d" proj.ain_minor_version;
   println pr "#define _KEYCODE 0x%08lX" Ain.ain.keyc;
   println pr "#define _ISAI2FILE %B" Ain.ain.is_ai2;
   if Ain.ain.vers >= 6 then

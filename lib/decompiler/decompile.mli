@@ -18,6 +18,7 @@ type decompiled_ain = {
   structs : CodeGen.struct_t array;
   globals : CodeGen.variable list;
   srcs : (string * CodeGen.function_t list) list;
+  ain_minor_version : int;
 }
 
 val decompile : bool -> decompiled_ain
