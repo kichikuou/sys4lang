@@ -281,6 +281,11 @@ class type_analyze_visitor ctx =
           | _ -> type_check parent t rhs)
       | _ -> type_check parent t rhs
 
+    method check_funarg_or_return parent t (rhs : expression) =
+      match (t, rhs.ty) with
+      | FuncType _, String -> type_error t (Some rhs) parent
+      | _ -> self#check_assign parent t rhs
+
     method check_ref_assign parent (lhs : expression) (rhs : expression) =
       (* rhs must be a ref, or an lvalue in order to create a reference to it *)
       self#check_referenceable rhs parent;
@@ -324,7 +329,8 @@ class type_analyze_visitor ctx =
               | Ref ty ->
                   self#check_referenceable a (ASTExpression a);
                   ref_type_check (ASTExpression a) ty a
-              | _ -> self#check_assign (ASTExpression a) v.type_spec.ty a);
+              | _ ->
+                  self#check_funarg_or_return (ASTExpression a) v.type_spec.ty a);
               Some a
           | None, Some e ->
               (* NOTE: `e` may be from another file that has not yet been type-checked. *)
@@ -746,7 +752,9 @@ class type_analyze_visitor ctx =
                   | Ref ty ->
                       self#check_referenceable e (ASTExpression e);
                       ref_type_check (ASTStatement stmt) ty e
-                  | _ -> self#check_assign (ASTStatement stmt) f.return.ty e))
+                  | _ ->
+                      self#check_funarg_or_return (ASTStatement stmt)
+                        f.return.ty e))
           | Return None -> (
               match environment#current_function with
               | None ->

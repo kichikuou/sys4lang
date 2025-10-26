@@ -146,6 +146,7 @@ let%expect_test "function call" =
         f_func(&f_int);   // ok
         f_func(&f_float); // error
         f_func(NULL);     // ok
+        f_func("f_int");  // error
       }
     |};
   [%expect
@@ -165,6 +166,9 @@ let%expect_test "function call" =
     -:26:16-24: Type error: expected func; got void(float)
        26 |         f_func(&f_float); // error
                            ^^^^^^^^
+    -:28:16-23: Type error: expected func; got string
+       28 |         f_func("f_int");  // error
+                           ^^^^^^^
     |}]
 
 let%expect_test "default parameter" =
