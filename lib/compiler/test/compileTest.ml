@@ -939,6 +939,33 @@ let%expect_test "dg_set" =
       052: EOF
     |}]
 
+let%expect_test "dg_copy" =
+  compile_test
+    {|
+      delegate void dg();
+      void f(dg d) {
+        dg dd = d;
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: PUSHLOCALPAGE
+    008: PUSH 1
+    014: REF
+    016: PUSHLOCALPAGE
+    018: PUSH 0
+    024: REF
+    026: DG_COPY
+    028: DG_ASSIGN
+    030: DG_POP
+    032: RETURN
+    034: ENDFUNC f
+    040: EOF test.jaf
+    046: FUNC NULL
+    052: EOF
+    |}]
+
 let%expect_test "dg_set_string" =
   compile_test
     {|

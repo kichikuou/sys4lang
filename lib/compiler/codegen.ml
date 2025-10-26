@@ -1267,9 +1267,16 @@ class jaf_compiler ctx debug_info =
                 self#write_instruction1 PUSH dg_i;
                 self#write_instruction0 DG_STR_TO_METHOD;
                 self#write_instruction0 DG_SET
-            | Some e ->
+            | Some ({ ty = TyMethod _; _ } as e) ->
                 self#compile_expression e;
                 self#write_instruction0 DG_SET
+            | Some ({ ty = Delegate _; _ } as e) ->
+                self#compile_expression e;
+                self#write_instruction0 DG_ASSIGN;
+                self#write_instruction0 DG_POP
+            | Some _ ->
+                compiler_bug "invalid delegate initval"
+                  (Some (ASTVariable decl))
             | None -> self#write_instruction0 DG_CLEAR)
         | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
         | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
