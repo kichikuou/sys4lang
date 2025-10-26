@@ -319,6 +319,46 @@ let%expect_test "ref_return_null" =
     080: EOF
     |}]
 
+let%expect_test "return_struct_from_ref" =
+  compile_test
+    {|
+      struct S {};
+      ref S rs;
+      ref S f() {
+        return NULL;
+      }
+      S g() {
+        return rs;
+        return f();
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: PUSH -1
+    012: RETURN
+    014: PUSH -1
+    020: RETURN
+    022: ENDFUNC f
+    028: FUNC g
+    034: PUSHGLOBALPAGE
+    036: PUSH 0
+    042: SR_REF struct(0)
+    048: RETURN
+    050: PUSHLOCALPAGE
+    052: PUSH 0
+    058: CALLFUNC f
+    064: ASSIGN
+    066: SR_REF2 struct(0)
+    072: RETURN
+    074: PUSH -1
+    080: RETURN
+    082: ENDFUNC g
+    088: EOF test.jaf
+    094: FUNC NULL
+    100: EOF
+    |}]
+
 let%expect_test "bool ? ref int : int" =
   compile_test
     {|
@@ -421,28 +461,29 @@ let%expect_test "deref struct assign" =
     |};
   [%expect
     {|
-      000: FUNC ref_s
-      006: SH_LOCALDELETE s
-      012: SH_LOCALCREATE s, struct(0)
-      022: SH_LOCALREF s
-      028: PUSHLOCALPAGE
-      030: PUSH 2
-      036: SH_LOCALREF rs
-      042: CALLFUNC ref_s
-      048: ASSIGN
-      050: PUSH 0
-      056: SR_ASSIGN
-      058: POP
-      060: SH_LOCALREF rs
-      066: DUP
-      068: SP_INC
-      070: RETURN
-      072: PUSH -1
-      078: RETURN
-      080: ENDFUNC ref_s
-      086: EOF test.jaf
-      092: FUNC NULL
-      098: EOF
+    000: FUNC ref_s
+    006: SH_LOCALDELETE s
+    012: SH_LOCALCREATE s, struct(0)
+    022: SH_LOCALREF s
+    028: PUSHLOCALPAGE
+    030: PUSH 2
+    036: SH_LOCALREF rs
+    042: CALLFUNC ref_s
+    048: ASSIGN
+    050: SR_REF2 struct(0)
+    056: PUSH 0
+    062: SR_ASSIGN
+    064: POP
+    066: SH_LOCALREF rs
+    072: DUP
+    074: SP_INC
+    076: RETURN
+    078: PUSH -1
+    084: RETURN
+    086: ENDFUNC ref_s
+    092: EOF test.jaf
+    098: FUNC NULL
+    104: EOF
     |}]
 
 let%expect_test "ref struct assign" =

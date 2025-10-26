@@ -942,7 +942,13 @@ class jaf_compiler ctx debug_info =
       | Call (_, _, _) ->
           compiler_bug "invalid call expression" (Some (ASTExpression expr))
       | New _ -> compiler_bug "bare new expression" (Some (ASTExpression expr))
-      | DummyRef _ -> self#compile_lvalue expr
+      | DummyRef _ -> (
+          self#compile_lvalue expr;
+          match expr.ty with
+          | Ref (Struct (_, no)) -> self#write_instruction1 SR_REF2 no
+          | _ ->
+              compiler_bug "unexpected DummyRef type"
+                (Some (ASTExpression expr)))
       | This -> (
           match expr.ty with
           | Struct (_, no) ->
@@ -988,6 +994,9 @@ class jaf_compiler ctx debug_info =
       | Seq (a, b) ->
           self#compile_expr_and_pop a;
           self#compile_expr_and_pop b
+      | DummyRef _ ->
+          self#compile_lvalue expr;
+          self#compile_pop expr.ty (ASTExpression expr)
       | _ ->
           self#compile_expression expr;
           self#compile_pop expr.ty (ASTExpression expr)
