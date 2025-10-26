@@ -112,7 +112,9 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
   match builtin with
   | Assert -> make Void "assert" [ Int; String; String; Int ]
   | IntString -> make String "String" []
-  | FloatString -> make String "String" []
+  | FloatString ->
+      make String "String" [ Int ]
+        ~defaults:[ Some (make_expr ~ty:Int (ConstInt (-1))) ]
   | StringInt -> make Int "Int" []
   | StringLength -> make Int "Length" []
   | StringLengthByte -> make Int "LengthByte" []

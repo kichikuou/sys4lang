@@ -765,7 +765,7 @@ class jaf_compiler ctx debug_info =
               self#write_instruction0 FTOI;
               self#write_instruction0 ITOLI
           | Float, String ->
-              self#write_instruction1 PUSH 6;
+              self#write_instruction1 PUSH (-1);
               self#write_instruction0 FTOS
           | String, String -> ()
           | String, Int -> self#write_instruction0 STOI
@@ -861,9 +861,7 @@ class jaf_compiler ctx debug_info =
           self#compile_function_arguments args f;
           match builtin with
           | IntString -> self#write_instruction0 I_STRING
-          | FloatString ->
-              self#write_instruction1 PUSH 6;
-              self#write_instruction0 ITOF
+          | FloatString -> self#write_instruction0 FTOS
           | StringInt -> self#write_instruction0 STOI
           | StringLength ->
               self#write_instruction0
