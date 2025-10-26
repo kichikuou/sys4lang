@@ -453,7 +453,8 @@ type t = {
   string_table : (string, int) Hashtbl.t;
 }
 
-let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
+let create ?is_ain2 ?(keyc = 0l) ?(game_version = 0) major_version minor_version
+    =
   {
     is_ain2 = Option.value is_ain2 ~default:(major_version >= 5);
     major_version;
@@ -469,7 +470,7 @@ let create ?is_ain2 ?(keyc = 0l) major_version minor_version =
     msgf = 0;
     libraries = [||];
     switches = [||];
-    game_version = 0;
+    game_version;
     strings = Dynarray.make 1 "";
     filenames = [||];
     ojmp = -1;
