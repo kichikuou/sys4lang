@@ -746,8 +746,7 @@ class jaf_compiler ctx debug_info =
           self#write_address_at ifz_addr current_address;
           self#compile_expression alt;
           self#write_address_at jump_addr current_address
-      | Cast (_, e) -> (
-          let dst_t = expr.ty in
+      | Cast (dst_t, e) -> (
           let src_t = e.ty in
           self#compile_expression e;
           match (src_t, dst_t) with
@@ -769,6 +768,11 @@ class jaf_compiler ctx debug_info =
               self#write_instruction0 FTOS
           | String, String -> ()
           | String, Int -> self#write_instruction0 STOI
+          | String, Delegate (Some (_, dg_i)) ->
+              self#write_instruction1 PUSH (-1);
+              self#write_instruction0 SWAP;
+              self#write_instruction1 PUSH dg_i;
+              self#write_instruction0 DG_STR_TO_METHOD
           | TyFunction _, TyMethod _ ->
               self#write_instruction1 PUSH (-1);
               self#write_instruction0 SWAP
@@ -1263,16 +1267,12 @@ class jaf_compiler ctx debug_info =
               self#write_instruction1 PUSH (List.length decl.array_dim);
               self#write_instruction0 A_ALLOC)
             else self#write_instruction0 A_FREE
-        | Delegate dg_i -> (
+        | Delegate _ -> (
             self#compile_local_ref v.index;
             self#write_instruction0 REF;
             match decl.initval with
             | Some ({ ty = String; _ } as e) ->
                 self#compile_expression e;
-                self#write_instruction1 PUSH (-1);
-                self#write_instruction0 SWAP;
-                self#write_instruction1 PUSH dg_i;
-                self#write_instruction0 DG_STR_TO_METHOD;
                 self#write_instruction0 DG_SET
             | Some ({ ty = TyMethod _; _ } as e) ->
                 self#compile_expression e;

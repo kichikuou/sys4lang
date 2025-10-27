@@ -235,25 +235,35 @@ class type_analyze_visitor ctx =
       | _ -> type_check parent (FuncType functype) expr
 
     method check_delegate_compatible parent delegate (expr : expression) =
-      let check dg_name ft needs_cast =
-        let dt = ft_of_fundecl (Hashtbl.find_exn ctx.delegates dg_name) in
-        if not (ft_compatible dt ft) then
-          type_error (Delegate delegate) (Some expr) parent;
-        if needs_cast then insert_cast (TyMethod dt) expr
-      in
-      match (delegate, expr.ty) with
-      | Some (dg_name, _), TyMethod ft -> check dg_name ft false
-      | Some (dg_name, _), TyFunction ft -> check dg_name ft true
-      | Some (dg_name, dg_i), Delegate (Some (name, idx)) ->
-          if not (String.equal name dg_name && dg_i = idx) then
-            type_error (Delegate delegate) (Some expr) parent
-      | Some _, NullType -> expr.ty <- Delegate delegate
-      | Some _, String -> ()
-      | None, Delegate None -> ()
-      | None, (TyMethod _ | TyFunction _ | Delegate _ | String | NullType)
-        when !loose_functype_check ->
-          ()
-      | _ -> type_check parent (Delegate delegate) expr
+      match delegate with
+      | Some (dg_name, dg_i) -> (
+          let dt = ft_of_fundecl (Hashtbl.find_exn ctx.delegates dg_name) in
+          let check ft =
+            if not (ft_compatible dt ft) then
+              type_error (Delegate delegate) (Some expr) parent
+          in
+          match expr.ty with
+          | TyMethod ft -> check ft
+          | TyFunction ft ->
+              check ft;
+              insert_cast (TyMethod dt) expr
+          | Delegate (Some (name, idx)) ->
+              if not (String.equal name dg_name && dg_i = idx) then
+                type_error (Delegate delegate) (Some expr) parent
+          | NullType -> expr.ty <- Delegate delegate
+          | String ->
+              (* XXX: String -> Method conversion, but needs a delegate index
+                 for DG_STR_TO_METHOD instruction *)
+              insert_cast (Delegate delegate) expr;
+              expr.ty <- TyMethod dt
+          | _ -> type_check parent (Delegate delegate) expr)
+      | None -> (
+          match expr.ty with
+          | Delegate None -> ()
+          | (TyMethod _ | TyFunction _ | Delegate _ | String | NullType)
+            when !loose_functype_check ->
+              ()
+          | _ -> type_check parent (Delegate delegate) expr)
 
     method check_assign parent t (rhs : expression) =
       match t with
