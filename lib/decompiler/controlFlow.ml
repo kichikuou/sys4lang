@@ -20,66 +20,6 @@ open Ast
 open Instructions
 open BasicBlock
 
-module CFG = struct
-  module L = Doubly_linked
-
-  type t = fragment basic_block L.t
-
-  let of_list = L.of_list
-  let to_list = L.to_list
-  let value = Option.map ~f:L.Elt.value
-  let value_exn node = L.Elt.value (Option.value_exn node)
-
-  let next cfg = function
-    | None -> raise (Invalid_argument "next Null")
-    | Some elt -> L.next cfg elt
-
-  let prev cfg = function
-    | None -> raise (Invalid_argument "prev Null")
-    | Some elt -> L.prev cfg elt
-
-  let first = L.first_elt
-  let last = L.last_elt
-  let is_end = Option.is_none
-  let node_equal node node' = Option.equal L.Elt.equal node node'
-
-  let insert_before cfg node value =
-    Some (L.insert_before cfg (Option.value_exn node) value)
-
-  let insert_last cfg value = Some (L.insert_last cfg value)
-  let remove cfg node = L.remove cfg (Option.value_exn node)
-  let set node value = L.Elt.set (Option.value_exn node) value
-
-  let rec iterate cfg node end_node f =
-    if node_equal node end_node then ()
-    else (
-      f (value_exn node);
-      iterate cfg (next cfg node) end_node f)
-
-  let rec find cfg node ~next ~f =
-    match value node with
-    | None -> None
-    | Some v -> if f v then node else find cfg (next cfg node) ~next ~f
-
-  let find_forward cfg node ~f = find cfg node ~next ~f
-  let find_backward cfg node ~f = find cfg node ~next:prev ~f
-  let by_address addr bb = bb.addr = addr
-
-  let by_jump_target addr = function
-    | { code = { txt = Jump target; _ }, _; _ } -> target = addr
-    | _ -> false
-
-  let rec splice_to_list cfg begin_node end_node =
-    if node_equal begin_node end_node then []
-    else
-      let nxt = next cfg begin_node in
-      remove cfg begin_node;
-      value_exn begin_node :: splice_to_list cfg nxt end_node
-
-  let splice cfg begin_node end_node =
-    L.of_list (splice_to_list cfg begin_node end_node)
-end
-
 let negate = function UnaryOp (NOT, e) -> e | e -> UnaryOp (NOT, e)
 
 let add_labels labels stmts =
@@ -177,8 +117,8 @@ let recover_else (cfg : CFG.t) =
            | Some (ifaddr, cond, addr, then_block, stmts) ->
                if addr = region_end_addr then (
                  let else_stmt =
-                   CFG.splice_to_list cfg (CFG.next cfg node) None
-                   |> do_collapse
+                   CFG.splice cfg (CFG.next node) None
+                   |> CFG.to_list |> do_collapse
                  in
                  CFG.set node
                    {
@@ -196,14 +136,14 @@ let recover_else (cfg : CFG.t) =
                  scan node)
                else
                  let target =
-                   CFG.(find_forward ~f:(by_address addr) cfg (next cfg node))
+                   CFG.(find_forward ~f:(by_address addr) cfg (next node))
                  in
-                 if CFG.is_end target then scan (CFG.prev cfg node)
+                 if CFG.is_end target then scan (CFG.prev node)
                  else
                    let target_bb = CFG.value_exn target in
                    let else_stmt =
-                     CFG.splice_to_list cfg (CFG.next cfg node) target
-                     |> do_collapse
+                     CFG.splice cfg (CFG.next node) target
+                     |> CFG.to_list |> do_collapse
                    in
                    CFG.set node
                      {
@@ -221,7 +161,7 @@ let recover_else (cfg : CFG.t) =
                      };
                    decrement_nr_jump_srcs target_bb 1;
                    scan node
-           | None -> scan (CFG.prev cfg node))
+           | None -> scan (CFG.prev node))
      in
      scan (CFG.last cfg));
   do_collapse (CFG.to_list cfg)
@@ -297,7 +237,7 @@ let generate_break_continue record cfg =
     | None -> ()
     | Some bb ->
         CFG.set node (replace_bb bb);
-        aux (CFG.next cfg node)
+        aux (CFG.next node)
   in
   aux (CFG.first cfg);
   cfg
@@ -327,7 +267,7 @@ let rec has_break_continue cfg begin_node end_node =
   else
     let { code = _, stmts; _ } = CFG.value_exn begin_node in
     test_stmt (Block stmts)
-    || has_break_continue cfg (CFG.next cfg begin_node) end_node
+    || has_break_continue cfg (CFG.next begin_node) end_node
 
 (* Returns true if any variable is declared between block_begin and block_end
    and used after block_end. *)
@@ -361,7 +301,7 @@ let recover_forever_loop (cfg : CFG.t) =
         let target = CFG.(find_backward ~f:(by_address addr) cfg node) in
         if
           CFG.is_end target
-          || has_break_continue cfg target (CFG.next cfg node)
+          || has_break_continue cfg target (CFG.next node)
           (* If creating a loop causes out-of-scope use of a variable, don't create it.
               For example, the jump to label1 below should not be converted to a loop:
                 label:
@@ -369,15 +309,15 @@ let recover_forever_loop (cfg : CFG.t) =
                   goto label;
                   f(x);
           *)
-          || has_escaping_vars cfg target (CFG.next cfg node)
-        then scan (CFG.next cfg node)
+          || has_escaping_vars cfg target (CFG.next node)
+        then scan (CFG.next node)
         else
           let target_bb = CFG.value_exn target in
           let new_node = CFG.insert_before cfg target target_bb in
           CFG.set target { target_bb with labels = []; nr_jump_srcs = 0 };
           CFG.set node (remove_jump bb);
           let body =
-            CFG.splice cfg target (CFG.next cfg node)
+            CFG.splice cfg target (CFG.next node)
             |> generate_break_continue
                  {
                    break_continue_record with
@@ -395,8 +335,8 @@ let recover_forever_loop (cfg : CFG.t) =
                 ( seq_terminator,
                   [ { body with txt = For (None, None, None, body) } ] );
             };
-          scan (CFG.next cfg new_node)
-    | Some _ -> scan (CFG.next cfg node)
+          scan (CFG.next new_node)
+    | Some _ -> scan (CFG.next node)
   in
   scan (CFG.first cfg);
   recover_else cfg
@@ -411,13 +351,13 @@ let collapse = recover_forever_loop
     => switch (expr) { bb2..bb(k-1) };
 *)
 let reduce_switch cfg node0 =
-  let node1 = CFG.next cfg node0 in
+  let node1 = CFG.next node0 in
   let bb0 = CFG.value_exn node0 in
   let bb1 = CFG.value_exn node1 in
   match (bb0, bb1) with
   | ( { code = { txt = Switch0 (id, expr); addr = switch_addr; _ }, stmts0; _ },
       { code = { txt = Jump switch_end_addr; _ }, []; _ } ) ->
-      let body_head = CFG.next cfg node1 in
+      let body_head = CFG.next node1 in
       let body_end =
         CFG.(find_forward ~f:(by_address switch_end_addr) cfg body_head)
       in
@@ -486,7 +426,7 @@ let reduce_if_then cfg node0 branch_target =
    _;
   } ->
       let then_stmt =
-        CFG.splice cfg (CFG.next cfg node0) branch_target |> collapse
+        CFG.splice cfg (CFG.next node0) branch_target |> collapse
       in
       CFG.set node0
         {
@@ -533,7 +473,7 @@ let reduce_backward_branch cfg nodek branch_target =
 let reduce_do_while cfg marker_node =
   match CFG.value_exn marker_node with
   | { code = { txt = DoWhile0 bbk_addr; _ }, []; _ } -> (
-      let node0 = CFG.next cfg marker_node in
+      let node0 = CFG.next marker_node in
       let nodek = CFG.(find_forward ~f:(by_address bbk_addr) cfg node0) in
       let bb0 = CFG.value_exn node0 in
       let bbk = CFG.value_exn nodek in
@@ -541,7 +481,7 @@ let reduce_do_while cfg marker_node =
       | { code = ({ txt = Branch (_, expr); _ } as term), stmts0; _ } ->
           CFG.set nodek { bbk with code = (seq_terminator, stmts0) };
           let body =
-            CFG.splice cfg node0 (CFG.next cfg nodek)
+            CFG.splice cfg node0 (CFG.next nodek)
             |> generate_break_continue
                  {
                    break_continue_record with
@@ -591,7 +531,7 @@ let insert_label_for_inc nr_jump_to_inc bc_record addr body =
 
 let reduce_forward_branch cfg node0 branch_target =
   let bb0 = CFG.value_exn node0 in
-  let node_before_branch_target = CFG.prev cfg branch_target in
+  let node_before_branch_target = CFG.prev branch_target in
   match (bb0, CFG.value node_before_branch_target) with
   | ( {
         code =
@@ -606,7 +546,7 @@ let reduce_forward_branch cfg node0 branch_target =
         (* if (expr) stmt; (unoptimized) *)
         CFG.set node_before_branch_target (remove_jump bb_before_branch_target);
         let then_stmt =
-          CFG.splice cfg (CFG.next cfg node0) branch_target |> collapse
+          CFG.splice cfg (CFG.next node0) branch_target |> collapse
         in
         CFG.set node0
           {
@@ -634,7 +574,7 @@ let reduce_forward_branch cfg node0 branch_target =
           let else_end =
             CFG.(
               find_forward ~f:(by_address else_end_addr) cfg
-                (next cfg branch_target))
+                (next branch_target))
           in
           if CFG.is_end else_end then
             Printf.failwithf "basic block %d not found" else_end_addr ()
@@ -643,7 +583,7 @@ let reduce_forward_branch cfg node0 branch_target =
               (remove_jump bb_before_branch_target);
           decrement_nr_jump_srcs (CFG.value_exn branch_target) 1;
           let then_stmt =
-            CFG.splice cfg (CFG.next cfg node0) branch_target |> collapse
+            CFG.splice cfg (CFG.next node0) branch_target |> collapse
           in
           let else_stmt = CFG.splice cfg branch_target else_end |> collapse in
           CFG.set node0
@@ -664,7 +604,7 @@ let reduce_forward_branch cfg node0 branch_target =
         (* while (expr) stmt; *)
         CFG.set node_before_branch_target (remove_jump bb_before_branch_target);
         let body =
-          CFG.splice cfg (CFG.next cfg node0) branch_target
+          CFG.splice cfg (CFG.next node0) branch_target
           |> generate_break_continue
                {
                  break_continue_record with
@@ -690,8 +630,8 @@ let reduce_forward_branch cfg node0 branch_target =
           };
         decrement_nr_jump_srcs (CFG.value_exn branch_target) 1)
       else if bb0.addr < label1 && label1 < branch_target_addr then
-        let node1 = CFG.next cfg node0 in
-        let node2 = CFG.next cfg node1 in
+        let node1 = CFG.next node0 in
+        let node2 = CFG.next node1 in
         match (CFG.value_exn node1, CFG.value_exn node2) with
         | ( { code = { txt = Jump label3; _ }, []; _ },
             {
@@ -718,7 +658,7 @@ let reduce_forward_branch cfg node0 branch_target =
             in
             CFG.set node_before_branch_target
               (remove_jump bb_before_branch_target);
-            decrement_nr_jump_srcs (CFG.value_exn (CFG.next cfg node2)) 1;
+            decrement_nr_jump_srcs (CFG.value_exn (CFG.next node2)) 1;
             let bc_record =
               {
                 break_continue_record with
@@ -727,7 +667,7 @@ let reduce_forward_branch cfg node0 branch_target =
               }
             in
             let body =
-              CFG.splice cfg (CFG.next cfg node2) branch_target
+              CFG.splice cfg (CFG.next node2) branch_target
               |> generate_break_continue bc_record
               |> collapse
               |> insert_label_for_inc nr_jump_to_inc bc_record label1
@@ -759,7 +699,7 @@ let reduce_forward_branch cfg node0 branch_target =
       else
         Printf.failwithf "unrecognized control structure:\n%s"
           ([%show: fragment basic_block list]
-             (CFG.splice_to_list cfg node0 None))
+             (CFG.splice cfg node0 None |> CFG.to_list))
           ()
   | _ -> reduce_if_then cfg node0 branch_target
 
@@ -773,7 +713,7 @@ let reduce_forward_branch cfg node0 branch_target =
 *)
 let reduce_jump cfg node0 =
   let bb0 = CFG.value_exn node0 in
-  let node1 = CFG.next cfg node0 in
+  let node1 = CFG.next node0 in
   match (bb0, CFG.value node1) with
   | ( { code = { txt = Jump body_addr; _ }, []; _ },
       Some
@@ -783,7 +723,7 @@ let reduce_jump cfg node0 =
            _;
          } as bb1) )
     when body_addr = body_addr' && cond_addr = bb0.addr -> (
-      let node2 = CFG.next cfg node1 in
+      let node2 = CFG.next node1 in
       match CFG.(find_forward ~f:(by_jump_target bb1.addr) cfg node2) with
       | Some _ as nodek ->
           let break_addr = (CFG.value_exn nodek).end_addr in
@@ -793,7 +733,7 @@ let reduce_jump cfg node0 =
           in
           CFG.set nodek (remove_jump (CFG.value_exn nodek));
           let body =
-            CFG.splice cfg node2 (CFG.next cfg nodek)
+            CFG.splice cfg node2 (CFG.next nodek)
             |> generate_break_continue
                  {
                    break_continue_record with
@@ -830,9 +770,7 @@ let reduce cfg node0 =
   match bb0 with
   | { code = { txt = Switch0 _; _ }, _; _ } -> reduce_switch cfg node0
   | { code = { txt = Branch (addr, _); _ }, _; _ } ->
-      let target =
-        CFG.(find_forward ~f:(by_address addr) cfg (next cfg node0))
-      in
+      let target = CFG.(find_forward ~f:(by_address addr) cfg (next node0)) in
       if not (CFG.is_end target) then reduce_forward_branch cfg node0 target
       else
         let target = CFG.(find_backward ~f:(by_address addr) cfg node0) in
@@ -861,6 +799,6 @@ let analyze bbs =
     if CFG.is_end node then collapse cfg
     else (
       reduce cfg node;
-      scan (CFG.prev cfg node))
+      scan (CFG.prev node))
   in
   scan (CFG.last cfg)

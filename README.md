@@ -27,7 +27,7 @@ Games released between 2003 (Daibanchou) and 2015 (Rance 03) are currently suppo
 To build and install the tools from source, you need to have OCaml and opam installed. Then, run the following commands:
 
 ```sh
-$ git clone --recursive https://github.com/kichikuou/sys4lang.git
+$ git clone https://github.com/kichikuou/sys4lang.git
 $ cd sys4lang
 $ opam install . --deps-only --with-test
 $ dune build

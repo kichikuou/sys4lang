@@ -29,9 +29,6 @@ depends: [
   "ppx_yojson_conv_lib"
   "ppx_expect" {with-test}
   "ocamlformat" {= "0.28.1" & with-test}
-  "ppx_compare"
-  "ppx_sexp_conv"
-  "sexplib"
   "odoc" {with-doc}
 ]
 build: [

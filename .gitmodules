@@ -1,6 +1,0 @@
-[submodule "union-find"]
-	path = union-find
-	url = https://github.com/mbarbin/union-find.git
-[submodule "doubly-linked"]
-	path = doubly-linked
-	url = https://github.com/mbarbin/doubly-linked.git
