@@ -439,7 +439,7 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
     | CaseStr (_, s) -> println pr "case \"%s\":" (escape_dq s)
     | Default _ -> println pr "default:"
   in
-  let rec print_stmt indent in_else_if stmt =
+  let rec print_stmt indent ?(in_else_if = false) stmt =
     match stmt.txt with
     | Block stmts ->
         addr_and_indent stmt.addr indent;
@@ -484,26 +484,20 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
           e
     | IfElse (expr, stmt1, stmt2) -> (
         if not in_else_if then addr_and_indent stmt.addr indent;
-        println pr "if (%a)" (pr_expr 0) expr;
-        addr_and_indent stmt1.addr indent;
-        println pr "{";
+        println pr "if (%a) {" (pr_expr 0) expr;
         print_stmt_list (indent + 1)
           (match stmt1.txt with
           | Block stmts -> List.rev stmts
           | _ -> [ stmt1 ]);
         addr_and_indent stmt1.end_addr indent;
-        println pr "}";
+        print_string pr.oc "}";
         match stmt2.txt with
-        | Block [] -> ()
+        | Block [] -> print_newline pr
         | IfElse _ ->
-            addr_and_indent stmt2.addr indent;
-            print_string pr.oc "else ";
-            print_stmt indent true stmt2
+            print_string pr.oc " else ";
+            print_stmt indent ~in_else_if:true stmt2
         | _ ->
-            addr_and_indent stmt2.addr indent;
-            println pr "else";
-            addr_and_indent stmt2.addr indent;
-            println pr "{";
+            println pr " else {";
             print_stmt_list (indent + 1)
               (match stmt2.txt with
               | Block stmts -> List.rev stmts
@@ -512,18 +506,14 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
             println pr "}")
     | Switch (_, expr, body) ->
         addr_and_indent stmt.addr indent;
-        println pr "switch (%a)" (pr_expr 0) expr;
-        addr_and_indent body.addr indent;
-        println pr "{";
+        println pr "switch (%a) {" (pr_expr 0) expr;
         print_stmt_list (indent + 1)
           (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
         addr_and_indent body.end_addr indent;
         println pr "}"
     | While (cond, body) ->
         addr_and_indent stmt.addr indent;
-        println pr "while (%a)" (pr_expr 0) cond;
-        addr_and_indent body.addr indent;
-        println pr "{";
+        println pr "while (%a) {" (pr_expr 0) cond;
         print_stmt_list (indent + 1)
           (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
         addr_and_indent body.end_addr indent;
@@ -543,9 +533,7 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
         (match cond with None -> () | Some e -> pr_expr 0 pr.oc e);
         print_string pr.oc "; ";
         (match inc with None -> () | Some e -> pr_expr 0 pr.oc e);
-        println pr ")";
-        addr_and_indent body.addr indent;
-        println pr "{";
+        println pr ") {";
         print_stmt_list (indent + 1)
           (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
         addr_and_indent body.end_addr indent;
@@ -569,7 +557,7 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
         addr_and_indent stmt.addr indent;
         println pr "'%s';" (escape_sq s)
   and print_stmt_list indent stmts =
-    List.iter stmts ~f:(fun stmt -> print_stmt indent false stmt)
+    List.iter stmts ~f:(fun stmt -> print_stmt indent stmt)
   in
   let print_func_signature (func : function_t) =
     let return_type = func.func.return_type in
@@ -595,11 +583,10 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
     | Block _ -> func.body
     | _ -> { func.body with txt = Block [ func.body ] }
   in
-  print_stmt 0 false body
+  print_stmt 0 body
 
 let print_struct_decl pr (struc : struct_t) =
-  println pr "class %s" struc.struc.name;
-  println pr "{";
+  println pr "class %s {" struc.struc.name;
   println pr "public:";
   List.iter struc.members ~f:(fun v ->
       match v.v.type_ with
@@ -646,8 +633,7 @@ let print_globals pr (globals : variable list) =
       match (List.hd_exn group).v.group_index with
       | -1 -> print_group 0 group
       | gindex ->
-          println pr "globalgroup %s" Ain.ain.objg.(gindex);
-          println pr "{";
+          println pr "globalgroup %s {" Ain.ain.objg.(gindex);
           print_group 1 group;
           println pr "}")
 
