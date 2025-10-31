@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0 - 2025-11-01
+- Decompiler: Changed the generated code style to be more compact
+- Compiler: Added support for the optional argument of `float.String()`
+- Compiler: Fixed code generation bugs
+
 ## 0.5.0 - 2025-10-25
 - The syntax for adding a function to a delegate has changed: write `delegate += f` instead of `delegate.Add(f)`
 - Compiler: Allow `ref X foo = bool ? ref X : ref X;` (#1)
