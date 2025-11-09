@@ -1738,9 +1738,9 @@ let to_utf8 sjis =
   Buffer.contents buf
 
 let is_valid ch =
-  (0x01 <= ch && ch <= 0x7e)
-  (* ASCII *) || (0xa1 <= ch && ch <= 0xdf)
-  (* half-width kana *)
+  (ch = 9 || ch = 10 || ch = 13 (* whitespaces *))
+  || (0x20 <= ch && ch <= 0x7e (* ASCII *))
+  || (0xa1 <= ch && ch <= 0xdf (* half-width kana *))
   || 0x100 <= ch && ch <= 0xffff
      &&
      let c1 = Char.of_int_exn (ch land 0xff)
