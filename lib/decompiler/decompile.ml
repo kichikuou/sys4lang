@@ -18,36 +18,31 @@ open Base
 open Loc
 
 let rec decompile_function (f : CodeSection.function_t) =
-  try
-    let body =
-      BasicBlock.create f
-      |> BasicBlock.generate_var_decls f.func
-      |> ControlFlow.analyze
-      |> TypeAnalysis.analyze_function f.func f.struc
-      |> Transform.expand_else_scope |> Transform.rename_labels
-      |> Transform.recover_loop_initializer
-      |> Transform.remove_implicit_array_free
-      |> Transform.remove_array_free_for_dead_arrays
-      |> Transform.remove_generated_lockpeek
-      |> Transform.remove_redundant_return
-      |> Transform.remove_dummy_variable_assignment
-      |> Transform.remove_vardecl_default_rhs
-      |> Transform.fold_newline_func_to_msg
-      |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
-    in
-    let lambdas = List.map ~f:decompile_function f.lambdas in
-    CodeGen.
-      {
-        func = f.func;
-        struc = f.struc;
-        name = f.name;
-        body;
-        lambdas;
-        parent = f.parent;
-      }
-  with e ->
-    Stdio.eprintf "Error while decompiling function %s\n" f.func.name;
-    raise e
+  let body =
+    BasicBlock.create f
+    |> BasicBlock.generate_var_decls f.func
+    |> ControlFlow.analyze
+    |> TypeAnalysis.analyze_function f.func f.struc
+    |> Transform.expand_else_scope |> Transform.rename_labels
+    |> Transform.recover_loop_initializer
+    |> Transform.remove_implicit_array_free
+    |> Transform.remove_array_free_for_dead_arrays
+    |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
+    |> Transform.remove_dummy_variable_assignment
+    |> Transform.remove_vardecl_default_rhs
+    |> Transform.fold_newline_func_to_msg |> Transform.remove_optional_arguments
+    |> Transform.simplify_boolean_expr
+  in
+  let lambdas = List.map ~f:decompile_function f.lambdas in
+  CodeGen.
+    {
+      func = f.func;
+      struc = f.struc;
+      name = f.name;
+      body;
+      lambdas;
+      parent = f.parent;
+    }
 
 let inspect_function (f : CodeSection.function_t) ~print_addr =
   BasicBlock.create f
@@ -136,6 +131,8 @@ type decompiled_ain = {
   globals : CodeGen.variable list;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
+  succeed : int;
+  failed : int;
 }
 
 (* Ain 6 minor versions:
@@ -180,40 +177,60 @@ let decompile move_to_original_file =
           { struc; members = to_variable_list struc.members; methods = [] })
   in
   let globals = ref (to_variable_list Ain.ain.glob) in
+  let succeed = ref 0 in
+  let failed = ref 0 in
   let srcs =
     List.map files ~f:(fun (fname, funcs) ->
         let decompiled_funcs = ref [] in
         let process_func func =
-          let f = decompile_function func in
-          match f with
-          | { struc = Some struc; _ } ->
-              let s = structs.(struc.id) in
-              if String.equal f.name "2" then
-                s.members <- extract_array_dims_exn f.body struc.members
-              else if String.equal f.name "0" then (
-                match extract_array_dims f.body struc.members with
-                | Some (vs, true) -> s.members <- vs
-                | _ ->
-                    s.methods <- f :: s.methods;
-                    let body = Transform.remove_array_initializer_call f.body in
-                    decompiled_funcs := { f with body } :: !decompiled_funcs)
-              else if is_rance7_bad_function f then
-                Stdio.eprintf
-                  "Warning: Removing ill-typed tagBusho::getSp() function\n"
-              else (
-                if not f.func.is_lambda then s.methods <- f :: s.methods;
-                decompiled_funcs := f :: !decompiled_funcs)
-          | { struc = None; name = "0"; _ } ->
-              globals := extract_array_dims_exn f.body Ain.ain.glob
-          | { struc = None; name = "NULL"; _ } -> ()
-          | _ -> decompiled_funcs := f :: !decompiled_funcs
+          try
+            let f = decompile_function func in
+            match f with
+            | { struc = Some struc; _ } ->
+                let s = structs.(struc.id) in
+                if String.equal f.name "2" then
+                  s.members <- extract_array_dims_exn f.body struc.members
+                else if String.equal f.name "0" then (
+                  match extract_array_dims f.body struc.members with
+                  | Some (vs, true) -> s.members <- vs
+                  | _ ->
+                      s.methods <- f :: s.methods;
+                      let body =
+                        Transform.remove_array_initializer_call f.body
+                      in
+                      decompiled_funcs := { f with body } :: !decompiled_funcs)
+                else if is_rance7_bad_function f then
+                  Stdio.eprintf
+                    "Warning: Removing ill-typed tagBusho::getSp() function\n"
+                else (
+                  if not f.func.is_lambda then s.methods <- f :: s.methods;
+                  decompiled_funcs := f :: !decompiled_funcs)
+            | { struc = None; name = "0"; _ } ->
+                globals := extract_array_dims_exn f.body Ain.ain.glob
+            | { struc = None; name = "NULL"; _ } -> ()
+            | _ ->
+                decompiled_funcs := f :: !decompiled_funcs;
+                succeed := !succeed + 1
+          with e ->
+            Stdio.printf "Error while decompiling function %s (%d bytes)\n"
+              func.func.name
+              (func.end_addr - func.func.address);
+            Stdio.printf "%s\n" (Exn.to_string e);
+            failed := !failed + 1
         in
         List.iter funcs ~f:process_func;
         (fname, List.rev !decompiled_funcs))
   in
   Array.iter structs ~f:(fun s -> s.methods <- List.rev s.methods);
   let ain_minor_version = determine_ain_minor_version code in
-  { srcs; structs; globals = !globals; ain_minor_version }
+  {
+    srcs;
+    structs;
+    globals = !globals;
+    ain_minor_version;
+    succeed = !succeed;
+    failed = !failed;
+  }
 
 let inspect funcname =
   let code = Instructions.decode Ain.ain.code in

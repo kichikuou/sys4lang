@@ -19,6 +19,8 @@ type decompiled_ain = {
   globals : CodeGen.variable list;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
+  succeed : int;
+  failed : int;
 }
 
 val decompile : bool -> decompiled_ain

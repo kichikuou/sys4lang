@@ -39,8 +39,8 @@ let output_printer_getter ~print_addr out_dir fname f =
     f (new CodeGen.code_printer ~print_addr outc unix_fname);
     Out_channel.close outc
 
-let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
-    =
+let sys4dc output_dir inspect_function print_addr move_to_original_file
+    count_failed ain_file =
   let output_dir = Option.value output_dir ~default:"." in
   Ain.load ain_file;
   match inspect_function with
@@ -56,8 +56,12 @@ let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
           | Some p -> to_string @@ normalize p
           | None -> ain_file)
       in
-      Decompile.export decompiled ain_path
-        (output_printer_getter ~print_addr output_dir)
+      if count_failed then
+        Stdio.printf "%d / %d functions failed\n" decompiled.failed
+          (decompiled.succeed + decompiled.failed)
+      else
+        Decompile.export decompiled ain_path
+          (output_printer_getter ~print_addr output_dir)
   | Some funcname -> Decompile.inspect funcname ~print_addr
 
 let cmd =
@@ -88,6 +92,10 @@ let cmd =
     in
     Cmdliner.Arg.(value & flag & info [ "move-to-original-file" ] ~doc)
   in
+  let count_failed =
+    let doc = "Count failed functions" in
+    Cmdliner.Arg.(value & flag & info [ "count-failed" ] ~doc)
+  in
   let ain_file =
     let doc = "The .ain file to decompile" in
     let docv = "AIN_FILE" in
@@ -96,6 +104,6 @@ let cmd =
   Cmd.v info
     Term.(
       const sys4dc $ output_dir $ inspect_function $ print_addr
-      $ move_to_original_file $ ain_file)
+      $ move_to_original_file $ count_failed $ ain_file)
 
 let () = Stdlib.exit (Cmd.eval cmd)
