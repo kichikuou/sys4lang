@@ -321,6 +321,8 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
       | DerefStruct (_, expr) -> self#pr_expr prec oc expr
       | Page StructPage -> print_string oc "this"
       | Null -> print_string oc "NULL"
+      | Nullable expr ->
+          fprintf oc "%a?" (self#pr_expr (prec_value PREC_DOT)) expr
       | Void -> print_string oc "<void>" (* FIXME *)
       | UnaryOp (FTOI, expr) -> fprintf oc "int(%a)" (self#pr_expr 0) expr
       | UnaryOp (ITOF, expr) -> fprintf oc "float(%a)" (self#pr_expr 0) expr
