@@ -300,6 +300,7 @@ type instruction =
   | PSEUDO_FT_ASSIGNS of int
   | PSEUDO_DG_CALL of int (* dg_type *)
   | PSEUDO_A_NUMOF1
+  | PSEUDO_NULL_COALESCE
 [@@deriving show { with_path = false }]
 
 val width : instruction -> int
