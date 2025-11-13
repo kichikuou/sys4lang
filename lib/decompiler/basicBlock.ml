@@ -239,6 +239,7 @@ let convert_stack_top_to_delegate ctx =
 let ref_ ctx =
   update_stack ctx (function
     | slot :: page :: stack -> Deref (lvalue ctx page slot) :: stack
+    | [] -> [ Nullable (Deref NullRef) ] (* part of `refvar?.method()` *)
     | stack -> unexpected_stack "ref" stack)
 
 let refref ctx =
@@ -645,7 +646,7 @@ let analyze ctx =
                   else emit_expression ctx e
               | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
               | _ -> push ctx e)
-          | [ Number fid ] ->
+          | [ Number fid ] -> (
               (* <prev_bb>?.method(...) *)
               ctx.stack <- [];
               let func = Ain.ain.func.(Int32.to_int_exn fid) in
@@ -654,7 +655,10 @@ let analyze ctx =
                   ( Method (Nullable Void, func),
                     reshape_args ctx (Ain.Function.arg_types func) args )
               in
-              push ctx e
+              match func.return_type with
+              | Void -> emit_expression ctx e
+              | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
+              | _ -> push ctx e)
           | stack -> unexpected_stack "CALLMETHOD" stack
         else
           let func = Ain.ain.func.(n) in
@@ -1133,8 +1137,6 @@ let rec analyze_basic_blocks ctx stack = function
                    bb)
                 ())
       |> List.rev
-  | { code = { txt = POP; _ } :: _; _ } :: _ ->
-      Printf.failwithf "unexpected POP instruction in basic block" ()
   | bb :: rest ->
       ctx.instructions <- bb.code;
       ctx.address <-
@@ -1230,19 +1232,43 @@ and reduce ctx stack rest =
   | {
       code =
         ( { txt = Jump label2; _ },
-          [ Number 0l; Call (Method (Nullable Void, func), args) ],
+          [ Number 0l; Call (Method (Nullable placeholder, func), args) ],
           [] );
       end_addr = addr1;
       _;
     }
-    :: ({ code = { txt = Branch (label1, _cond); _ }, expr :: estack, stmts; _ }
-        as top)
+    :: ({ code = { txt = Branch (label1, _cond); _ }, estack, stmts; _ } as top)
+    :: stack'
+  | {
+      code =
+        ( { txt = Jump label2; _ },
+          [ Number 0l ],
+          [
+            {
+              txt =
+                Expression (Call (Method (Nullable placeholder, func), args));
+              _;
+            };
+          ] );
+      end_addr = addr1;
+      _;
+    }
+    :: ({ code = { txt = Branch (label1, _cond); _ }, estack, stmts; _ } as top)
     :: stack'
     when addr1 = label1 -> (
+      let lhs, estack =
+        match (placeholder, estack) with
+        | Void, lhs :: estack -> (lhs, estack)
+        | Deref NullRef, slot :: page :: estack ->
+            (Deref (lvalue ctx page slot), estack)
+        | _ -> failwith "unexpected ?. lhs placeholder"
+      in
       match (func.return_type, rest) with
       | ( Void,
           {
-            code = [ { txt = POP; _ }; { txt = PUSH -1l; _ } ];
+            code =
+              ( [ { txt = POP; _ }; { txt = PUSH -1l; _ } ]
+              | [ { txt = POP; _ }; { txt = POP; _ }; { txt = PUSH -1l; _ } ] );
             end_addr = addr2;
             _;
           }
@@ -1254,14 +1280,22 @@ and reduce ctx stack rest =
           analyze_basic_blocks
             {
               ctx with
-              stack = Call (Method (Nullable expr, func), args) :: estack;
+              stack = Call (Method (Nullable lhs, func), args) :: estack;
               stmts;
             }
             stack' bbs
-      | ( Int,
+      | ( (Int | Bool | Float),
           {
             code =
-              [ { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ } ];
+              ( [
+                  { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ };
+                ]
+              | [
+                  { txt = POP; _ };
+                  { txt = POP; _ };
+                  { txt = PUSH -1l; _ };
+                  { txt = PUSH -1l; _ };
+                ] );
             end_addr = addr2;
             _;
           }
@@ -1275,7 +1309,7 @@ and reduce ctx stack rest =
                _;
              }
           :: {
-               code = [ { txt = POP; _ }; { txt = PUSH 0l; _ } ];
+               code = [ { txt = POP; _ }; { txt = PUSH 0l | F_PUSH 0.0; _ } ];
                end_addr = addr3;
                _;
              }
@@ -1283,7 +1317,15 @@ and reduce ctx stack rest =
       | ( String,
           {
             code =
-              [ { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ } ];
+              ( [
+                  { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ };
+                ]
+              | [
+                  { txt = POP; _ };
+                  { txt = POP; _ };
+                  { txt = PUSH -1l; _ };
+                  { txt = PUSH -1l; _ };
+                ] );
             end_addr = addr2;
             _;
           }
@@ -1309,7 +1351,7 @@ and reduce ctx stack rest =
           analyze_basic_blocks
             {
               ctx with
-              stack = Call (Method (Nullable expr, func), args) :: estack;
+              stack = Call (Method (Nullable lhs, func), args) :: estack;
               stmts;
             }
             stack' bbs
