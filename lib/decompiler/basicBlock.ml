@@ -238,6 +238,8 @@ let convert_stack_top_to_delegate ctx =
 
 let ref_ ctx =
   update_stack ctx (function
+    | TernaryLvalue (cond, l1, l2) :: stack ->
+        TernaryOp (cond, Deref l1, Deref l2) :: stack
     | slot :: page :: stack -> Deref (lvalue ctx page slot) :: stack
     | [] -> [ Nullable (Deref NullRef) ] (* part of `refvar?.method()` *)
     | stack -> unexpected_stack "ref" stack)
@@ -1203,6 +1205,55 @@ and reduce ctx stack rest =
         }
       in
       reduce ctx (top' :: stack') rest
+  (* expr ? lvalue : lvalue *)
+  | { addr = label1; end_addr; code = { txt = Seq; _ }, [ c2; c1 ], []; _ }
+    :: { code = { txt = Jump label2; _ }, [ b2; b1 ], []; _ }
+    :: ({ code = { txt = Branch (label1', a); _ }, estack, stmts; _ } as top)
+    :: stack'
+    when label1 = label1' && label2 = end_addr ->
+      let top' =
+        {
+          top with
+          end_addr;
+          code =
+            ( seq_terminator,
+              TernaryLvalue (a, lvalue ctx b1 b2, lvalue ctx c1 c2) :: estack,
+              stmts );
+        }
+      in
+      reduce ctx (top' :: stack') rest
+  (* expr ? lvalue : rvalue *)
+  | {
+      addr = label1;
+      end_addr = label2';
+      code = { txt = Jump label3; _ }, [ c ], [];
+      _;
+    }
+    :: { code = { txt = Jump label2; _ }, [ b2; b1 ], []; _ }
+    :: ({ code = { txt = Branch (label1', a); _ }, estack, stmts; _ } as top)
+    :: stack'
+    when label1 = label1' && label2 = label2' -> (
+      match rest with
+      | {
+          code =
+            ([ { txt = REF; _ } ] | [ { txt = REF; _ }; { txt = A_REF; _ } ]) as
+            code;
+          _;
+        }
+        :: rest
+        when label3 = label2 + (2 * List.length code) ->
+          let top' =
+            {
+              top with
+              end_addr = label3;
+              code =
+                ( seq_terminator,
+                  TernaryOp (a, Deref (lvalue ctx b1 b2), c) :: estack,
+                  stmts );
+            }
+          in
+          reduce ctx (top' :: stack') rest
+      | _ -> failwith "not implemented")
   (* ?: operator with type coercion *)
   | {
       addr = label1;

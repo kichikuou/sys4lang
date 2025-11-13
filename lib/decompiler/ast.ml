@@ -68,6 +68,7 @@ and expr =
   | AssignOp of Instructions.instruction * lvalue * expr
   | Call of callable * expr list (* func, args *)
   | TernaryOp of expr * expr * expr
+  | TernaryLvalue of expr * lvalue * lvalue
   | DelegateCast of expr * int (* str, dg_type *)
   | C_Ref of expr * expr (* str, i *)
   | C_Assign of expr * expr * expr (* str, i, char *)
@@ -217,6 +218,8 @@ let map_expr stmt ~f =
     | Call (c, args) -> Call (rec_callable c, List.map args ~f:rec_expr) |> f
     | TernaryOp (e1, e2, e3) ->
         TernaryOp (rec_expr e1, rec_expr e2, rec_expr e3) |> f
+    | TernaryLvalue (e1, e2, e3) ->
+        TernaryLvalue (rec_expr e1, rec_lvalue e2, rec_lvalue e3) |> f
     | DelegateCast (expr, id) -> DelegateCast (rec_expr expr, id) |> f
     | C_Ref (e1, e2) -> C_Ref (rec_expr e1, rec_expr e2) |> f
     | C_Assign (e1, e2, e3) ->
@@ -310,6 +313,10 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
         rec_expr e1;
         rec_expr e2;
         rec_expr e3
+    | TernaryLvalue (e1, e2, e3) ->
+        rec_expr e1;
+        rec_lvalue e2;
+        rec_lvalue e3
     | DelegateCast (expr, _) -> rec_expr expr
     | C_Ref (e1, e2) ->
         rec_expr e1;
