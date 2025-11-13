@@ -293,7 +293,8 @@ let analyze_function (func : Ain.Function.t) (struc : Ain.Struct.t option) stmt
       match insn with
       | ADD | F_ADD | LI_ADD | S_ADD | SUB | F_SUB | LI_SUB | MUL | F_MUL
       | LI_MUL | DIV | F_DIV | LI_DIV | MOD | LI_MOD | S_MOD _ | LSHIFT | RSHIFT
-      | AND | OR | XOR | PSEUDO_LOGAND | PSEUDO_LOGOR | OBJSWAP _ ->
+      | AND | OR | XOR | PSEUDO_LOGAND | PSEUDO_LOGOR | OBJSWAP _
+      | PSEUDO_NULL_COALESCE ->
           lt
       | S_PLUSA | S_PLUSA2 | PSEUDO_COMMA | DG_PLUSA | DG_MINUSA -> rt
       | EQUALE | S_EQUALE | F_EQUALE | R_EQUALE | NOTE | S_NOTE | F_NOTE

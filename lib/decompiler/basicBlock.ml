@@ -781,7 +781,8 @@ let analyze ctx =
       | OR | XOR | LSHIFT | RSHIFT | F_ADD | F_SUB | F_MUL | F_DIV | F_LT | F_GT
       | F_LTE | F_GTE | F_EQUALE | F_NOTE | LI_ADD | LI_SUB | LI_MUL | LI_DIV
       | LI_MOD | S_PLUSA | S_PLUSA2 | S_ADD | S_LT | S_GT | S_LTE | S_GTE
-      | S_NOTE | S_EQUALE | DG_PLUSA | DG_MINUSA ) as op ->
+      | S_NOTE | S_EQUALE | DG_PLUSA | DG_MINUSA | PSEUDO_NULL_COALESCE ) as op
+      ->
         binary_op ctx op
     | ( ASSIGN | F_ASSIGN | LI_ASSIGN | PLUSA | MINUSA | MULA | DIVA | MODA
       | ANDA | ORA | XORA | LSHIFTA | RSHIFTA | F_PLUSA | F_MINUSA | F_MULA
@@ -1359,11 +1360,7 @@ and reduce ctx stack rest =
                  ];
                _;
              }
-          :: {
-               code = [ { txt = POP; _ }; { txt = PUSH 0l | F_PUSH 0.0; _ } ];
-               end_addr = addr3;
-               _;
-             }
+          :: ({ code = { txt = POP; _ } :: code'; end_addr = addr3; _ } as bb)
           :: bb' :: rest' )
       | ( String,
           {
@@ -1389,15 +1386,18 @@ and reduce ctx stack rest =
                  ];
                _;
              }
-          :: {
-               code = [ { txt = DELETE; _ }; { txt = S_PUSH 0; _ } ];
-               end_addr = addr3;
-               _;
-             }
+          :: ({ code = { txt = DELETE; _ } :: code'; end_addr = addr3; _ } as bb)
           :: bb' :: rest' )
         when addr2 = label2 && addr3 = label3 ->
           let bbs =
-            { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
+            { top with code = code'; end_addr = bb.end_addr }
+            :: {
+                 bb' with
+                 code =
+                   { txt = PSEUDO_NULL_COALESCE; addr = -1; end_addr = -1 }
+                   :: bb'.code;
+               }
+            :: rest'
           in
           analyze_basic_blocks
             {
