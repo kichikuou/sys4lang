@@ -510,6 +510,17 @@ let analyze ctx =
             (* Occurs during assignment to a reference *)
             emit_statement ctx (Expression e)
         | e -> unexpected_stack "POP" (e :: ctx.stack))
+    | DELETE -> (
+        match pop ctx with
+        | Deref (PageRef _ | ObjRef _ | RefRef _)
+        | DerefRef (PageRef _ | ObjRef _ | RefRef _) ->
+            ()
+        | e when List.is_empty ctx.stack -> emit_expression ctx e
+        | e -> unexpected_stack "DELETE" (e :: ctx.stack))
+    | SP_INC -> (
+        match pop ctx with
+        | AssignOp _ as e when List.is_empty ctx.stack -> emit_expression ctx e
+        | _ -> () (* reference counting is implicit *))
     | CHECKUDO -> (
         match pop ctx with
         | Deref (PageRef (LocalPage, _)) -> ()
@@ -580,7 +591,6 @@ let analyze ctx =
         emit_statement ctx (VarDecl (ctx.func.vars.(var), None))
     | R_ASSIGN -> r_assign ctx
     | NEW (struc, func) -> new_ ctx struc func
-    | DELETE | SP_INC -> pop ctx |> ignore (* reference counting is implicit *)
     | OBJSWAP type_ -> emit_expression ctx (objswap ctx type_)
     (* --- Control Flow --- *)
     | CALLFUNC n -> (
