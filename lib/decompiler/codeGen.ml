@@ -321,6 +321,8 @@ class code_printer ?(print_addr = false) (file : string) =
       | DerefStruct (_, expr) -> self#pr_expr prec out expr
       | Page StructPage -> print_string out "this"
       | Null -> print_string out "NULL"
+      | Nullable expr ->
+          bprintf out "%a?" (self#pr_expr (prec_value PREC_DOT)) expr
       | Void -> print_string out "<void>" (* FIXME *)
       | UnaryOp (FTOI, expr) -> bprintf out "int(%a)" (self#pr_expr 0) expr
       | UnaryOp (ITOF, expr) -> bprintf out "float(%a)" (self#pr_expr 0) expr

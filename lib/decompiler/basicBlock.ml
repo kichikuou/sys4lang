@@ -624,8 +624,9 @@ let analyze ctx =
     | CALLMETHOD n -> (
         if Ain.ain.vers >= 11 then
           let args = pop_n ctx n in
-          match pop2 ctx with
-          | this, Number fid -> (
+          match ctx.stack with
+          | Number fid :: this :: stack -> (
+              ctx.stack <- stack;
               let func = Ain.ain.func.(Int32.to_int_exn fid) in
               let e =
                 Call
@@ -644,7 +645,17 @@ let analyze ctx =
                   else emit_expression ctx e
               | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
               | _ -> push ctx e)
-          | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)
+          | [ Number fid ] ->
+              (* <prev_bb>?.method(...) *)
+              ctx.stack <- [];
+              let func = Ain.ain.func.(Int32.to_int_exn fid) in
+              let e =
+                Call
+                  ( Method (Nullable Void, func),
+                    reshape_args ctx (Ain.Function.arg_types func) args )
+              in
+              push ctx e
+          | stack -> unexpected_stack "CALLMETHOD" stack
         else
           let func = Ain.ain.func.(n) in
           let args = pop_args ctx (Ain.Function.arg_types func) in
@@ -1122,6 +1133,8 @@ let rec analyze_basic_blocks ctx stack = function
                    bb)
                 ())
       |> List.rev
+  | { code = { txt = POP; _ } :: _; _ } :: _ ->
+      Printf.failwithf "unexpected POP instruction in basic block" ()
   | bb :: rest ->
       ctx.instructions <- bb.code;
       ctx.address <-
@@ -1213,6 +1226,94 @@ and reduce ctx stack rest =
           in
           reduce ctx (top' :: stack') rest
       | _ -> failwith "not implemented")
+  (* ?. method call *)
+  | {
+      code =
+        ( { txt = Jump label2; _ },
+          [ Number 0l; Call (Method (Nullable Void, func), args) ],
+          [] );
+      end_addr = addr1;
+      _;
+    }
+    :: ({ code = { txt = Branch (label1, _cond); _ }, expr :: estack, stmts; _ }
+        as top)
+    :: stack'
+    when addr1 = label1 -> (
+      match (func.return_type, rest) with
+      | ( Void,
+          {
+            code = [ { txt = POP; _ }; { txt = PUSH -1l; _ } ];
+            end_addr = addr2;
+            _;
+          }
+          :: bb' :: rest' )
+        when addr2 = label2 ->
+          let bbs =
+            { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
+          in
+          analyze_basic_blocks
+            {
+              ctx with
+              stack = Call (Method (Nullable expr, func), args) :: estack;
+              stmts;
+            }
+            stack' bbs
+      | ( Int,
+          {
+            code =
+              [ { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ } ];
+            end_addr = addr2;
+            _;
+          }
+          :: {
+               code =
+                 [
+                   { txt = PUSH -1l; _ };
+                   { txt = EQUALE; _ };
+                   { txt = IFZ label3; _ };
+                 ];
+               _;
+             }
+          :: {
+               code = [ { txt = POP; _ }; { txt = PUSH 0l; _ } ];
+               end_addr = addr3;
+               _;
+             }
+          :: bb' :: rest' )
+      | ( String,
+          {
+            code =
+              [ { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ } ];
+            end_addr = addr2;
+            _;
+          }
+          :: {
+               code =
+                 [
+                   { txt = PUSH -1l; _ };
+                   { txt = EQUALE; _ };
+                   { txt = IFZ label3; _ };
+                 ];
+               _;
+             }
+          :: {
+               code = [ { txt = DELETE; _ }; { txt = S_PUSH 0; _ } ];
+               end_addr = addr3;
+               _;
+             }
+          :: bb' :: rest' )
+        when addr2 = label2 && addr3 = label3 ->
+          let bbs =
+            { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
+          in
+          analyze_basic_blocks
+            {
+              ctx with
+              stack = Call (Method (Nullable expr, func), args) :: estack;
+              stmts;
+            }
+            stack' bbs
+      | _ -> failwith "unhandled ?. method call")
   | ({ code = { txt = Seq; _ }, (_ :: _ as estack), stmts; _ } as top) :: stack'
     -> (
       match rest with

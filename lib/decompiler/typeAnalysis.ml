@@ -166,6 +166,9 @@ let analyze_function (func : Ain.Function.t) (struc : Ain.Struct.t option) stmt
         let lval', t = analyze_lvalue lval in
         (DerefRef lval', Ref t)
     | Null -> (Null, Ref Any)
+    | Nullable e ->
+        let e', t = analyze_expr expected e in
+        (Nullable e', t)
     | Void -> (Void, Void)
     | New n as e -> (e, Ref (Struct n))
     | DerefStruct (struc, expr) ->
