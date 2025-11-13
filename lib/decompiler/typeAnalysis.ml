@@ -211,6 +211,17 @@ let analyze_function (func : Ain.Function.t) (struc : Ain.Struct.t option) stmt
         and i', _t2 = analyze_expr Int i
         and char', _t3 = analyze_expr Char char in
         (C_Assign (str', i', char'), Char)
+    | PropertySet (obj, m, rhs) ->
+        let obj, _ = analyze_expr Any obj in
+        let arg_type =
+          match Ain.Function.arg_types m with
+          | [ t ] -> t
+          | _ -> failwith "non-unary property setter function"
+        in
+        let rhs, t = analyze_expr arg_type rhs in
+        unify_if_functype arg_type t;
+        let rhs = remove_cast arg_type rhs in
+        (PropertySet (obj, m, rhs), t)
   and analyze_callable args = function
     | Function func as expr ->
         (expr, func.return_type, Ain.Function.arg_types func)

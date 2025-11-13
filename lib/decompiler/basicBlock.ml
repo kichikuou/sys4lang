@@ -633,7 +633,15 @@ let analyze ctx =
                     reshape_args ctx (Ain.Function.arg_types func) args )
               in
               match func.return_type with
-              | Void -> emit_expression ctx e
+              | Void ->
+                  if
+                    n = 1
+                    && Option.exists (List.hd ctx.stack) ~f:(fun v ->
+                        Poly.(v = List.hd_exn args))
+                  then (
+                    ctx.stack <- List.tl_exn ctx.stack;
+                    push ctx (PropertySet (this, func, List.hd_exn args)))
+                  else emit_expression ctx e
               | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
               | _ -> push ctx e)
           | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)

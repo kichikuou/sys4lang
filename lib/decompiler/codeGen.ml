@@ -308,9 +308,13 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
       | BoundMethod (Number -1l, f) ->
           fprintf oc "&%s" (Ain.Function.parse_name f).name
       | BoundMethod (expr, f) ->
+          let method_name =
+            (Ain.Function.parse_name f).name
+            |> String.chop_suffix_if_exists ~suffix:"::set"
+          in
           fprintf oc "%a.%s"
             (self#pr_expr (prec_value PREC_DOT))
-            expr (Ain.Function.parse_name f).name
+            expr method_name
       | Deref lval -> self#pr_lvalue prec oc lval
       | DerefRef lval -> self#pr_lvalue prec oc lval
       | New n -> fprintf oc "new %s" Ain.ain.strt.(n).name
@@ -371,6 +375,10 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
             str (self#pr_expr 0) i
       | C_Assign (str, i, ch) ->
           self#pr_binary_op parent_op prec (operator ASSIGN) (C_Ref (str, i)) ch
+      | PropertySet (obj, m, rhs) ->
+          self#pr_binary_op parent_op prec (operator ASSIGN)
+            (BoundMethod (obj, m))
+            rhs
       | e ->
           eprintf "%s\n" (show_expr e);
           failwith "pr_expr: not implemented"
