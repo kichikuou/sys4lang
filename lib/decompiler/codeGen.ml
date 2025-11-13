@@ -184,6 +184,7 @@ let operator insn =
   | INV | F_INV -> make_op "-" PREC_UNARY Right
   | NOT -> make_op "!" PREC_UNARY Right
   | COMPL -> make_op "~" PREC_UNARY Right
+  | PSEUDO_NULL_COALESCE -> make_op "??" PREC_QUESTION Right
   | op ->
       Printf.failwithf "cannot print operator for %s" (show_instruction op) ()
 
