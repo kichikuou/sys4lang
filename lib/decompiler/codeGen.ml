@@ -429,6 +429,7 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
       | Void -> print_string oc "void"
       | Struct n ->
           print_string oc (if n < 0 then "struct" else Ain.ain.strt.(n).name)
+      | Array Any -> print_string oc "array"
       | Array _ as t ->
           print_string oc "array@";
           let base, rank = Type.array_base_and_rank t in
