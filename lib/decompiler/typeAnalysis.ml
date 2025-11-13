@@ -196,6 +196,11 @@ let analyze_function (func : Ain.Function.t) (struc : Ain.Struct.t option) stmt
         and e2', t2 = analyze_expr expected e2
         and e3', _t3 = analyze_expr expected e3 in
         (TernaryOp (e1', e2', e3'), t2)
+    | TernaryLvalue (e1, e2, e3) ->
+        let e1', _t1 = analyze_expr Bool e1
+        and e2', t2 = analyze_lvalue e2
+        and e3', _t3 = analyze_lvalue e3 in
+        (TernaryLvalue (e1', e2', e3'), t2)
     | DelegateCast (expr, dg_type) ->
         let expr', _ = analyze_expr String expr in
         let t =
