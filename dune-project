@@ -1,5 +1,5 @@
 (lang dune 3.13)
-(using menhir 2.1)
+(using menhir 3.0)
 
 (name sys4lang)
 (version 0.6.0)
