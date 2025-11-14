@@ -102,6 +102,12 @@ let pr_char oc c =
 let strip_class_name s =
   match String.lsplit2 s ~on:'@' with None -> s | Some (_, right) -> right
 
+(* strip_qualifiers "a::b::c" returns "c" *)
+let strip_qualifiers name =
+  match String.rindex name ':' with
+  | None -> name
+  | Some i -> String.sub name ~pos:(i + 1) ~len:(String.length name - i - 1)
+
 let pr_array_rank oc rank = if rank > 1 then fprintf oc "%@%d" rank
 
 let pr_number oc = function
@@ -564,9 +570,9 @@ let print_function ~print_addr pr dbginfo (func : function_t) =
     (match func.struc with
     | Some (struc : Ain.Struct.t) ->
         if String.equal func.name "0" then
-          fprintf pr.oc "%s::%s" struc.name struc.name
+          fprintf pr.oc "%s::%s" struc.name (strip_qualifiers struc.name)
         else if String.equal func.name "1" then
-          fprintf pr.oc "%s::~%s" struc.name struc.name
+          fprintf pr.oc "%s::~%s" struc.name (strip_qualifiers struc.name)
         else
           fprintf pr.oc "%a %s::%s" (pr_type pr) return_type struc.name
             func.name
@@ -602,9 +608,10 @@ let print_struct_decl pr (struc : struct_t) =
   then print_newline pr;
   List.iter struc.methods ~f:(fun func ->
       print_indent pr 1;
-      if String.equal func.name "0" then fprintf pr.oc "%s" struc.struc.name
+      if String.equal func.name "0" then
+        fprintf pr.oc "%s" (strip_qualifiers struc.struc.name)
       else if String.equal func.name "1" then
-        fprintf pr.oc "~%s" struc.struc.name
+        fprintf pr.oc "~%s" (strip_qualifiers struc.struc.name)
       else fprintf pr.oc "%a %s" (pr_type pr) func.func.return_type func.name;
       println pr "(%a);"
         (pr_param_list (pr_vardecl pr))
