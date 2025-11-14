@@ -1,11 +1,7 @@
 open Common
 open Base
 
-type instruction = {
-  op_i : int;
-  opcode : Bytecode.opcode;
-  args : Bytecode.argtype list;
-}
+type instruction = { op_i : int; args : Bytecode.argtype list }
 
 type t = {
   ain : Ain.t;
@@ -26,7 +22,7 @@ let get_instruction dasm =
       let op_i = Stdlib.Bytes.get_int16_le (Ain.get_code dasm.ain) dasm.addr in
       let opcode = Bytecode.opcode_of_int op_i in
       let args = Bytecode.args_of_opcode opcode in
-      let instr = { op_i; opcode; args } in
+      let instr = { op_i; args } in
       (match opcode with
       | Bytecode.FUNC ->
           dasm.current_func <- Some (Int32.to_int_exn (arg dasm 0))

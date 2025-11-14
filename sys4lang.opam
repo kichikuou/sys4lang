@@ -18,7 +18,7 @@ depends: [
   "cmdliner"
   "stdio"
   "camlzip"
-  "dune" {>= "3.0"}
+  "dune" {>= "3.13"}
   "dune-build-info"
   "linol-eio" {>= "0.8" & < "0.10"}
   "eio_main"

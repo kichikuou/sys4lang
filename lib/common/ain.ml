@@ -423,11 +423,11 @@ module FunctionType = struct
 end
 
 module Enum = struct
-  type t = { index : int; name : string; symbols : string list }
+  type t = { _index : int; name : string; _symbols : string list }
 end
 
 type t = {
-  mutable is_ain2 : bool;
+  is_ain2 : bool;
   mutable major_version : int;
   mutable minor_version : int;
   mutable keyc : int32;
@@ -783,9 +783,9 @@ let read_function_types buf count =
 
 let read_enums buf count =
   read_cstrings buf count
-  |> List.mapi ~f:(fun index name ->
+  |> List.mapi ~f:(fun _index name ->
       (* TODO: symbols *)
-      let e : Enum.t = { index; name; symbols = [] } in
+      let e : Enum.t = { _index; name; _symbols = [] } in
       e)
 
 let decrypt = Mt19937.(decrypt ain_decrypt_seed)
