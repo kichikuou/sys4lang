@@ -26,6 +26,10 @@ let array_element_type = function
   | _ -> failwith "array_element_type: non-array type"
 
 let builtin_type receiver_type insn args =
+  let array_callback_type () =
+    if Ain.ain.vers < 8 then FuncType (TypeVar.create Var)
+    else Delegate (TypeVar.create Var)
+  in
   let open Instructions in
   match insn with
   | A_NUMOF ->
@@ -42,8 +46,8 @@ let builtin_type receiver_type insn args =
   | A_ERASE -> (insn, Int, [ Int ])
   | A_FILL -> (insn, Int, [ Int; Int; array_element_type receiver_type ])
   | A_COPY -> (insn, Int, [ Int; Ref receiver_type; Int; Int ])
-  | A_FIND -> (insn, Int, [ Int; Int; Any; FuncType (TypeVar.create Var) ])
-  | A_SORT -> (insn, Void, [ FuncType (TypeVar.create Var) ])
+  | A_FIND -> (insn, Int, [ Int; Int; Any; array_callback_type () ])
+  | A_SORT -> (insn, Void, [ array_callback_type () ])
   | A_SORT_MEM -> (
       match receiver_type with
       | Array (Struct n) -> (insn, Void, [ StructMember n ])

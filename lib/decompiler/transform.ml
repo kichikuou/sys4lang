@@ -326,8 +326,14 @@ let fold_newline_func_to_msg stmt =
 let remove_optional_arguments =
   map_expr ~f:(function
     | Call ((Builtin (PSEUDO_A_NUMOF1, _) as f), [ Number 1l ]) -> Call (f, [])
-    | Call ((Builtin (A_SORT, _) as f), [ Null ]) -> Call (f, [])
-    | Call ((Builtin (A_FIND, _) as f), [ a; b; c; Null ]) ->
+    | Call
+        ( (Builtin (A_SORT, _) as f),
+          [ (Null | BoundMethod (Number -1l, { name = "NULL"; _ })) ] ) ->
+        Call (f, [])
+    | Call
+        ( (Builtin (A_FIND, _) as f),
+          [ a; b; c; (Null | BoundMethod (Number -1l, { name = "NULL"; _ })) ]
+        ) ->
         Call (f, [ a; b; c ])
     | Call ((Builtin2 (FTOS, _) as f), [ Number -1l ]) -> Call (f, [])
     | expr -> expr)
