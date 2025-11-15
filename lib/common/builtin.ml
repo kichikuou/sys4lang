@@ -87,6 +87,10 @@ let fundecl_of_syscall sys =
 let addr_null =
   make_expr ~ty:(TyFunction ([], Void)) (FuncAddr ("NULL", Some 0))
 
+let method_null =
+  let ty = TyMethod ([], Void) in
+  make_expr ~ty (Cast (ty, addr_null))
+
 let fundecl_of_builtin ctx builtin receiver_ty node_opt =
   let elem_ty = match receiver_ty with Array t -> t | _ -> Void in
   let rank = array_rank receiver_ty in
@@ -142,16 +146,20 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
   | ArraySort ->
       let cb_argtype, cb_default =
         match elem_ty with
-        | Int | Float | String -> (elem_ty, Some addr_null)
+        | Int | Float | String ->
+            ( elem_ty,
+              Some (if ctx.version < 800 then addr_null else method_null) )
         | Struct _ -> (Ref elem_ty, None)
         | _ ->
             CompileError.compile_error
               ("Sort() is not supported for array@" ^ jaf_type_to_string elem_ty)
               (Option.value_exn node_opt)
       in
-      make Void "Sort"
-        [ TyFunction ([ cb_argtype; cb_argtype ], Int) ]
-        ~defaults:[ cb_default ]
+      let cb_type =
+        if ctx.version < 800 then TyFunction ([ cb_argtype; cb_argtype ], Int)
+        else TyMethod ([ cb_argtype; cb_argtype ], Bool)
+      in
+      make Void "Sort" [ cb_type ] ~defaults:[ cb_default ]
   | ArraySortBy -> (
       match elem_ty with
       | Struct (name, _) ->
@@ -163,15 +171,21 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
   | ArrayFind ->
       let cb_argtype, cb_default =
         match elem_ty with
-        | Int | Float | Bool | String -> (elem_ty, Some addr_null)
+        | Int | Float | Bool | String ->
+            ( elem_ty,
+              Some (if ctx.version < 800 then addr_null else method_null) )
         | Struct _ -> (Ref elem_ty, None)
         | _ ->
             CompileError.compile_error
               ("Find() is not supported for array@" ^ jaf_type_to_string elem_ty)
               (Option.value_exn node_opt)
       in
+      let cb_type =
+        if ctx.version < 800 then TyFunction ([ cb_argtype; cb_argtype ], Bool)
+        else TyMethod ([ cb_argtype; cb_argtype ], Bool)
+      in
       make Int "Find"
-        [ Int; Int; cb_argtype; TyFunction ([ cb_argtype; cb_argtype ], Bool) ]
+        [ Int; Int; cb_argtype; cb_type ]
         ~defaults:[ None; None; None; cb_default ]
   | DelegateNumof -> make Int "Numof" []
   | DelegateExist -> make Int "Exist" [ delegate_ft receiver_ty ]
