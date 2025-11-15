@@ -71,17 +71,16 @@ class type_declare_visitor ctx =
               self#visit_declaration (Global ds));
           gg_index <- -1
       | Function f ->
-          (match f.class_name with
-          | Some name ->
-              if not (Hashtbl.mem ctx.structs name) then
-                compile_error
-                  ("undefined class name " ^ name)
-                  (ASTDeclaration decl)
-              else if not (Hashtbl.mem ctx.functions (mangled_name f)) then
-                compile_error
-                  (f.name ^ " is not declared in class " ^ name)
-                  (ASTDeclaration decl)
-          | None -> ());
+          (match parse_qualified_name f.name with
+          | None, _ -> ()
+          | Some qual, name ->
+              if Hashtbl.mem ctx.structs qual then (
+                f.name <- name;
+                f.class_name <- Some qual;
+                if not (Hashtbl.mem ctx.functions (mangled_name f)) then
+                  compile_error
+                    (f.name ^ " is not declared in class " ^ qual)
+                    (ASTDeclaration decl)));
           self#declare_function f
       | FuncTypeDef f -> (
           match Hashtbl.add ctx.functypes ~key:f.name ~data:f with
@@ -96,6 +95,7 @@ class type_declare_visitor ctx =
                 (ASTDeclaration decl)
           | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
       | StructDef s -> (
+          let unqualified_struct_name = snd (parse_qualified_name s.name) in
           let ain_s = Ain.add_struct ctx.ain s.name in
           let jaf_s = new_jaf_struct s.name s.loc ain_s.index in
           let next_index = ref 0 in
@@ -104,7 +104,7 @@ class type_declare_visitor ctx =
             | AccessSpecifier Public -> in_private := false
             | AccessSpecifier Private -> in_private := true
             | Constructor f ->
-                if not (String.equal f.name s.name) then
+                if not (String.equal f.name unqualified_struct_name) then
                   compile_error "constructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.class_name <- Some s.name;
@@ -112,7 +112,8 @@ class type_declare_visitor ctx =
                 f.is_private <- !in_private;
                 self#declare_function f
             | Destructor f ->
-                if not (String.equal f.name ("~" ^ s.name)) then
+                if not (String.equal f.name ("~" ^ unqualified_struct_name))
+                then
                   compile_error "destructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.class_name <- Some s.name;

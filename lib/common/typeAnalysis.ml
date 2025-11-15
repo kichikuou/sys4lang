@@ -409,21 +409,25 @@ class type_analyze_visitor ctx =
           | Some f ->
               expr.node <- FuncAddr (name, f.index);
               expr.ty <- TyFunction (ft_of_fundecl f)
-          | None -> undefined_variable_error name (ASTExpression expr))
-      | MemberAddr (sname, name, _) -> (
-          match environment#resolve_qualified sname name with
-          | UnresolvedName ->
-              undefined_variable_error
-                (sname ^ "::" ^ name)
-                (ASTExpression expr)
-          | ResolvedMember (_, v) ->
-              expr.node <-
-                MemberAddr
-                  (sname, name, ClassVariable (Option.value_exn v.index));
-              expr.ty <- MemberPtr (sname, v.type_spec.ty)
-          | _ ->
-              compiler_bug "resolve_qualified returned an unexpected value"
-                (Some (ASTExpression expr)))
+          | None -> (
+              match Jaf.parse_qualified_name name with
+              | None, name -> undefined_variable_error name (ASTExpression expr)
+              | Some sname, name -> (
+                  match environment#resolve_qualified sname name with
+                  | UnresolvedName ->
+                      undefined_variable_error
+                        (sname ^ "::" ^ name)
+                        (ASTExpression expr)
+                  | ResolvedMember (_, v) ->
+                      expr.node <-
+                        MemberAddr (sname, name, Option.value_exn v.index);
+                      expr.ty <- MemberPtr (sname, v.type_spec.ty)
+                  | _ ->
+                      compiler_bug
+                        "resolve_qualified returned an unexpected value"
+                        (Some (ASTExpression expr)))))
+      | MemberAddr _ ->
+          compiler_bug "unexpected MemberAddr" (Some (ASTExpression expr))
       | Unary (op, e) -> (
           match op with
           | UPlus | UMinus | PreInc | PreDec | PostInc | PostDec ->

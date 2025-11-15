@@ -84,15 +84,6 @@ let func loc typespec name params body =
     class_index = None;
   }
 
-let member_func loc typespec_opt class_name is_dtor name params body =
-  let name = if is_dtor then "~" ^ name else name in
-  let type_spec = match typespec_opt with
-    | Some ts -> ts
-    | None -> implicit_void (fst loc)
-  in
-  let fundecl = func loc type_spec name params body in
-  { fundecl with class_name = Some class_name }
-
 let rec multidim_array dims t =
   if dims <= 0 then t else multidim_array (dims - 1) (Array t)
 
@@ -148,10 +139,20 @@ hll
   : hll_declaration* EOF { $1 }
   ;
 
+qualified_name
+  : IDENTIFIER { $1 }
+  | IDENTIFIER COCO qualified_name { $1 ^ "::" ^ $3 }
+  ;
+
+qualified_funcname
+  : IDENTIFIER { $1 }
+  | BITNOT IDENTIFIER { "~" ^ $2 }
+  | IDENTIFIER COCO qualified_funcname { $1 ^ "::" ^ $3 }
+  ;
+
 primary_expression
-  : IDENTIFIER { make_expr ~loc:$sloc (Ident ($1, UnresolvedIdent)) }
-  | BITAND IDENTIFIER { make_expr ~loc:$sloc (FuncAddr ($2, None)) }
-  | BITAND IDENTIFIER COCO IDENTIFIER { make_expr ~loc:$sloc (MemberAddr ($2, $4, UnresolvedMember)) }
+  : qualified_name { make_expr ~loc:$sloc (Ident ($1, UnresolvedIdent)) }
+  | BITAND qualified_name { make_expr ~loc:$sloc (FuncAddr ($2, None)) }
   | THIS { make_expr ~loc:$sloc This }
   | NULL { make_expr ~loc:$sloc Null }
   | constant { make_expr ~loc:$sloc $1 }
@@ -194,7 +195,7 @@ postfix_expression
   | postfix_expression LBRACKET expression RBRACKET { make_expr ~loc:$sloc (Subscript ($1, $3)) }
   | primitive_type_specifier LPAREN expression RPAREN { make_expr ~loc:$sloc (Cast ($1, $3)) }
   | postfix_expression arglist { make_expr ~loc:$sloc (Call ($1, $2, UnresolvedCall)) }
-  | NEW IDENTIFIER { make_expr ~loc:$sloc (New { ty = Unresolved $2; location = $loc($2) }) }
+  | NEW qualified_name { make_expr ~loc:$sloc (New { ty = Unresolved $2; location = $loc($2) }) }
   | postfix_expression DOT IDENTIFIER { make_expr ~loc:$sloc (Member ($1, $3, UnresolvedMember)) }
   | postfix_expression INC { make_expr ~loc:$sloc (Unary (PostInc, $1)) }
   | postfix_expression DEC { make_expr ~loc:$sloc (Unary (PostDec, $1)) }
@@ -334,7 +335,7 @@ primitive_type_specifier
 
 atomic_type_specifier
   : primitive_type_specifier { $1 }
-  | IDENTIFIER { Unresolved $1 }
+  | qualified_name { Unresolved $1 }
 
 type_specifier
   : atomic_type_specifier { $1 }
@@ -364,7 +365,7 @@ switch_statement
   ;
 
 declaration_statement
-  : declaration { Declarations $1 }
+  : declaration(IDENTIFIER) { Declarations $1 }
 
 label_statement
   : IDENTIFIER COLON { Label $1 }
@@ -402,7 +403,7 @@ iteration_statement
            $6,
            $8)
     }
-  | FOR LPAREN declaration expression? SEMICOLON expression? RPAREN statement
+  | FOR LPAREN declaration(IDENTIFIER) expression? SEMICOLON expression? RPAREN statement
     { For (stmt $loc($3) (Declarations $3),
            $4,
            $6,
@@ -415,7 +416,7 @@ jump_statement
   | CONTINUE SEMICOLON { Continue }
   | BREAK SEMICOLON { Break }
   | RETURN expression? SEMICOLON { Return ($2) }
-  | JUMP IDENTIFIER SEMICOLON { Jump $2 }
+  | JUMP qualified_name SEMICOLON { Jump $2 }
   | JUMPS expression SEMICOLON { Jumps $2 }
   ;
 
@@ -433,10 +434,10 @@ assert_statement
                   Some (make_expr ~loc:$loc($1) (ConstInt $startpos.pos_lnum))] in
       Expression (make_expr ~loc:$sloc (Call (make_expr ~loc:$loc($1) (Ident ("assert", UnresolvedIdent)), args, UnresolvedCall))) }
 
-declaration
-  : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
+declaration(X)
+  : CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator(X)) SEMICOLON
     { { decl_loc = $sloc; typespec = $2; is_const_decls = true; vars = vardecls LocalVar true $2 $3 } }
-  | declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
+  | declaration_specifiers separated_nonempty_list(COMMA, init_declarator(X)) SEMICOLON
     { { decl_loc = $sloc; typespec = $1; is_const_decls = false; vars = vardecls LocalVar false $1 $2 } }
   ;
 
@@ -445,36 +446,34 @@ declaration_specifiers
   | type_specifier { { location = $sloc; ty = $1 } }
   ;
 
-init_declarator
-  : declarator ASSIGN assign_expression { { $1 with initval = Some $3; loc = $sloc } }
-  | declarator { $1 }
+init_declarator(X)
+  : declarator(X) ASSIGN assign_expression { { $1 with initval = Some $3; loc = $sloc } }
+  | declarator(X) { $1 }
   ;
 
-declarator
-  : IDENTIFIER { { name=$1; dims=[]; initval=None; loc=$sloc } }
-  | array_allocation { $1 }
+declarator(X)
+  : X { { name=$1; dims=[]; initval=None; loc=$sloc } }
+  | array_allocation(X) { $1 }
   ;
 
-array_allocation
-  : IDENTIFIER LBRACKET expression RBRACKET { { name=$1; loc=$sloc; initval=None; dims=[$3] } }
-  | array_allocation LBRACKET expression RBRACKET
+array_allocation(X)
+  : X LBRACKET expression RBRACKET { { name=$1; loc=$sloc; initval=None; dims=[$3] } }
+  | array_allocation(X) LBRACKET expression RBRACKET
     { { $1 with dims = $3 :: $1.dims; loc = $sloc } }
   ;
 
 external_declaration
-  : declaration
+  : declaration(qualified_name)
     { Global { $1 with vars = (List.map (fun d -> { d with kind = GlobalVar }) $1.vars) } }
-  | declaration_specifiers IDENTIFIER parameter_list(init_declarator) block
-    { Function (func $sloc $1 $2 $3 (Some $4)) }
-  | ioption(declaration_specifiers) IDENTIFIER COCO boption(BITNOT) IDENTIFIER parameter_list(declarator) block
-    { Function (member_func $sloc $1 $2 $4 $5 $6 (Some $7)) }
-  | HASH IDENTIFIER LPAREN VOID? RPAREN block
+  | ioption(declaration_specifiers) qualified_funcname parameter_list(init_declarator(IDENTIFIER)) block
+    { Function (func $sloc (Option.value $1 ~default:(implicit_void $symbolstartpos)) $2 $3 (Some $4)) }
+  | HASH qualified_name LPAREN VOID? RPAREN block
     { Function { (func $sloc (implicit_void $symbolstartpos) $2 [] (Some $6)) with is_label=true } }
-  | FUNCTYPE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
+  | FUNCTYPE declaration_specifiers qualified_name functype_parameter_list SEMICOLON
     { FuncTypeDef (func $sloc $2 $3 $4 None) }
-  | DELEGATE declaration_specifiers IDENTIFIER functype_parameter_list SEMICOLON
+  | DELEGATE declaration_specifiers qualified_name functype_parameter_list SEMICOLON
     { DelegateDef (func $sloc $2 $3 $4 None) }
-  | struct_or_class IDENTIFIER LBRACE struct_declaration* RBRACE SEMICOLON
+  | struct_or_class qualified_name LBRACE struct_declaration* RBRACE SEMICOLON
     { StructDef ({ loc = $sloc; is_class = $1; name = $2; decls = $4 }) }
   | ENUM enumerator_list SEMICOLON
     { Enum ({ loc=$sloc; name=None; values=$2 }) }
@@ -482,14 +481,14 @@ external_declaration
     { Enum ({ loc=$sloc; name=Some $2; values=$3 }) }
   | GLOBALGROUP IDENTIFIER SEMICOLON
     { GlobalGroup { name = $2; loc = $loc; vardecls = [] } }
-  | GLOBALGROUP IDENTIFIER LBRACE declaration* RBRACE
+  | GLOBALGROUP IDENTIFIER LBRACE declaration(qualified_name)* RBRACE
     {
       let update_decls ds = { ds with vars = (List.map (fun d -> { d with kind = GlobalVar }) ds.vars) } in
       GlobalGroup { name = $2; loc = $loc; vardecls = List.map update_decls $4 }
     }
 
 hll_declaration
-  : declaration_specifiers IDENTIFIER parameter_list(declarator) SEMICOLON
+  : declaration_specifiers IDENTIFIER parameter_list(declarator(IDENTIFIER)) SEMICOLON
     { Function (func $sloc $1 $2 $3 None) }
 
 %inline struct_or_class
@@ -517,7 +516,7 @@ parameter_list(X)
 
 functype_parameter_declaration
   : declaration_specifiers { vardecl Parameter false $1 { name="<anonymous>"; dims=[]; initval=None; loc=$sloc } }
-  | parameter_declaration(declarator) { $1 }
+  | parameter_declaration(declarator(IDENTIFIER)) { $1 }
   ;
 
 functype_parameter_list
@@ -527,13 +526,13 @@ functype_parameter_list
 struct_declaration
   : access_specifier COLON
     { AccessSpecifier $1 }
-  | CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator) SEMICOLON
+  | CONST declaration_specifiers separated_nonempty_list(COMMA, init_declarator(IDENTIFIER)) SEMICOLON
     { let vars = vardecls ClassVar true $2 $3 in
       MemberDecl { decl_loc=$sloc; typespec=$2; is_const_decls = true; vars } }
-  | declaration_specifiers separated_nonempty_list(COMMA, declarator) SEMICOLON
+  | declaration_specifiers separated_nonempty_list(COMMA, declarator(IDENTIFIER)) SEMICOLON
     { let vars = vardecls ClassVar false $1 $2 in
       MemberDecl { decl_loc=$sloc; typespec=$1; is_const_decls = false; vars } }
-  | declaration_specifiers IDENTIFIER parameter_list(init_declarator) opt_body
+  | declaration_specifiers IDENTIFIER parameter_list(init_declarator(IDENTIFIER)) opt_body
     { Method (func $sloc $1 $2 $3 $4) }
   | IDENTIFIER LPAREN VOID? RPAREN opt_body
     { Constructor (func $sloc (implicit_void $symbolstartpos) $1 [] $5) }

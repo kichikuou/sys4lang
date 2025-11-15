@@ -502,8 +502,7 @@ class jaf_compiler ctx debug_info =
       | FuncAddr (_, Some no) -> self#write_instruction1 PUSH no
       | FuncAddr (_, None) ->
           compiler_bug "unresolved FuncAddr" (Some (ASTExpression expr))
-      | MemberAddr (_, _, ClassVariable v) -> self#write_instruction1 PUSH v
-      | MemberAddr _ -> compile_error "not implemented" (ASTExpression expr)
+      | MemberAddr (_, _, v) -> self#write_instruction1 PUSH v
       | Ident (_, GlobalVariable i) -> (
           match (Ain.get_global_by_index ctx.ain i).value_type with
           | (Int | Float | Bool | LongInt | FuncType _) when ctx.version < 630

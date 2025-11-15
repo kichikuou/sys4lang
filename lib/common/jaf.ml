@@ -163,7 +163,7 @@ and ast_expression =
   | ConstString of string
   | Ident of string * ident_type
   | FuncAddr of string * int option
-  | MemberAddr of string * string * member_type
+  | MemberAddr of string * string * int
   | Unary of unary_op * expression
   | Binary of binary_op * expression * expression
   | Assign of assign_op * expression * expression
@@ -249,6 +249,16 @@ let ft_of_fundecl fundecl =
 
 let is_constructor (f : fundecl) =
   match f.class_name with Some s -> String.equal f.name s | _ -> false
+
+let parse_qualified_name name =
+  match String.rindex name ':' with
+  | None -> (None, name)
+  | Some i ->
+      let left = String.sub name ~pos:0 ~len:(i - 1) in
+      let right =
+        String.sub name ~pos:(i + 1) ~len:(String.length name - i - 1)
+      in
+      (Some left, right)
 
 let mangled_name fdecl =
   match fdecl.class_name with
