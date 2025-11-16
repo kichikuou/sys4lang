@@ -17,7 +17,7 @@
 open Base
 open Loc
 
-let decompile_function (f : CodeSection.function_t) =
+let rec decompile_function (f : CodeSection.function_t) =
   try
     let body =
       BasicBlock.create f
@@ -35,7 +35,16 @@ let decompile_function (f : CodeSection.function_t) =
       |> Transform.fold_newline_func_to_msg
       |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
     in
-    CodeGen.{ func = f.func; struc = f.struc; name = f.name; body }
+    let lambdas = List.map ~f:decompile_function f.lambdas in
+    CodeGen.
+      {
+        func = f.func;
+        struc = f.struc;
+        name = f.name;
+        body;
+        lambdas;
+        parent = f.parent;
+      }
   with e ->
     Stdio.eprintf "Error while decompiling function %s\n" f.func.name;
     raise e
@@ -62,7 +71,16 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   |> fun body ->
   Stdio.printf "\nDecompiled code:\n";
   let printer = new CodeGen.code_printer ~print_addr Stdio.stdout "" in
-  printer#print_function { func = f.func; struc = f.struc; name = f.name; body }
+  let lambdas = List.map ~f:decompile_function f.lambdas in
+  printer#print_function
+    {
+      func = f.func;
+      struc = f.struc;
+      name = f.name;
+      body;
+      lambdas;
+      parent = f.parent;
+    }
 
 let to_variable_list vars =
   List.map (Array.to_list vars) ~f:(fun v -> CodeGen.{ v; dims = [] })
@@ -150,9 +168,9 @@ let decompile move_to_original_file =
   let srcs =
     List.map files ~f:(fun (fname, funcs) ->
         let decompiled_funcs = ref [] in
-        let rec process_func func =
+        let process_func func =
           let f = decompile_function func in
-          (match f with
+          match f with
           | { struc = Some struc; _ } ->
               let s = structs.(struc.id) in
               if String.equal f.name "2" then
@@ -173,8 +191,7 @@ let decompile move_to_original_file =
           | { struc = None; name = "0"; _ } ->
               globals := extract_array_dims_exn f.body Ain.ain.glob
           | { struc = None; name = "NULL"; _ } -> ()
-          | _ -> decompiled_funcs := f :: !decompiled_funcs);
-          List.iter func.lambdas ~f:process_func
+          | _ -> decompiled_funcs := f :: !decompiled_funcs
         in
         List.iter funcs ~f:process_func;
         (fname, List.rev !decompiled_funcs))

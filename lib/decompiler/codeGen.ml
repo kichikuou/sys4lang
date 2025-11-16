@@ -28,6 +28,8 @@ type function_t = {
   struc : Ain.Struct.t option;
   name : string;
   body : Ast.statement loc;
+  lambdas : function_t list;
+  parent : Ain.Function.t option;
 }
 
 type struct_t = {
@@ -240,6 +242,7 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
     val mutable line = 1
     val mutable indent = 0
     val dbginfo = create_debug_info ()
+    val current_function = Stack.create ()
 
     method print_newline =
       line <- line + 1;
@@ -297,6 +300,13 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
             Ain.ain.strt.(struc).members.(slot).name
       | BoundMethod (Number -1l, f) ->
           fprintf oc "&%s" (Ain.Function.parse_name f).name
+      | BoundMethod (Page StructPage, ({ is_lambda = true; _ } as func)) -> (
+          match
+            List.find (Stack.top_exn current_function).lambdas ~f:(fun f ->
+                Poly.equal f.func func)
+          with
+          | Some func -> self#print_function ~as_lambda:true func
+          | None -> Printf.failwithf "unresolved lambda %s" func.name ())
       | BoundMethod (expr, f) ->
           fprintf oc "%a.%s"
             (self#pr_expr (prec_value PREC_DOT))
@@ -460,24 +470,24 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
     method private pr_vardecl oc (arg : Ain.Variable.t) =
       fprintf oc "%a %s" self#pr_type arg.type_ arg.name
 
-    method print_function (func : function_t) =
+    method print_function ?(as_lambda = false) (func : function_t) =
       let pr_label = function
         | Address label -> self#println "label%d:" label
         | CaseInt (_, k) -> self#println "case %ld:" k
         | CaseStr (_, s) -> self#println "case \"%s\":" (escape_dq s)
         | Default _ -> self#println "default:"
       in
-      let rec print_stmt ?(in_else_if = false) stmt =
+      let rec print_stmt ?(in_else_if = false) ?(is_lambda_top = false) stmt =
         match stmt.txt with
         | Block stmts ->
-            self#addr_and_indent stmt.addr;
+            if not is_lambda_top then self#addr_and_indent stmt.addr;
             self#println "{";
             self#with_indent (fun () -> print_stmt_list (List.rev stmts));
             let end_addr =
               match stmts with [] -> stmt.end_addr | s :: _ -> s.end_addr
             in
             self#addr_and_indent end_addr;
-            self#println "}"
+            if is_lambda_top then print_string oc "}" else self#println "}"
         | Expression expr ->
             self#addr_and_indent stmt.addr;
             self#println "%a;" (self#pr_expr 0) expr
@@ -602,21 +612,24 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
       and print_stmt_list = List.iter ~f:print_stmt in
       let print_func_signature (func : function_t) =
         let return_type = func.func.return_type in
-        (match func.struc with
-        | Some (struc : Ain.Struct.t) ->
-            if String.equal func.name "0" then
-              fprintf oc "%s::%s" struc.name (strip_qualifiers struc.name)
-            else if String.equal func.name "1" then
-              fprintf oc "%s::~%s" struc.name (strip_qualifiers struc.name)
-            else
-              fprintf oc "%a %s::%s" self#pr_type return_type struc.name
-                func.name
-        | None ->
-            if func.func.is_label then fprintf oc "#%s" func.name
-            else fprintf oc "%a %s" self#pr_type return_type func.name);
-        self#println "(%a)"
+        (if not as_lambda then
+           match func.struc with
+           | Some (struc : Ain.Struct.t) ->
+               if String.equal func.name "0" then
+                 fprintf oc "%s::%s" struc.name (strip_qualifiers struc.name)
+               else if String.equal func.name "1" then
+                 fprintf oc "%s::~%s" struc.name (strip_qualifiers struc.name)
+               else
+                 fprintf oc "%a %s::%s" self#pr_type return_type struc.name
+                   func.name
+           | None ->
+               if func.func.is_label then fprintf oc "#%s" func.name
+               else fprintf oc "%a %s" self#pr_type return_type func.name);
+        fprintf oc "(%a)"
           (pr_param_list self#pr_vardecl)
-          (Ain.Function.args func.func)
+          (Ain.Function.args func.func);
+        if as_lambda then fprintf oc " => %a " self#pr_type return_type
+        else self#print_newline
       in
       print_func_signature func;
       let body =
@@ -624,7 +637,9 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
         | Block _ -> func.body
         | _ -> { func.body with txt = Block [ func.body ] }
       in
-      print_stmt body
+      Stack.push current_function func;
+      print_stmt ~is_lambda_top:as_lambda body;
+      Stack.pop_exn current_function |> ignore
 
     method print_struct_decl (struc : struct_t) =
       self#println "class %s {" struc.struc.name;

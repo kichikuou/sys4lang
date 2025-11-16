@@ -23,6 +23,8 @@ type function_t = {
   struc : Ain.Struct.t option;
   name : string;
   body : Ast.statement loc;
+  lambdas : function_t list;
+  parent : Ain.Function.t option;
 }
 
 type struct_t = {
@@ -35,7 +37,7 @@ type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
 class code_printer : ?print_addr:bool -> out_channel -> string -> object
   method print_newline : unit
-  method print_function : function_t -> unit
+  method print_function : ?as_lambda:bool -> function_t -> unit
   method print_struct_decl : struct_t -> unit
   method print_functype_decl : string -> Ain.FuncType.t -> unit
   method print_globals : variable list -> unit
