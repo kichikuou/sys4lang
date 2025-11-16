@@ -27,6 +27,5 @@ val inspect : string -> print_addr:bool -> unit
 val export :
   decompiled_ain ->
   string ->
-  (string -> (CodeGen.printer -> unit) -> unit) ->
-  print_addr:bool ->
+  (string -> (CodeGen.code_printer -> unit) -> unit) ->
   unit

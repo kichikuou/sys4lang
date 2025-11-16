@@ -32,24 +32,17 @@ type struct_t = {
 }
 
 type project_t = { name : string; output_dir : string; ain_minor_version : int }
-type debug_info
 
-val create_debug_info : unit -> debug_info
-
-type printer
-
-val create_printer : out_channel -> string -> printer
-val print_newline : printer -> unit
-
-val print_function :
-  print_addr:bool -> printer -> debug_info -> function_t -> unit
-
-val print_struct_decl : printer -> struct_t -> unit
-val print_functype_decl : printer -> string -> Ain.FuncType.t -> unit
-val print_globals : printer -> variable list -> unit
-val print_constants : printer -> unit
-val print_hll : printer -> Ain.HLL.function_t array -> unit
-val print_hll_inc : printer -> unit
-val print_inc : printer -> string list -> unit
-val print_pje : printer -> project_t -> unit
-val print_debug_info : printer -> debug_info -> unit
+class code_printer : ?print_addr:bool -> out_channel -> string -> object
+  method print_newline : unit
+  method print_function : function_t -> unit
+  method print_struct_decl : struct_t -> unit
+  method print_functype_decl : string -> Ain.FuncType.t -> unit
+  method print_globals : variable list -> unit
+  method print_constants : unit
+  method print_hll : Ain.HLL.function_t array -> unit
+  method print_hll_inc : unit
+  method print_inc : string list -> unit
+  method print_pje : project_t -> unit
+  method print_debug_info : unit
+end

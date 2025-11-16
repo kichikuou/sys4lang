@@ -26,17 +26,17 @@ let rec mkdir_p path =
   else if not (Stdlib.Sys.is_directory path) then
     failwith (path ^ " exists but is not a directory")
 
-let output_printer_getter out_dir fname f =
+let output_printer_getter ~print_addr out_dir fname f =
   if String.(out_dir = "-") then (
     Stdio.printf "FILE %s\n\n" fname;
-    f (CodeGen.create_printer Stdio.stdout ""))
+    f (new CodeGen.code_printer ~print_addr Stdio.stdout ""))
   else
     let fname_components = String.split fname ~on:'\\' in
     let unix_fname = String.concat ~sep:"/" fname_components in
     let output_path = Stdlib.Filename.concat out_dir unix_fname in
     mkdir_p (Stdlib.Filename.dirname output_path);
     let outc = Stdio.Out_channel.create output_path in
-    f (CodeGen.create_printer outc unix_fname);
+    f (new CodeGen.code_printer ~print_addr outc unix_fname);
     Out_channel.close outc
 
 let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
@@ -57,8 +57,7 @@ let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
           | None -> ain_file)
       in
       Decompile.export decompiled ain_path
-        (output_printer_getter output_dir)
-        ~print_addr
+        (output_printer_getter ~print_addr output_dir)
   | Some funcname -> Decompile.inspect funcname ~print_addr
 
 let cmd =

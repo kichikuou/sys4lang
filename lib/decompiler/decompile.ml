@@ -61,11 +61,8 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
   |> fun body ->
   Stdio.printf "\nDecompiled code:\n";
-  CodeGen.(
-    print_function ~print_addr
-      (create_printer Stdio.stdout "")
-      (create_debug_info ())
-      { func = f.func; struc = f.struc; name = f.name; body })
+  let printer = new CodeGen.code_printer ~print_addr Stdio.stdout "" in
+  printer#print_function { func = f.func; struc = f.struc; name = f.name; body }
 
 let to_variable_list vars =
   List.map (Array.to_list vars) ~f:(fun v -> CodeGen.{ v; dims = [] })
@@ -202,37 +199,35 @@ let inspect funcname =
   | None -> failwith ("cannot find function " ^ funcname)
   | Some f -> inspect_function f
 
-let export decompiled ain_path output_to_printer ~print_addr =
+let export decompiled ain_path
+    (output_to_printer : string -> (CodeGen.code_printer -> unit) -> unit) =
   let sources = ref [] in
   let output_source fname f =
     sources := fname :: !sources;
     output_to_printer fname f
   in
-  let dbginfo = CodeGen.create_debug_info () in
-  output_source "constants.jaf" (fun pr -> CodeGen.print_constants pr);
+  output_source "constants.jaf" (fun pr -> pr#print_constants);
   output_source "classes.jaf" (fun pr ->
       Array.iter decompiled.structs ~f:(fun struc ->
-          CodeGen.print_struct_decl pr struc;
-          CodeGen.print_newline pr);
+          pr#print_struct_decl struc;
+          pr#print_newline);
       Array.iter Ain.ain.fnct ~f:(fun ft ->
-          CodeGen.print_functype_decl pr "functype" ft);
+          pr#print_functype_decl "functype" ft);
       Array.iter Ain.ain.delg ~f:(fun ft ->
-          CodeGen.print_functype_decl pr "delegate" ft));
-  output_source "globals.jaf" (fun pr ->
-      CodeGen.print_globals pr decompiled.globals);
+          pr#print_functype_decl "delegate" ft));
+  output_source "globals.jaf" (fun pr -> pr#print_globals decompiled.globals);
   Array.iter Ain.ain.hll0 ~f:(fun hll ->
       output_to_printer
         ("HLL/" ^ hll.name ^ ".hll")
-        (fun pr -> CodeGen.print_hll pr hll.functions));
-  output_source "HLL\\hll.inc" (fun pr -> CodeGen.print_hll_inc pr);
+        (fun pr -> pr#print_hll hll.functions));
+  output_source "HLL\\hll.inc" (fun pr -> pr#print_hll_inc);
   List.iter decompiled.srcs ~f:(fun (fname, funcs) ->
       if not (List.is_empty funcs) then
         output_source fname (fun pr ->
             List.iter funcs ~f:(fun func ->
-                CodeGen.print_function ~print_addr pr dbginfo func;
-                CodeGen.print_newline pr)));
-  output_to_printer "main.inc" (fun pr ->
-      CodeGen.print_inc pr (List.rev !sources));
+                pr#print_function func;
+                pr#print_newline)));
+  output_to_printer "main.inc" (fun pr -> pr#print_inc (List.rev !sources));
   let project : CodeGen.project_t =
     {
       name = Stdlib.Filename.(remove_extension @@ basename ain_path);
@@ -240,7 +235,5 @@ let export decompiled ain_path output_to_printer ~print_addr =
       ain_minor_version = decompiled.ain_minor_version;
     }
   in
-  output_to_printer (project.name ^ ".pje") (fun pr ->
-      CodeGen.(print_pje pr project));
-  output_to_printer "debug_info.json" (fun pr ->
-      CodeGen.print_debug_info pr dbginfo)
+  output_to_printer (project.name ^ ".pje") (fun pr -> pr#print_pje project);
+  output_to_printer "debug_info.json" (fun pr -> pr#print_debug_info)

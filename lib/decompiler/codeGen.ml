@@ -192,144 +192,6 @@ let pr_param_list pr_var oc (params : Ain.Variable.t list) =
   in
   print_list ", " pr_var oc params
 
-let rec pr_lvalue prec oc = function
-  | NullRef -> print_string oc "NULL"
-  | PageRef (StructPage, var) -> fprintf oc "this.%s" var.name
-  | PageRef (_, var) -> print_string oc var.name
-  | RefRef lval -> pr_lvalue prec oc lval
-  | ArrayRef (array, index) ->
-      fprintf oc "%a[%a]"
-        (pr_expr (prec_value PREC_DOT))
-        array (pr_expr 0) index
-  | MemberRef (obj, memb) ->
-      fprintf oc "%a.%s" (pr_expr (prec_value PREC_DOT)) obj memb.name
-  | RefValue e -> pr_expr (prec_value PREC_DOT) oc e
-  | ObjRef _ as lval ->
-      failwith ("pr_lvalue: unresolved ObjRef " ^ show_lvalue lval)
-  | IncDec (fix, op, lval) ->
-      let op = incdec_op op in
-      open_paren prec op.prec oc;
-      (match fix with
-      | Prefix -> fprintf oc "%s%a" op.sym (pr_lvalue prec) lval
-      | Postfix -> fprintf oc "%a%s" (pr_lvalue prec) lval op.sym);
-      close_paren prec op.prec oc
-
-and pr_expr ?parent_op prec oc = function
-  | Number n -> fprintf oc "%ld" n
-  | Boolean b -> print_string oc (if b then "true" else "false")
-  | Character c -> pr_char oc (Int32.to_int_exn c)
-  | Float x -> print_string oc (format_float x)
-  | String s -> fprintf oc "\"%s\"" (escape_dq s)
-  | FuncAddr f -> fprintf oc "&%s" f.name
-  | MemberPointer (struc, slot) ->
-      fprintf oc "&%s::%s" Ain.ain.strt.(struc).name
-        Ain.ain.strt.(struc).members.(slot).name
-  | BoundMethod (Number -1l, f) ->
-      fprintf oc "&%s" (Ain.Function.parse_name f).name
-  | BoundMethod (expr, f) ->
-      fprintf oc "%a.%s"
-        (pr_expr (prec_value PREC_DOT))
-        expr (Ain.Function.parse_name f).name
-  | Deref lval -> pr_lvalue prec oc lval
-  | DerefRef lval -> pr_lvalue prec oc lval
-  | New n -> fprintf oc "new %s" Ain.ain.strt.(n).name
-  | DerefStruct (_, expr) -> pr_expr prec oc expr
-  | Page StructPage -> print_string oc "this"
-  | Null -> print_string oc "NULL"
-  | Void -> print_string oc "<void>" (* FIXME *)
-  | UnaryOp (FTOI, expr) -> fprintf oc "int(%a)" (pr_expr 0) expr
-  | UnaryOp (ITOF, expr) -> fprintf oc "float(%a)" (pr_expr 0) expr
-  | UnaryOp (ITOLI, expr) -> fprintf oc "lint(%a)" (pr_expr 0) expr
-  | UnaryOp (ITOB, Number 0l) -> print_string oc "false"
-  | UnaryOp (ITOB, Number 1l) -> print_string oc "true"
-  | UnaryOp (ITOB, expr) -> pr_expr prec oc expr
-  | UnaryOp (STOI, expr) ->
-      fprintf oc "%a.Int()" (pr_expr (prec_value PREC_DOT)) expr
-  | UnaryOp (I_STRING, expr) -> fprintf oc "string(%a)" (pr_expr 0) expr
-  | UnaryOp (insn, expr) ->
-      let op = operator insn in
-      open_paren prec op.prec oc;
-      fprintf oc "%s%a" op.sym (pr_expr op.rprec) expr;
-      close_paren prec op.prec oc
-  | BinaryOp (insn, lhs, rhs) ->
-      let op = operator insn in
-      pr_binary_op parent_op prec op oc lhs rhs
-  | AssignOp (insn, lval, rhs) ->
-      let op = operator insn in
-      pr_binary_op parent_op prec op oc (Deref lval) rhs
-  | TernaryOp
-      ( expr1,
-        (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr2),
-        (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr3) ) ->
-      (* For Rance 9: ref_int = bool ? ref_int : ref_int
-         Add casts so that the right hand side of the assignment is an int
-         instead of a ref int *)
-      let op_prec = prec_value PREC_QUESTION in
-      open_paren prec op_prec oc;
-      fprintf oc "%a ? int(%a) : int(%a)"
-        (pr_expr (op_prec + 1))
-        expr1
-        (pr_expr (op_prec + 1))
-        expr2 (pr_expr op_prec) expr3;
-      close_paren prec op_prec oc
-  | TernaryOp (expr1, expr2, expr3) ->
-      let op_prec = prec_value PREC_QUESTION in
-      open_paren prec op_prec oc;
-      fprintf oc "%a ? %a : %a"
-        (pr_expr (op_prec + 1))
-        expr1
-        (pr_expr (op_prec + 1))
-        expr2 (pr_expr op_prec) expr3;
-      close_paren prec op_prec oc
-  | Call (f, args) -> fprintf oc "%a(%a)" pr_callable f pr_arg_list args
-  | C_Ref (str, i) ->
-      fprintf oc "%a[%a]" (pr_expr (prec_value PREC_DOT)) str (pr_expr 0) i
-  | C_Assign (str, i, ch) ->
-      pr_binary_op parent_op prec (operator ASSIGN) oc (C_Ref (str, i)) ch
-  | e ->
-      eprintf "%s\n" (show_expr e);
-      failwith "pr_expr: not implemented"
-
-and pr_binary_op parent_op prec op oc lhs rhs =
-  (* Match the AinDecompiler's parenthesizing rules. *)
-  let prec' =
-    match parent_op with
-    | Some pop ->
-        if prec = op.prec && not (String.equal pop.sym op.sym) then prec + 1
-        else prec
-    | None -> prec
-  in
-  let space = if String.equal op.sym "," then "" else " " in
-  open_paren prec' op.prec oc;
-  fprintf oc "%a%s%s %a"
-    (pr_expr ~parent_op:op op.lprec)
-    lhs space op.sym
-    (pr_expr ~parent_op:op op.rprec)
-    rhs;
-  close_paren prec' op.prec oc
-
-and pr_callable oc = function
-  | Function func -> print_string oc func.name
-  | FuncPtr (_, e) -> pr_expr (prec_value PREC_DOT) oc e
-  | Delegate (_, e) -> pr_expr (prec_value PREC_DOT) oc e
-  | SysCall n -> print_string oc syscalls.(n).name
-  | HllFunc (lib, func) -> fprintf oc "%s.%s" lib func.name
-  | Method (expr, func) ->
-      fprintf oc "%a.%s"
-        (pr_expr (prec_value PREC_DOT))
-        expr
-        (strip_class_name func.name)
-  | Builtin (insn, lval) ->
-      fprintf oc "%a.%s"
-        (pr_lvalue (prec_value PREC_DOT))
-        lval (builtin_method_name insn)
-  | Builtin2 (insn, expr) ->
-      fprintf oc "%a.%s"
-        (pr_expr (prec_value PREC_DOT))
-        expr (builtin_method_name insn)
-
-and pr_arg_list oc args = print_list ", " (pr_expr 0) oc args
-
 type debug_mapping = { addr : int; src : int; line : int }
 
 type debug_info = {
@@ -370,344 +232,520 @@ let debug_info_to_json dbginfo =
       ("mappings", `List mappings);
     ]
 
-type printer = { oc : Stdio.Out_channel.t; file : string; mutable line : int }
-
-let create_printer oc file = { oc; file; line = 1 }
-
-let print_newline pr =
-  pr.line <- pr.line + 1;
-  Stdio.Out_channel.newline pr.oc
-
-let print_indent pr n = print_string pr.oc (String.make n '\t')
-let println pr fmt = kfprintf (fun _ -> print_newline pr) pr.oc fmt
-
-let rec pr_type pr oc = function
-  | Any -> failwith "unresolved type"
-  | Char -> failwith "variables cannot have Char type"
-  | Int -> print_string oc "int"
-  | Float -> print_string oc "float"
-  | String -> print_string oc "string"
-  | Bool -> print_string oc "bool"
-  | LongInt -> print_string oc "lint"
-  | Void -> print_string oc "void"
-  | Struct n ->
-      print_string oc (if n < 0 then "struct" else Ain.ain.strt.(n).name)
-  | Array _ as t ->
-      print_string oc "array@";
-      let base, rank = Type.array_base_and_rank t in
-      pr_type pr oc base;
-      pr_array_rank oc rank
-  | Ref t ->
-      print_string oc "ref ";
-      pr_type pr oc t
-  | IMainSystem -> print_string oc "IMainSystem"
-  | FuncType ftv -> (
-      match Type.TypeVar.get_value ftv with
-      | Id (n, _) -> print_string oc Ain.ain.fnct.(n).name
-      | Type t ->
-          (* Output the first functype matching the inferred type *)
-          let ft =
-            Array.find_exn Ain.ain.fnct ~f:(fun ft ->
-                Poly.(t = Ain.FuncType.to_type ft))
-          in
-          print_string oc ft.name
-      | Var -> print_string oc "unknown_functype")
-  | StructMember _ -> failwith "cannot happen"
-  | Delegate dtv -> (
-      match Type.TypeVar.get_value dtv with
-      | Id (n, _) -> print_string oc Ain.ain.delg.(n).name
-      | Type t ->
-          (* Output the first delegate type matching the inferred type *)
-          let dt =
-            Array.find_exn Ain.ain.delg ~f:(fun ft ->
-                Poly.(t = Ain.FuncType.to_type ft))
-          in
-          print_string oc dt.name
-      | Var -> print_string oc "unknown_delegate")
-  | HllFunc2 -> print_string oc "hll_func2"
-  | HllParam -> print_string oc "hll_param"
-
-let pr_vartype pr oc (arg : Ain.Variable.t) =
-  fprintf oc "%a" (pr_type pr) arg.type_
-
-let pr_vardecl pr oc (arg : Ain.Variable.t) =
-  fprintf oc "%a %s" (pr_type pr) arg.type_ arg.name
-
-let print_function ~print_addr pr dbginfo (func : function_t) =
-  let addr_and_indent addr indent =
-    if addr > 0 then add_debug_info dbginfo addr pr.file pr.line;
-    if print_addr then fprintf pr.oc "/* %08x */" addr;
-    print_indent pr indent
-  in
-  let pr_label = function
-    | Address label -> println pr "label%d:" label
-    | CaseInt (_, k) -> println pr "case %ld:" k
-    | CaseStr (_, s) -> println pr "case \"%s\":" (escape_dq s)
-    | Default _ -> println pr "default:"
-  in
-  let rec print_stmt indent ?(in_else_if = false) stmt =
-    match stmt.txt with
-    | Block stmts ->
-        addr_and_indent stmt.addr indent;
-        println pr "{";
-        print_stmt_list (indent + 1) (List.rev stmts);
-        let end_addr =
-          match stmts with [] -> stmt.end_addr | s :: _ -> s.end_addr
-        in
-        addr_and_indent end_addr indent;
-        println pr "}"
-    | Expression expr ->
-        addr_and_indent stmt.addr indent;
-        println pr "%a;" (pr_expr 0) expr
-    | Return None ->
-        addr_and_indent stmt.addr indent;
-        println pr "return;"
-    | Return (Some expr) ->
-        addr_and_indent stmt.addr indent;
-        println pr "return %a;" (pr_expr 0) expr
-    | Break ->
-        addr_and_indent stmt.addr indent;
-        println pr "break;"
-    | Continue ->
-        addr_and_indent stmt.addr indent;
-        println pr "continue;"
-    | Goto (label, _) ->
-        addr_and_indent stmt.addr indent;
-        println pr "goto label%d;" label
-    | VarDecl (var, None) ->
-        addr_and_indent stmt.addr indent;
-        println pr "%a;" (pr_vardecl pr) var
-    | VarDecl (var, Some (_, Call (Builtin (A_ALLOC, _), dims))) ->
-        addr_and_indent stmt.addr indent;
-        println pr "%a%a;" (pr_vardecl pr) var
-          (pr_array_dims ~pr_expr:(pr_expr 0))
-          dims
-    | VarDecl (var, Some (insn, e)) ->
-        let op = operator insn in
-        addr_and_indent stmt.addr indent;
-        println pr "%a = %a;" (pr_vardecl pr) var
-          (pr_expr ~parent_op:op op.rprec)
-          e
-    | IfElse (expr, stmt1, stmt2) -> (
-        if not in_else_if then addr_and_indent stmt.addr indent;
-        println pr "if (%a) {" (pr_expr 0) expr;
-        print_stmt_list (indent + 1)
-          (match stmt1.txt with
-          | Block stmts -> List.rev stmts
-          | _ -> [ stmt1 ]);
-        addr_and_indent stmt1.end_addr indent;
-        print_string pr.oc "}";
-        match stmt2.txt with
-        | Block [] -> print_newline pr
-        | IfElse _ ->
-            print_string pr.oc " else ";
-            print_stmt indent ~in_else_if:true stmt2
-        | _ ->
-            println pr " else {";
-            print_stmt_list (indent + 1)
-              (match stmt2.txt with
-              | Block stmts -> List.rev stmts
-              | _ -> [ stmt2 ]);
-            addr_and_indent stmt2.end_addr indent;
-            println pr "}")
-    | Switch (_, expr, body) ->
-        addr_and_indent stmt.addr indent;
-        println pr "switch (%a) {" (pr_expr 0) expr;
-        print_stmt_list (indent + 1)
-          (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
-        addr_and_indent body.end_addr indent;
-        println pr "}"
-    | While (cond, body) ->
-        addr_and_indent stmt.addr indent;
-        println pr "while (%a) {" (pr_expr 0) cond;
-        print_stmt_list (indent + 1)
-          (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
-        addr_and_indent body.end_addr indent;
-        println pr "}"
-    | DoWhile (body, cond) ->
-        addr_and_indent stmt.addr indent;
-        println pr "do {";
-        print_stmt_list (indent + 1)
-          (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
-        addr_and_indent cond.addr indent;
-        println pr "} while (%a);" (pr_expr 0) cond.txt
-    | For (init, cond, inc, body) ->
-        addr_and_indent stmt.addr indent;
-        print_string pr.oc "for (";
-        (match init with None -> () | Some e -> pr_expr 0 pr.oc e);
-        print_string pr.oc "; ";
-        (match cond with None -> () | Some e -> pr_expr 0 pr.oc e);
-        print_string pr.oc "; ";
-        (match inc with None -> () | Some e -> pr_expr 0 pr.oc e);
-        println pr ") {";
-        print_stmt_list (indent + 1)
-          (match body.txt with Block stmts -> List.rev stmts | _ -> [ body ]);
-        addr_and_indent body.end_addr indent;
-        println pr "}"
-    | Label label ->
-        addr_and_indent stmt.addr (indent - 1);
-        pr_label label
-    | Assert expr ->
-        addr_and_indent stmt.addr indent;
-        println pr "assert(%a);" (pr_expr 0) expr
-    | ScenarioJump s ->
-        addr_and_indent stmt.addr indent;
-        println pr "jump %s;" s
-    | Msg (s, Some (Call (f, []))) ->
-        addr_and_indent stmt.addr indent;
-        println pr "'%s' %a;" (escape_sq s) pr_callable f
-    | Msg (s, Some e) ->
-        addr_and_indent stmt.addr indent;
-        println pr "'%s' %a;" (escape_sq s) (pr_expr 0) e
-    | Msg (s, None) ->
-        addr_and_indent stmt.addr indent;
-        println pr "'%s';" (escape_sq s)
-  and print_stmt_list indent stmts =
-    List.iter stmts ~f:(fun stmt -> print_stmt indent stmt)
-  in
-  let print_func_signature (func : function_t) =
-    let return_type = func.func.return_type in
-    (match func.struc with
-    | Some (struc : Ain.Struct.t) ->
-        if String.equal func.name "0" then
-          fprintf pr.oc "%s::%s" struc.name (strip_qualifiers struc.name)
-        else if String.equal func.name "1" then
-          fprintf pr.oc "%s::~%s" struc.name (strip_qualifiers struc.name)
-        else
-          fprintf pr.oc "%a %s::%s" (pr_type pr) return_type struc.name
-            func.name
-    | None ->
-        if func.func.is_label then fprintf pr.oc "#%s" func.name
-        else fprintf pr.oc "%a %s" (pr_type pr) return_type func.name);
-    println pr "(%a)"
-      (pr_param_list (pr_vardecl pr))
-      (Ain.Function.args func.func)
-  in
-  print_func_signature func;
-  let body =
-    match func.body.txt with
-    | Block _ -> func.body
-    | _ -> { func.body with txt = Block [ func.body ] }
-  in
-  print_stmt 0 body
-
-let print_struct_decl pr (struc : struct_t) =
-  println pr "class %s {" struc.struc.name;
-  println pr "public:";
-  List.iter struc.members ~f:(fun v ->
-      match v.v.type_ with
-      | Void -> ()
-      | _ ->
-          print_indent pr 1;
-          pr_vardecl pr pr.oc v.v;
-          pr_array_dims pr.oc v.dims;
-          println pr ";");
-  if
-    (not (Array.is_empty struc.struc.members))
-    && not (List.is_empty struc.methods)
-  then print_newline pr;
-  List.iter struc.methods ~f:(fun func ->
-      print_indent pr 1;
-      if String.equal func.name "0" then
-        fprintf pr.oc "%s" (strip_qualifiers struc.struc.name)
-      else if String.equal func.name "1" then
-        fprintf pr.oc "~%s" (strip_qualifiers struc.struc.name)
-      else fprintf pr.oc "%a %s" (pr_type pr) func.func.return_type func.name;
-      println pr "(%a);"
-        (pr_param_list (pr_vardecl pr))
-        (Ain.Function.args func.func));
-  println pr "};"
-
-let print_functype_decl pr keyword (ft : Ain.FuncType.t) =
-  if String.contains ft.name '@' then ()
-  else (
-    fprintf pr.oc "%s %a %s " keyword (pr_type pr) ft.return_type ft.name;
-    match Ain.FuncType.args ft with
-    | [] -> println pr "(void);"
-    | args -> println pr "(%a);" (pr_param_list (pr_vartype pr)) args)
-
-let print_globals pr (globals : variable list) =
-  let groups =
-    List.group globals ~break:(fun a b -> a.v.group_index <> b.v.group_index)
-  in
-  let print_group indent =
-    List.iter ~f:(fun (v : variable) ->
-        print_indent pr indent;
-        pr_vardecl pr pr.oc v.v;
-        pr_array_dims pr.oc v.dims;
-        pr_initval pr.oc v.v;
-        println pr ";")
-  in
-  List.iter groups ~f:(fun group ->
-      match (List.hd_exn group).v.group_index with
-      | -1 -> print_group 0 group
-      | gindex ->
-          println pr "globalgroup %s {" Ain.ain.objg.(gindex);
-          print_group 1 group;
-          println pr "}")
-
-let print_constants pr =
-  println pr "const int true = 1;";
-  println pr "const int false = 0;";
-  print_newline pr
-
-let print_hll_function pr (func : Ain.HLL.function_t) =
-  fprintf pr.oc "%a %s" (pr_type pr) func.return_type func.name;
-  match Ain.HLL.args func with
-  | [] -> println pr "(void);"
-  | args -> println pr "(%a);" (pr_param_list (pr_vardecl pr)) args
-
-let print_hll pr (funcs : Ain.HLL.function_t array) =
-  let printed = Hash_set.create (module String) in
-  Array.iter funcs ~f:(fun func ->
-      if Hash_set.mem printed func.name then
-        print_string pr.oc "// (duplicated) "
-      else Hash_set.add printed func.name;
-      print_hll_function pr func)
-
-let print_hll_inc pr =
-  println pr "SystemSource = {";
-  let printed = Hash_set.create (module String) in
-  Array.iter Ain.ain.hll0 ~f:(fun hll ->
-      if Hash_set.mem printed hll.name then
-        Stdio.eprintf "Warning: %s: Removing duplicate HLL include for %s.hll\n"
-          pr.file hll.name
-      else (
-        Hash_set.add printed hll.name;
-        println pr "\t\"%s.hll\",\t\"%s\"," hll.name hll.name));
-  println pr "}"
-
-let print_inc pr srcs =
-  println pr "Source = {";
-  List.iter srcs ~f:(fun src -> println pr "\t\"%s\"," src);
-  println pr "}"
-
 type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
-let print_pje pr proj =
-  println pr "// Project Environment File";
-  println pr "Encoding = \"UTF-8\"";
-  println pr "ProjectName = \"%s\"" proj.name;
-  print_newline pr;
-  println pr "CodeName = \"%s.ain\"" proj.name;
-  print_newline pr;
-  println pr "#define _AINVERSION %d" Ain.ain.vers;
-  if proj.ain_minor_version <> 0 then
-    println pr "#define _AINMINORVERSION %d" proj.ain_minor_version;
-  println pr "#define _KEYCODE 0x%08lX" Ain.ain.keyc;
-  println pr "#define _ISAI2FILE %B" Ain.ain.is_ai2;
-  print_newline pr;
-  println pr "GameVersion = %ld" Ain.ain.gver;
-  print_newline pr;
-  println pr "// Settings for each directory";
-  println pr "SourceDir = \".\"";
-  println pr "HLLDir = \"HLL\"";
-  println pr "ObjDir = \"OBJ\"";
-  println pr "OutputDir = \"%s\"" proj.output_dir;
-  print_newline pr;
-  println pr "Source = {";
-  println pr "\t\"main.inc\",";
-  println pr "}"
+class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
+  (file : string) =
+  object (self)
+    val mutable line = 1
+    val mutable indent = 0
+    val dbginfo = create_debug_info ()
 
-let print_debug_info pr dbginfo =
-  debug_info_to_json dbginfo |> Yojson.Basic.to_string |> print_string pr.oc
+    method print_newline =
+      line <- line + 1;
+      Stdio.Out_channel.newline oc
+
+    method private print_indent = print_string oc (String.make indent '\t')
+
+    method private with_indent ?(delta = 1) f =
+      indent <- indent + delta;
+      f ();
+      indent <- indent - delta
+
+    method private addr_and_indent addr =
+      if addr > 0 then add_debug_info dbginfo addr file line;
+      if print_addr then fprintf oc "/* %08x */" addr;
+      self#print_indent
+
+    method private println :
+        'a. ('a, Stdio.Out_channel.t, unit, unit) format4 -> 'a =
+      fun fmt -> kfprintf (fun _ -> self#print_newline) oc fmt
+
+    method private pr_lvalue prec oc lval =
+      match lval with
+      | NullRef -> print_string oc "NULL"
+      | PageRef (StructPage, var) -> fprintf oc "this.%s" var.name
+      | PageRef (_, var) -> print_string oc var.name
+      | RefRef lval -> self#pr_lvalue prec oc lval
+      | ArrayRef (array, index) ->
+          fprintf oc "%a[%a]"
+            (self#pr_expr (prec_value PREC_DOT))
+            array (self#pr_expr 0) index
+      | MemberRef (obj, memb) ->
+          fprintf oc "%a.%s" (self#pr_expr (prec_value PREC_DOT)) obj memb.name
+      | RefValue e -> self#pr_expr (prec_value PREC_DOT) oc e
+      | ObjRef _ as lval ->
+          failwith ("pr_lvalue: unresolved ObjRef " ^ show_lvalue lval)
+      | IncDec (fix, op, lval) ->
+          let op = incdec_op op in
+          open_paren prec op.prec oc;
+          (match fix with
+          | Prefix -> fprintf oc "%s%a" op.sym (self#pr_lvalue prec) lval
+          | Postfix -> fprintf oc "%a%s" (self#pr_lvalue prec) lval op.sym);
+          close_paren prec op.prec oc
+
+    method private pr_expr ?parent_op prec oc =
+      function
+      | Number n -> fprintf oc "%ld" n
+      | Boolean b -> print_string oc (if b then "true" else "false")
+      | Character c -> pr_char oc (Int32.to_int_exn c)
+      | Float x -> print_string oc (format_float x)
+      | String s -> fprintf oc "\"%s\"" (escape_dq s)
+      | FuncAddr f -> fprintf oc "&%s" f.name
+      | MemberPointer (struc, slot) ->
+          fprintf oc "&%s::%s" Ain.ain.strt.(struc).name
+            Ain.ain.strt.(struc).members.(slot).name
+      | BoundMethod (Number -1l, f) ->
+          fprintf oc "&%s" (Ain.Function.parse_name f).name
+      | BoundMethod (expr, f) ->
+          fprintf oc "%a.%s"
+            (self#pr_expr (prec_value PREC_DOT))
+            expr (Ain.Function.parse_name f).name
+      | Deref lval -> self#pr_lvalue prec oc lval
+      | DerefRef lval -> self#pr_lvalue prec oc lval
+      | New n -> fprintf oc "new %s" Ain.ain.strt.(n).name
+      | DerefStruct (_, expr) -> self#pr_expr prec oc expr
+      | Page StructPage -> print_string oc "this"
+      | Null -> print_string oc "NULL"
+      | Void -> print_string oc "<void>" (* FIXME *)
+      | UnaryOp (FTOI, expr) -> fprintf oc "int(%a)" (self#pr_expr 0) expr
+      | UnaryOp (ITOF, expr) -> fprintf oc "float(%a)" (self#pr_expr 0) expr
+      | UnaryOp (ITOLI, expr) -> fprintf oc "lint(%a)" (self#pr_expr 0) expr
+      | UnaryOp (ITOB, Number 0l) -> print_string oc "false"
+      | UnaryOp (ITOB, Number 1l) -> print_string oc "true"
+      | UnaryOp (ITOB, expr) -> self#pr_expr prec oc expr
+      | UnaryOp (STOI, expr) ->
+          fprintf oc "%a.Int()" (self#pr_expr (prec_value PREC_DOT)) expr
+      | UnaryOp (I_STRING, expr) ->
+          fprintf oc "string(%a)" (self#pr_expr 0) expr
+      | UnaryOp (insn, expr) ->
+          let op = operator insn in
+          open_paren prec op.prec oc;
+          fprintf oc "%s%a" op.sym (self#pr_expr op.rprec) expr;
+          close_paren prec op.prec oc
+      | BinaryOp (insn, lhs, rhs) ->
+          let op = operator insn in
+          self#pr_binary_op parent_op prec op lhs rhs
+      | AssignOp (insn, lval, rhs) ->
+          let op = operator insn in
+          self#pr_binary_op parent_op prec op (Deref lval) rhs
+      | TernaryOp
+          ( expr1,
+            (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr2),
+            (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr3) ) ->
+          (* For Rance 9: ref_int = bool ? ref_int : ref_int
+             Add casts so that the right hand side of the assignment is an int
+             instead of a ref int *)
+          let op_prec = prec_value PREC_QUESTION in
+          open_paren prec op_prec oc;
+          fprintf oc "%a ? int(%a) : int(%a)"
+            (self#pr_expr (op_prec + 1))
+            expr1
+            (self#pr_expr (op_prec + 1))
+            expr2 (self#pr_expr op_prec) expr3;
+          close_paren prec op_prec oc
+      | TernaryOp (expr1, expr2, expr3) ->
+          let op_prec = prec_value PREC_QUESTION in
+          open_paren prec op_prec oc;
+          fprintf oc "%a ? %a : %a"
+            (self#pr_expr (op_prec + 1))
+            expr1
+            (self#pr_expr (op_prec + 1))
+            expr2 (self#pr_expr op_prec) expr3;
+          close_paren prec op_prec oc
+      | Call (f, args) ->
+          fprintf oc "%a(%a)" self#pr_callable f self#pr_arg_list args
+      | C_Ref (str, i) ->
+          fprintf oc "%a[%a]"
+            (self#pr_expr (prec_value PREC_DOT))
+            str (self#pr_expr 0) i
+      | C_Assign (str, i, ch) ->
+          self#pr_binary_op parent_op prec (operator ASSIGN) (C_Ref (str, i)) ch
+      | e ->
+          eprintf "%s\n" (show_expr e);
+          failwith "pr_expr: not implemented"
+
+    method private pr_binary_op parent_op prec op lhs rhs =
+      (* Match the AinDecompiler's parenthesizing rules. *)
+      let prec' =
+        match parent_op with
+        | Some pop ->
+            if prec = op.prec && not (String.equal pop.sym op.sym) then prec + 1
+            else prec
+        | None -> prec
+      in
+      let space = if String.equal op.sym "," then "" else " " in
+      open_paren prec' op.prec oc;
+      fprintf oc "%a%s%s %a"
+        (self#pr_expr ~parent_op:op op.lprec)
+        lhs space op.sym
+        (self#pr_expr ~parent_op:op op.rprec)
+        rhs;
+      close_paren prec' op.prec oc
+
+    method private pr_callable oc =
+      function
+      | Function func -> print_string oc func.name
+      | FuncPtr (_, e) -> self#pr_expr (prec_value PREC_DOT) oc e
+      | Delegate (_, e) -> self#pr_expr (prec_value PREC_DOT) oc e
+      | SysCall n -> print_string oc syscalls.(n).name
+      | HllFunc (lib, func) -> fprintf oc "%s.%s" lib func.name
+      | Method (expr, func) ->
+          fprintf oc "%a.%s"
+            (self#pr_expr (prec_value PREC_DOT))
+            expr
+            (strip_class_name func.name)
+      | Builtin (insn, lval) ->
+          fprintf oc "%a.%s"
+            (self#pr_lvalue (prec_value PREC_DOT))
+            lval (builtin_method_name insn)
+      | Builtin2 (insn, expr) ->
+          fprintf oc "%a.%s"
+            (self#pr_expr (prec_value PREC_DOT))
+            expr (builtin_method_name insn)
+
+    method private pr_arg_list oc args =
+      print_list ", " (self#pr_expr 0) oc args
+
+    method private pr_type oc =
+      function
+      | Any -> failwith "unresolved type"
+      | Char -> failwith "variables cannot have Char type"
+      | Int -> print_string oc "int"
+      | Float -> print_string oc "float"
+      | String -> print_string oc "string"
+      | Bool -> print_string oc "bool"
+      | LongInt -> print_string oc "lint"
+      | Void -> print_string oc "void"
+      | Struct n ->
+          print_string oc (if n < 0 then "struct" else Ain.ain.strt.(n).name)
+      | Array _ as t ->
+          print_string oc "array@";
+          let base, rank = Type.array_base_and_rank t in
+          self#pr_type oc base;
+          pr_array_rank oc rank
+      | Ref t ->
+          print_string oc "ref ";
+          self#pr_type oc t
+      | IMainSystem -> print_string oc "IMainSystem"
+      | FuncType ftv -> (
+          match Type.TypeVar.get_value ftv with
+          | Id (n, _) -> print_string oc Ain.ain.fnct.(n).name
+          | Type t ->
+              (* Output the first functype matching the inferred type *)
+              let ft =
+                Array.find_exn Ain.ain.fnct ~f:(fun ft ->
+                    Poly.(t = Ain.FuncType.to_type ft))
+              in
+              print_string oc ft.name
+          | Var -> print_string oc "unknown_functype")
+      | StructMember _ -> failwith "cannot happen"
+      | Delegate dtv -> (
+          match Type.TypeVar.get_value dtv with
+          | Id (n, _) -> print_string oc Ain.ain.delg.(n).name
+          | Type t ->
+              (* Output the first delegate type matching the inferred type *)
+              let dt =
+                Array.find_exn Ain.ain.delg ~f:(fun ft ->
+                    Poly.(t = Ain.FuncType.to_type ft))
+              in
+              print_string oc dt.name
+          | Var -> print_string oc "unknown_delegate")
+      | HllFunc2 -> print_string oc "hll_func2"
+      | HllParam -> print_string oc "hll_param"
+
+    method private pr_vartype oc (arg : Ain.Variable.t) =
+      fprintf oc "%a" self#pr_type arg.type_
+
+    method private pr_vardecl oc (arg : Ain.Variable.t) =
+      fprintf oc "%a %s" self#pr_type arg.type_ arg.name
+
+    method print_function (func : function_t) =
+      let pr_label = function
+        | Address label -> self#println "label%d:" label
+        | CaseInt (_, k) -> self#println "case %ld:" k
+        | CaseStr (_, s) -> self#println "case \"%s\":" (escape_dq s)
+        | Default _ -> self#println "default:"
+      in
+      let rec print_stmt ?(in_else_if = false) stmt =
+        match stmt.txt with
+        | Block stmts ->
+            self#addr_and_indent stmt.addr;
+            self#println "{";
+            self#with_indent (fun () -> print_stmt_list (List.rev stmts));
+            let end_addr =
+              match stmts with [] -> stmt.end_addr | s :: _ -> s.end_addr
+            in
+            self#addr_and_indent end_addr;
+            self#println "}"
+        | Expression expr ->
+            self#addr_and_indent stmt.addr;
+            self#println "%a;" (self#pr_expr 0) expr
+        | Return None ->
+            self#addr_and_indent stmt.addr;
+            self#println "return;"
+        | Return (Some expr) ->
+            self#addr_and_indent stmt.addr;
+            self#println "return %a;" (self#pr_expr 0) expr
+        | Break ->
+            self#addr_and_indent stmt.addr;
+            self#println "break;"
+        | Continue ->
+            self#addr_and_indent stmt.addr;
+            self#println "continue;"
+        | Goto (label, _) ->
+            self#addr_and_indent stmt.addr;
+            self#println "goto label%d;" label
+        | VarDecl (var, None) ->
+            self#addr_and_indent stmt.addr;
+            self#println "%a;" self#pr_vardecl var
+        | VarDecl (var, Some (_, Call (Builtin (A_ALLOC, _), dims))) ->
+            self#addr_and_indent stmt.addr;
+            self#println "%a%a;" self#pr_vardecl var
+              (pr_array_dims ~pr_expr:(self#pr_expr 0))
+              dims
+        | VarDecl (var, Some (insn, e)) ->
+            let op = operator insn in
+            self#addr_and_indent stmt.addr;
+            self#println "%a = %a;" self#pr_vardecl var
+              (self#pr_expr ~parent_op:op op.rprec)
+              e
+        | IfElse (expr, stmt1, stmt2) -> (
+            if not in_else_if then self#addr_and_indent stmt.addr;
+            self#println "if (%a) {" (self#pr_expr 0) expr;
+            self#with_indent (fun () ->
+                print_stmt_list
+                  (match stmt1.txt with
+                  | Block stmts -> List.rev stmts
+                  | _ -> [ stmt1 ]));
+            self#addr_and_indent stmt1.end_addr;
+            print_string oc "}";
+            match stmt2.txt with
+            | Block [] -> self#print_newline
+            | IfElse _ ->
+                print_string oc " else ";
+                print_stmt ~in_else_if:true stmt2
+            | _ ->
+                self#println " else {";
+                self#with_indent (fun () ->
+                    print_stmt_list
+                      (match stmt2.txt with
+                      | Block stmts -> List.rev stmts
+                      | _ -> [ stmt2 ]));
+                self#addr_and_indent stmt2.end_addr;
+                self#println "}")
+        | Switch (_, expr, body) ->
+            self#addr_and_indent stmt.addr;
+            self#println "switch (%a) {" (self#pr_expr 0) expr;
+            self#with_indent (fun () ->
+                print_stmt_list
+                  (match body.txt with
+                  | Block stmts -> List.rev stmts
+                  | _ -> [ body ]));
+            self#addr_and_indent body.end_addr;
+            self#println "}"
+        | While (cond, body) ->
+            self#addr_and_indent stmt.addr;
+            self#println "while (%a) {" (self#pr_expr 0) cond;
+            self#with_indent (fun () ->
+                print_stmt_list
+                  (match body.txt with
+                  | Block stmts -> List.rev stmts
+                  | _ -> [ body ]));
+            self#addr_and_indent body.end_addr;
+            self#println "}"
+        | DoWhile (body, cond) ->
+            self#addr_and_indent stmt.addr;
+            self#println "do {";
+            self#with_indent (fun () ->
+                print_stmt_list
+                  (match body.txt with
+                  | Block stmts -> List.rev stmts
+                  | _ -> [ body ]));
+            self#addr_and_indent cond.addr;
+            self#println "} while (%a);" (self#pr_expr 0) cond.txt
+        | For (init, cond, inc, body) ->
+            self#addr_and_indent stmt.addr;
+            print_string oc "for (";
+            (match init with None -> () | Some e -> self#pr_expr 0 oc e);
+            print_string oc "; ";
+            (match cond with None -> () | Some e -> self#pr_expr 0 oc e);
+            print_string oc "; ";
+            (match inc with None -> () | Some e -> self#pr_expr 0 oc e);
+            self#println ") {";
+            self#with_indent (fun () ->
+                print_stmt_list
+                  (match body.txt with
+                  | Block stmts -> List.rev stmts
+                  | _ -> [ body ]));
+            self#addr_and_indent body.end_addr;
+            self#println "}"
+        | Label label ->
+            self#with_indent ~delta:(-1) (fun () ->
+                self#addr_and_indent stmt.addr;
+                pr_label label)
+        | Assert expr ->
+            self#addr_and_indent stmt.addr;
+            self#println "assert(%a);" (self#pr_expr 0) expr
+        | ScenarioJump s ->
+            self#addr_and_indent stmt.addr;
+            self#println "jump %s;" s
+        | Msg (s, Some (Call (f, []))) ->
+            self#addr_and_indent stmt.addr;
+            self#println "'%s' %a;" (escape_sq s) self#pr_callable f
+        | Msg (s, Some e) ->
+            self#addr_and_indent stmt.addr;
+            self#println "'%s' %a;" (escape_sq s) (self#pr_expr 0) e
+        | Msg (s, None) ->
+            self#addr_and_indent stmt.addr;
+            self#println "'%s';" (escape_sq s)
+      and print_stmt_list = List.iter ~f:print_stmt in
+      let print_func_signature (func : function_t) =
+        let return_type = func.func.return_type in
+        (match func.struc with
+        | Some (struc : Ain.Struct.t) ->
+            if String.equal func.name "0" then
+              fprintf oc "%s::%s" struc.name (strip_qualifiers struc.name)
+            else if String.equal func.name "1" then
+              fprintf oc "%s::~%s" struc.name (strip_qualifiers struc.name)
+            else
+              fprintf oc "%a %s::%s" self#pr_type return_type struc.name
+                func.name
+        | None ->
+            if func.func.is_label then fprintf oc "#%s" func.name
+            else fprintf oc "%a %s" self#pr_type return_type func.name);
+        self#println "(%a)"
+          (pr_param_list self#pr_vardecl)
+          (Ain.Function.args func.func)
+      in
+      print_func_signature func;
+      let body =
+        match func.body.txt with
+        | Block _ -> func.body
+        | _ -> { func.body with txt = Block [ func.body ] }
+      in
+      print_stmt body
+
+    method print_struct_decl (struc : struct_t) =
+      self#println "class %s {" struc.struc.name;
+      self#println "public:";
+      self#with_indent (fun () ->
+          List.iter struc.members ~f:(fun v ->
+              match v.v.type_ with
+              | Void -> ()
+              | _ ->
+                  self#print_indent;
+                  self#pr_vardecl oc v.v;
+                  pr_array_dims oc v.dims;
+                  self#println ";");
+          if
+            (not (Array.is_empty struc.struc.members))
+            && not (List.is_empty struc.methods)
+          then self#print_newline;
+          List.iter struc.methods ~f:(fun func ->
+              self#print_indent;
+              if String.equal func.name "0" then
+                fprintf oc "%s" (strip_qualifiers struc.struc.name)
+              else if String.equal func.name "1" then
+                fprintf oc "~%s" (strip_qualifiers struc.struc.name)
+              else
+                fprintf oc "%a %s" self#pr_type func.func.return_type func.name;
+              self#println "(%a);"
+                (pr_param_list self#pr_vardecl)
+                (Ain.Function.args func.func)));
+      self#println "};"
+
+    method print_functype_decl keyword (ft : Ain.FuncType.t) =
+      if String.contains ft.name '@' then ()
+      else (
+        fprintf oc "%s %a %s " keyword self#pr_type ft.return_type ft.name;
+        match Ain.FuncType.args ft with
+        | [] -> self#println "(void);"
+        | args -> self#println "(%a);" (pr_param_list self#pr_vartype) args)
+
+    method print_globals (globals : variable list) =
+      let groups =
+        List.group globals ~break:(fun a b ->
+            a.v.group_index <> b.v.group_index)
+      in
+      let print_group =
+        List.iter ~f:(fun (v : variable) ->
+            self#print_indent;
+            self#pr_vardecl oc v.v;
+            pr_array_dims oc v.dims;
+            pr_initval oc v.v;
+            self#println ";")
+      in
+      List.iter groups ~f:(fun group ->
+          match (List.hd_exn group).v.group_index with
+          | -1 -> print_group group
+          | gindex ->
+              self#println "globalgroup %s {" Ain.ain.objg.(gindex);
+              self#with_indent (fun () -> print_group group);
+              self#println "}")
+
+    method print_constants =
+      self#println "const int true = 1;";
+      self#println "const int false = 0;";
+      self#print_newline
+
+    method private print_hll_function (func : Ain.HLL.function_t) =
+      fprintf oc "%a %s" self#pr_type func.return_type func.name;
+      match Ain.HLL.args func with
+      | [] -> self#println "(void);"
+      | args -> self#println "(%a);" (pr_param_list self#pr_vardecl) args
+
+    method print_hll (funcs : Ain.HLL.function_t array) =
+      let printed = Hash_set.create (module String) in
+      Array.iter funcs ~f:(fun func ->
+          if Hash_set.mem printed func.name then
+            print_string oc "// (duplicated) "
+          else Hash_set.add printed func.name;
+          self#print_hll_function func)
+
+    method print_hll_inc =
+      self#println "SystemSource = {";
+      let printed = Hash_set.create (module String) in
+      Array.iter Ain.ain.hll0 ~f:(fun hll ->
+          if Hash_set.mem printed hll.name then
+            Stdio.eprintf
+              "Warning: %s: Removing duplicate HLL include for %s.hll\n" file
+              hll.name
+          else (
+            Hash_set.add printed hll.name;
+            self#println "\t\"%s.hll\",\t\"%s\"," hll.name hll.name));
+      self#println "}"
+
+    method print_inc srcs =
+      self#println "Source = {";
+      List.iter srcs ~f:(fun src -> self#println "\t\"%s\"," src);
+      self#println "}"
+
+    method print_pje (proj : project_t) =
+      self#println "// Project Environment File";
+      self#println "Encoding = \"UTF-8\"";
+      self#println "ProjectName = \"%s\"" proj.name;
+      self#print_newline;
+      self#println "CodeName = \"%s.ain\"" proj.name;
+      self#print_newline;
+      self#println "#define _AINVERSION %d" Ain.ain.vers;
+      if proj.ain_minor_version <> 0 then
+        self#println "#define _AINMINORVERSION %d" proj.ain_minor_version;
+      self#println "#define _KEYCODE 0x%08lX" Ain.ain.keyc;
+      self#println "#define _ISAI2FILE %B" Ain.ain.is_ai2;
+      self#print_newline;
+      self#println "GameVersion = %ld" Ain.ain.gver;
+      self#print_newline;
+      self#println "// Settings for each directory";
+      self#println "SourceDir = \".\"";
+      self#println "HLLDir = \"HLL\"";
+      self#println "ObjDir = \"OBJ\"";
+      self#println "OutputDir = \"%s\"" proj.output_dir;
+      self#print_newline;
+      self#println "Source = {";
+      self#println "\t\"main.inc\",";
+      self#println "}"
+
+    method print_debug_info =
+      debug_info_to_json dbginfo |> Yojson.Basic.to_string |> print_string oc
+  end
