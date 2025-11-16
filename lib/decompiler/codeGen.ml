@@ -619,10 +619,12 @@ let print_struct_decl pr (struc : struct_t) =
   println pr "};"
 
 let print_functype_decl pr keyword (ft : Ain.FuncType.t) =
-  fprintf pr.oc "%s %a %s " keyword (pr_type pr) ft.return_type ft.name;
-  match Ain.FuncType.args ft with
-  | [] -> println pr "(void);"
-  | args -> println pr "(%a);" (pr_param_list (pr_vartype pr)) args
+  if String.contains ft.name '@' then ()
+  else (
+    fprintf pr.oc "%s %a %s " keyword (pr_type pr) ft.return_type ft.name;
+    match Ain.FuncType.args ft with
+    | [] -> println pr "(void);"
+    | args -> println pr "(%a);" (pr_param_list (pr_vartype pr)) args)
 
 let print_globals pr (globals : variable list) =
   let groups =
