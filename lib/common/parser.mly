@@ -209,7 +209,7 @@ unary_expression
   : postfix_expression { $1 }
   | INC unary_expression { make_expr ~loc:$sloc (Unary (PreInc, $2)) }
   | DEC unary_expression { make_expr ~loc:$sloc (Unary (PreDec, $2)) }
-  | unary_operator cast_expression { make_expr ~loc:$sloc (Unary ($1, $2)) }
+  | unary_operator unary_expression { make_expr ~loc:$sloc (Unary ($1, $2)) }
   ;
 
 unary_operator
@@ -219,16 +219,11 @@ unary_operator
   | LOGNOT { LogNot }
   ;
 
-cast_expression
-  : unary_expression { $1 }
-  | LPAREN primitive_type_specifier RPAREN cast_expression { make_expr ~loc:$sloc (Cast ($2, $4)) }
-  ;
-
 mul_expression
-  : cast_expression { $1 }
-  | mul_expression TIMES cast_expression { make_expr ~loc:$sloc (Binary (Times, $1, $3)) }
-  | mul_expression DIV cast_expression { make_expr ~loc:$sloc (Binary (Divide, $1, $3)) }
-  | mul_expression MOD cast_expression { make_expr ~loc:$sloc (Binary (Modulo, $1, $3)) }
+  : unary_expression { $1 }
+  | mul_expression TIMES unary_expression { make_expr ~loc:$sloc (Binary (Times, $1, $3)) }
+  | mul_expression DIV unary_expression { make_expr ~loc:$sloc (Binary (Divide, $1, $3)) }
+  | mul_expression MOD unary_expression { make_expr ~loc:$sloc (Binary (Modulo, $1, $3)) }
   ;
 
 add_expression

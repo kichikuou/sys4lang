@@ -69,7 +69,7 @@ int main()
 	ra <- a;
 	rb <- NULL;
 	assert(g_ri === (true() ? ra : rb));
-	assert(a == (true() ? (int)ra : (int)rb));
+	assert(a == (true() ? int(ra) : int(rb)));
 
 	float f;
 	floatref(f);
