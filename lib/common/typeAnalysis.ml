@@ -303,7 +303,7 @@ class type_analyze_visitor ctx =
       (* check that lhs is a reference variable of the appropriate type *)
       match lhs.node with
       | Ident (name, _) -> (
-          match environment#resolve name with
+          match self#env#resolve name with
           | ResolvedLocal v | ResolvedGlobal v -> (
               match v.type_spec.ty with
               | Ref ty -> ref_type_check parent ty rhs
@@ -363,7 +363,7 @@ class type_analyze_visitor ctx =
       | ConstChar _ -> expr.ty <- Int
       | ConstString _ -> expr.ty <- String
       | Ident (name, _) -> (
-          match environment#resolve name with
+          match self#env#resolve name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, LocalVariable (-1, v.location));
               expr.ty <- v.type_spec.ty
@@ -413,7 +413,7 @@ class type_analyze_visitor ctx =
               match Jaf.parse_qualified_name name with
               | None, name -> undefined_variable_error name (ASTExpression expr)
               | Some sname, name -> (
-                  match environment#resolve_qualified sname name with
+                  match self#env#resolve_qualified sname name with
                   | UnresolvedName ->
                       undefined_variable_error
                         (sname ^ "::" ^ name)
@@ -593,7 +593,7 @@ class type_analyze_visitor ctx =
       | Member (obj, member_name, _) -> (
           let struc = Hashtbl.find_exn ctx.structs (check_member_lhs obj) in
           let access_check () =
-            match environment#current_class with
+            match self#env#current_class with
             | Some (Struct (_, i)) when i = struc.index -> ()
             | _ ->
                 compile_error
@@ -712,12 +712,13 @@ class type_analyze_visitor ctx =
       | DummyRef _ ->
           compiler_bug "dummy ref in type checker" (Some (ASTExpression expr))
       | This -> (
-          match environment#current_class with
+          match self#env#current_class with
           | Some ty -> expr.ty <- ty
           | None ->
               (* TODO: separate error type for this? *)
               undefined_variable_error "this" (ASTExpression expr))
       | Null -> expr.ty <- NullType
+      | Lambda f -> expr.ty <- TyMethod (ft_of_fundecl f)
 
     method! visit_statement stmt =
       self#catch_errors (fun () ->
@@ -754,7 +755,7 @@ class type_analyze_visitor ctx =
               | _ -> type_check (ASTStatement stmt) Int expr)
           | Default -> ()
           | Return (Some e) -> (
-              match environment#current_function with
+              match self#env#current_function with
               | None ->
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
@@ -770,7 +771,7 @@ class type_analyze_visitor ctx =
                       self#check_funarg_or_return (ASTStatement stmt)
                         f.return.ty e))
           | Return None -> (
-              match environment#current_function with
+              match self#env#current_function with
               | None ->
                   compiler_bug "return statement outside of function"
                     (Some (ASTStatement stmt))
@@ -782,7 +783,7 @@ class type_analyze_visitor ctx =
                   | Void -> ()
                   | _ -> type_error f.return.ty None (ASTStatement stmt)))
           | Jump name -> (
-              match environment#resolve name with
+              match self#env#resolve name with
               | ResolvedFunction f when f.is_label -> ()
               | _ ->
                   compile_error

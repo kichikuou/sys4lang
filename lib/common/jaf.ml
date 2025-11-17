@@ -177,11 +177,9 @@ and ast_expression =
   | DummyRef of int * expression
   | This
   | Null
+  | Lambda of fundecl
 
-let make_expr ?(ty = Untyped) ?(loc = dummy_location) node = { ty; node; loc }
-let clone_expr (e : expression) = { e with loc = e.loc }
-
-type statement = {
+and statement = {
   mutable node : ast_statement;
   mutable delete_vars : int list;
   loc : location;
@@ -229,18 +227,22 @@ and vardecls = {
   vars : variable list;
 }
 
-type fundecl = {
+and fundecl = {
   mutable name : string;
   loc : location;
   return : type_specifier;
   mutable params : variable list;
   mutable body : statement list option;
   is_label : bool;
+  is_lambda : bool;
   mutable is_private : bool;
   mutable index : int option;
   mutable class_name : string option;
   mutable class_index : int option;
 }
+
+let make_expr ?(ty = Untyped) ?(loc = dummy_location) node = { ty; node; loc }
+let clone_expr (e : expression) = { e with loc = e.loc }
 
 let ft_of_fundecl fundecl =
   let args = List.map fundecl.params ~f:(fun p -> p.type_spec.ty) in
@@ -373,90 +375,85 @@ type resolved_name =
   | ResolvedBuiltin of Bytecode.builtin
   | UnresolvedName
 
+class environment ctx current_function =
+  object (self)
+    val mutable stack = []
+
+    val mutable variables =
+      match current_function with Some f -> f.params | None -> []
+
+    method push = stack <- variables :: stack
+
+    method pop =
+      match stack with
+      | [] -> failwith "visitor tried to pop root environment"
+      | prev :: rest ->
+          variables <- prev;
+          stack <- rest
+
+    method push_var decl = variables <- decl :: variables
+
+    method var_list =
+      List.append variables (List.fold stack ~init:[] ~f:List.append)
+
+    method current_function = current_function
+
+    method current_class =
+      match current_function with
+      | Some { class_name = Some name; class_index = Some index; _ } ->
+          Some (Struct (name, index))
+      | _ -> None
+
+    method get_local name =
+      List.find variables ~f:(fun v -> String.equal v.name name)
+
+    method resolve name =
+      let ctx_resolve ctx =
+        match Hashtbl.find ctx.globals name with
+        | Some g -> ResolvedGlobal g
+        | None -> (
+            match Hashtbl.find ctx.functions name with
+            | Some f -> ResolvedFunction f
+            | None -> (
+                match Hashtbl.find ctx.libraries name with
+                | Some l -> ResolvedLibrary l
+                | None -> UnresolvedName))
+      in
+      match name with
+      | "system" -> ResolvedSystem
+      | "assert" ->
+          ResolvedBuiltin
+            (Option.value_exn (Bytecode.builtin_function_of_string "assert"))
+      | _ -> (
+          match self#get_local name with
+          | Some v -> ResolvedLocal v
+          | None -> (
+              match self#current_class with
+              | Some (Struct (s_name, _)) -> (
+                  let s = Hashtbl.find_exn ctx.structs s_name in
+                  match Hashtbl.find s.members name with
+                  | Some v -> ResolvedMember (s, v)
+                  | None -> (
+                      match
+                        Hashtbl.find ctx.functions (s_name ^ "@" ^ name)
+                      with
+                      | Some f -> ResolvedMethod (s, f)
+                      | None -> ctx_resolve ctx))
+              | _ -> ctx_resolve ctx))
+
+    method resolve_qualified sname name =
+      match Hashtbl.find ctx.structs sname with
+      | None -> UnresolvedName
+      | Some s -> (
+          match Hashtbl.find s.members name with
+          | Some v -> ResolvedMember (s, v)
+          | None -> UnresolvedName)
+  end
+
 class ivisitor ctx =
   object (self)
-    val environment =
-      object (self)
-        val mutable stack = []
-        val mutable variables = []
-        val mutable current_function = None
-        method push = stack <- variables :: stack
-
-        method pop =
-          match stack with
-          | [] -> failwith "visitor tried to pop root environment"
-          | prev :: rest ->
-              variables <- prev;
-              stack <- rest
-
-        method push_var decl = variables <- decl :: variables
-
-        method var_list =
-          List.append variables (List.fold stack ~init:[] ~f:List.append)
-
-        method enter_function decl =
-          self#push;
-          current_function <- Some decl;
-          List.iter decl.params ~f:self#push_var
-
-        method leave_function =
-          self#pop;
-          current_function <- None
-
-        method current_function = current_function
-
-        method current_class =
-          match current_function with
-          | Some { class_name = Some name; class_index = Some index; _ } ->
-              Some (Struct (name, index))
-          | _ -> None
-
-        method get_local name =
-          List.find variables ~f:(fun v -> String.equal v.name name)
-
-        method resolve name =
-          let ctx_resolve ctx =
-            match Hashtbl.find ctx.globals name with
-            | Some g -> ResolvedGlobal g
-            | None -> (
-                match Hashtbl.find ctx.functions name with
-                | Some f -> ResolvedFunction f
-                | None -> (
-                    match Hashtbl.find ctx.libraries name with
-                    | Some l -> ResolvedLibrary l
-                    | None -> UnresolvedName))
-          in
-          match name with
-          | "system" -> ResolvedSystem
-          | "assert" ->
-              ResolvedBuiltin
-                (Option.value_exn
-                   (Bytecode.builtin_function_of_string "assert"))
-          | _ -> (
-              match self#get_local name with
-              | Some v -> ResolvedLocal v
-              | None -> (
-                  match self#current_class with
-                  | Some (Struct (s_name, _)) -> (
-                      let s = Hashtbl.find_exn ctx.structs s_name in
-                      match Hashtbl.find s.members name with
-                      | Some v -> ResolvedMember (s, v)
-                      | None -> (
-                          match
-                            Hashtbl.find ctx.functions (s_name ^ "@" ^ name)
-                          with
-                          | Some f -> ResolvedMethod (s, f)
-                          | None -> ctx_resolve ctx))
-                  | _ -> ctx_resolve ctx))
-
-        method resolve_qualified sname name =
-          match Hashtbl.find ctx.structs sname with
-          | None -> UnresolvedName
-          | Some s -> (
-              match Hashtbl.find s.members name with
-              | Some v -> ResolvedMember (s, v)
-              | None -> UnresolvedName)
-      end
+    val env_stack = Stack.singleton (new environment ctx None)
+    method env = Stack.top_exn env_stack
 
     method visit_expression (e : expression) =
       match e.node with
@@ -493,11 +490,12 @@ class ivisitor ctx =
       | DummyRef (_, e) -> self#visit_expression e
       | This -> ()
       | Null -> ()
+      | Lambda f -> self#visit_fundecl f
 
     method visit_vardecls (ds : vardecls) =
       self#visit_type_specifier ds.typespec;
       List.iter ds.vars ~f:(fun v ->
-          (match v.kind with LocalVar -> environment#push_var v | _ -> ());
+          (match v.kind with LocalVar -> self#env#push_var v | _ -> ());
           self#visit_variable v)
 
     method visit_statement (s : statement) =
@@ -506,9 +504,9 @@ class ivisitor ctx =
       | Declarations ds -> self#visit_vardecls ds
       | Expression e -> self#visit_expression e
       | Compound stmts ->
-          environment#push;
+          self#env#push;
           List.iter stmts ~f:self#visit_statement;
-          environment#pop
+          self#env#pop
       | Label _ -> ()
       | If (test, cons, alt) ->
           self#visit_expression test;
@@ -521,12 +519,12 @@ class ivisitor ctx =
           self#visit_statement body;
           self#visit_expression test
       | For (init, test, inc, body) ->
-          environment#push;
+          self#env#push;
           self#visit_statement init;
           Option.iter test ~f:self#visit_expression;
           Option.iter inc ~f:self#visit_expression;
           self#visit_statement body;
-          environment#pop
+          self#env#pop
       | Goto _ -> ()
       | Continue -> ()
       | Break -> ()
@@ -555,9 +553,9 @@ class ivisitor ctx =
       self#visit_type_specifier f.return;
       List.iter f.params ~f:self#visit_variable;
       Option.iter f.body ~f:(fun body ->
-          environment#enter_function f;
+          Stack.push env_stack (new environment ctx (Some f));
           List.iter ~f:self#visit_statement body;
-          environment#leave_function)
+          Stack.pop_exn env_stack |> ignore)
 
     method visit_declaration d =
       match d with
@@ -698,6 +696,7 @@ let rec expr_to_string (e : expression) =
   | DummyRef (_, e) -> expr_to_string e
   | This -> "this"
   | Null -> "NULL"
+  | Lambda _ -> "lambda" (* FIXME *)
 
 let rec stmt_to_string (stmt : statement) =
   match stmt.node with
@@ -992,6 +991,7 @@ let context_from_ain ?(constants : variable list = []) ain =
             ain_to_jaf_variable ain Parameter v);
       body = None;
       is_label = false;
+      is_lambda = false;
       is_private = false;
       index = Some f.index;
       class_name = None;
@@ -1043,6 +1043,7 @@ let context_from_ain ?(constants : variable list = []) ain =
                 ain_to_jaf_variable ain Parameter v);
           body = None;
           is_label = f.is_label;
+          is_lambda = f.is_lambda;
           is_private = false;
           index = Some f.index;
           class_name;
@@ -1085,6 +1086,7 @@ let context_from_ain ?(constants : variable list = []) ain =
                     });
               body = None;
               is_label = false;
+              is_lambda = false;
               is_private = false;
               index = Some f.index;
               class_name = None;

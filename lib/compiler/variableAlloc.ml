@@ -43,9 +43,9 @@ let dummy_var_seqno = ref 0
 class variable_alloc_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
-    val mutable vars : variable list = []
+    val func_vars : variable list Stack.t = Stack.create ()
     val scopes = Stack.create ()
-    val labels = Hashtbl.create (module String)
+    val mutable labels = Hashtbl.create (module String)
 
     method start_scope =
       Stack.push scopes
@@ -105,7 +105,7 @@ class variable_alloc_visitor ctx =
     method current_var_set =
       Set.of_list
         (module Int)
-        (List.filter_map environment#var_list ~f:(fun v -> v.index))
+        (List.filter_map self#env#var_list ~f:(fun v -> v.index))
 
     method add_continue stmt =
       let scope = Stack.top_exn scopes in
@@ -130,29 +130,31 @@ class variable_alloc_visitor ctx =
       d.gotos <- (stmt, self#current_var_set) :: d.gotos
 
     method get_var_no name =
-      match environment#get_local name with
+      match self#env#get_local name with
       | Some v -> Option.value_exn v.index
       | None -> compiler_bug ("Undefined variable: " ^ name) None
 
     method add_var (v : variable) =
+      let vars = Stack.pop_exn func_vars in
       let i = List.length vars in
       v.index <- Some i;
-      if is_ref_scalar v.type_spec.ty then
-        let void =
-          {
-            name = "<void>";
-            location = v.location;
-            array_dim = [];
-            is_const = false;
-            is_private = false;
-            kind = v.kind;
-            type_spec = { ty = Void; location = v.type_spec.location };
-            initval = None;
-            index = Some (i + 1);
-          }
-        in
-        vars <- void :: v :: vars
-      else vars <- v :: vars
+      Stack.push func_vars
+        (if is_ref_scalar v.type_spec.ty then
+           let void =
+             {
+               name = "<void>";
+               location = v.location;
+               array_dim = [];
+               is_const = false;
+               is_private = false;
+               kind = v.kind;
+               type_spec = { ty = Void; location = v.type_spec.location };
+               initval = None;
+               index = Some (i + 1);
+             }
+           in
+           void :: v :: vars
+         else v :: vars)
 
     method create_dummy_var name ty =
       (* create dummy ref variable to store object for extent of statement *)
@@ -170,7 +172,7 @@ class variable_alloc_visitor ctx =
         }
       in
       self#add_var v;
-      environment#push_var v;
+      self#env#push_var v;
       dummy_var_seqno := !dummy_var_seqno + 1;
       Option.value_exn v.index
 
@@ -237,25 +239,30 @@ class variable_alloc_visitor ctx =
 
     method! visit_fundecl f =
       if Option.is_some f.body then (
+        let parent_labels = labels in
+        labels <- Hashtbl.create (module String);
+        Stack.push func_vars [];
         let conv_var index (v : variable) =
           Ain.Variable.make ~index v.name (jaf_to_ain_type v.type_spec.ty)
         in
-        let add_vars (a_f : Ain.Function.t) =
-          { a_f with vars = List.mapi (List.rev vars) ~f:conv_var }
+        let add_vars vars (a_f : Ain.Function.t) =
+          { a_f with vars = List.mapi vars ~f:conv_var }
         in
         self#start_scope;
         super#visit_fundecl f;
         self#end_scope ScopeAnon;
         self#resolve_gotos;
+
         (* write updated fundecl to ain file *)
+        let vars = List.rev (Stack.pop_exn func_vars) in
         (match Ain.get_function ctx.ain (mangled_name f) with
         | Some obj ->
-            obj |> jaf_to_ain_function f |> add_vars
+            obj |> jaf_to_ain_function f |> add_vars vars
             |> Ain.write_function ctx.ain
         | None ->
             compiler_bug "Undefined function"
               (Some (ASTDeclaration (Function f))));
-        vars <- [])
+        labels <- parent_labels)
   end
 
 let allocate_variables ctx decls =

@@ -55,13 +55,13 @@ class jaf_compiler ctx debug_info =
     val mutable current_address : int = 0
 
     (* The currently active control flow constructs. *)
-    val cflow_stmts = Stack.create ()
+    val mutable cflow_stmts = Stack.create ()
 
     (* The currentl active scopes. *)
     val scopes = Stack.create ()
 
     (* Labels/gotos record for the current function. *)
-    val labels = Hashtbl.create (module String)
+    val mutable labels = Hashtbl.create (module String)
 
     (** Begin a scope. Variables created within a scope are deleted when the
         scope ends. *)
@@ -971,6 +971,13 @@ class jaf_compiler ctx debug_info =
               compiler_bug
                 ("unimplemented: NULL rvalue of type " ^ jaf_type_to_string ty)
                 (Some (ASTExpression expr)))
+      | Lambda f ->
+          let jump_addr = current_address + 2 in
+          self#write_instruction1 JUMP 0;
+          self#compile_function f;
+          self#write_address_at jump_addr current_address;
+          self#write_instruction0 PUSHSTRUCTPAGE;
+          self#write_instruction1 PUSH (Option.value_exn f.index)
 
     method compile_expr_and_pop (expr : expression) =
       match expr.node with
@@ -1320,7 +1327,12 @@ class jaf_compiler ctx debug_info =
           address = current_address + 6;
         }
       in
+      let prev_function = current_function in
       current_function <- Some func;
+      let prev_cflow_stmts = cflow_stmts in
+      cflow_stmts <- Stack.create ();
+      let prev_labels = labels in
+      labels <- Hashtbl.create (module String);
       self#write_instruction1 FUNC index;
       self#compile_block (Option.value_exn decl.body);
       if not func.is_label then (
@@ -1331,12 +1343,15 @@ class jaf_compiler ctx debug_info =
          auto-generated array initializers. *)
       (match decl with
       | { name = "NULL"; _ } -> ()
-      | { class_name = None; _ } | { name = "2"; _ } ->
+      | { class_name = None; _ } | { name = "2"; _ } | { is_lambda = true; _ }
+        ->
           self#write_instruction1 ENDFUNC index
       | _ -> ());
       self#resolve_gotos;
       Ain.write_function ctx.ain func;
-      current_function <- None
+      current_function <- prev_function;
+      cflow_stmts <- prev_cflow_stmts;
+      labels <- prev_labels
 
     (** Compile a list of declarations. *)
     method compile jaf_name (decls : declaration list) =

@@ -24,13 +24,25 @@ open CompileError
  *)
 class type_declare_visitor ctx =
   object (self)
-    inherit ivisitor ctx
+    inherit ivisitor ctx as super
     val mutable gg_index = -1
 
-    method declare_function (decl : fundecl) =
+    (* LSP uses function-local lambda names to prevent ctx.functions from growing indefinitely. *)
+    val mutable lambda_index = 0
+
+    method! visit_fundecl (decl : fundecl) =
+      if decl.is_lambda then (
+        lambda_index <- lambda_index + 1;
+        let parent = Option.value_exn self#env#current_function in
+        decl.name <- Printf.sprintf "%s::<lambda : %d>" parent.name lambda_index;
+        decl.class_name <- parent.class_name);
       decl.index <- Some (-1);
       let name = mangled_name decl in
-      Hashtbl.set ctx.functions ~key:name ~data:decl
+      Hashtbl.set ctx.functions ~key:name ~data:decl;
+      let prev_lambda_index = lambda_index in
+      lambda_index <- 0;
+      super#visit_fundecl decl;
+      lambda_index <- prev_lambda_index
 
     method! visit_declaration decl =
       match decl with
@@ -54,7 +66,7 @@ class type_declare_visitor ctx =
                   compile_error
                     (f.name ^ " is not declared in class " ^ qual)
                     (ASTDeclaration decl)));
-          self#declare_function f
+          self#visit_fundecl f
       | FuncTypeDef f ->
           Hashtbl.set ctx.functypes ~key:f.name
             ~data:{ f with index = Some (-1) }
@@ -80,7 +92,7 @@ class type_declare_visitor ctx =
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 f.is_private <- !in_private;
-                self#declare_function f
+                self#visit_fundecl f
             | Destructor f ->
                 if not (String.equal f.name ("~" ^ unqualified_struct_name))
                 then
@@ -89,12 +101,12 @@ class type_declare_visitor ctx =
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 f.is_private <- !in_private;
-                self#declare_function f
+                self#visit_fundecl f
             | Method f ->
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 f.is_private <- !in_private;
-                self#declare_function f
+                self#visit_fundecl f
             | MemberDecl ds ->
                 List.iter ds.vars ~f:(fun v ->
                     v.is_private <- !in_private;
@@ -168,6 +180,15 @@ class type_resolve_visitor ctx decl_only =
         | _ -> t
       in
       ts.ty <- resolve ts.ty
+
+    method! visit_fundecl decl =
+      (if decl.is_lambda then
+         match self#env#current_class with
+         | Some (Struct (name, index)) ->
+             decl.class_name <- Some name;
+             decl.class_index <- Some index
+         | _ -> ());
+      super#visit_fundecl decl
 
     method! visit_declaration decl =
       (match decl with

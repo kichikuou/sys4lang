@@ -19,15 +19,22 @@ open Base
 open Jaf
 open CompileError
 
+let lambda_index = ref 0
+
 (*
  * AST pass over top-level declarations register names in the .ain file.
  *)
 class type_declare_visitor ctx =
   object (self)
-    inherit ivisitor ctx
+    inherit ivisitor ctx as super
     val mutable gg_index = -1
 
-    method declare_function decl =
+    method! visit_fundecl decl =
+      if decl.is_lambda then (
+        lambda_index := !lambda_index + 1;
+        decl.name <- Printf.sprintf "<lambda : %d>" !lambda_index;
+        decl.class_name <-
+          (Option.value_exn self#env#current_function).class_name);
       let name = mangled_name decl in
       if Option.is_some decl.body then
         decl.index <- Some (Ain.add_function ctx.ain name).index;
@@ -52,7 +59,8 @@ class type_declare_visitor ctx =
                  in method definition) *)
               if Option.is_some decl.body then decl.params <- prev_decl.params;
               decl)
-        | None -> decl)
+        | None -> decl);
+      super#visit_fundecl decl
 
     method! visit_declaration decl =
       match decl with
@@ -81,7 +89,7 @@ class type_declare_visitor ctx =
                   compile_error
                     (f.name ^ " is not declared in class " ^ qual)
                     (ASTDeclaration decl)));
-          self#declare_function f
+          self#visit_fundecl f
       | FuncTypeDef f -> (
           match Hashtbl.add ctx.functypes ~key:f.name ~data:f with
           | `Duplicate ->
@@ -110,7 +118,7 @@ class type_declare_visitor ctx =
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 f.is_private <- !in_private;
-                self#declare_function f
+                self#visit_fundecl f
             | Destructor f ->
                 if not (String.equal f.name ("~" ^ unqualified_struct_name))
                 then
@@ -119,12 +127,12 @@ class type_declare_visitor ctx =
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 f.is_private <- !in_private;
-                self#declare_function f
+                self#visit_fundecl f
             | Method f ->
                 f.class_name <- Some s.name;
                 f.class_index <- Some ain_s.index;
                 f.is_private <- !in_private;
-                self#declare_function f
+                self#visit_fundecl f
             | MemberDecl ds ->
                 List.iter ds.vars ~f:(fun v ->
                     v.is_private <- !in_private;
@@ -202,6 +210,15 @@ class type_resolve_visitor ctx decl_only =
       in
       ts.ty <- resolve ts.ty
 
+    method! visit_fundecl decl =
+      (if decl.is_lambda then
+         match self#env#current_class with
+         | Some (Struct (name, index)) ->
+             decl.class_name <- Some name;
+             decl.class_index <- Some index
+         | _ -> ());
+      super#visit_fundecl decl
+
     method! visit_declaration decl =
       (match decl with
       | Function f -> (
@@ -225,9 +242,18 @@ let resolve_types ctx decls decl_only =
  *)
 class type_define_visitor ctx =
   object (self)
-    inherit ivisitor ctx
+    inherit ivisitor ctx as super
+
+    method! visit_fundecl f =
+      super#visit_fundecl f;
+      if f.is_lambda then
+        let obj =
+          Ain.get_function_by_index ctx.ain (Option.value_exn f.index)
+        in
+        obj |> jaf_to_ain_function f |> Ain.write_function ctx.ain
 
     method! visit_declaration decl =
+      super#visit_declaration decl;
       match decl with
       | Global ds ->
           List.iter ds.vars ~f:(fun g ->

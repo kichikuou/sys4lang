@@ -64,7 +64,7 @@ let vardecls kind is_const type_spec var_list =
             ((base, delta + 1), { v with initval = Some value }))
   | _ -> vars
 
-let func loc typespec name params body =
+let func ?(is_lambda = false) loc typespec name params body =
   (* XXX: hack for `functype name(void)` *)
   let plist =
     match params with
@@ -78,6 +78,7 @@ let func loc typespec name params body =
     params = plist;
     body;
     is_label = false;
+    is_lambda;
     is_private = false;
     index = None;
     class_name = None;
@@ -108,7 +109,7 @@ let rec multidim_array dims t =
 %token SWAP
 /* delimiters */
 %token LPAREN RPAREN RBRACKET LBRACKET LBRACE RBRACE
-%token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH
+%token QUESTION COLON COCO SEMICOLON AT COMMA DOT HASH FATARROW
 /* types */
 %token VOID CHAR INT LINT FLOAT BOOL STRING HLL_PARAM HLL_FUNC HLL_DELEGATE
 /* keywords */
@@ -158,6 +159,8 @@ primary_expression
   | constant { make_expr ~loc:$sloc $1 }
   | string { make_expr ~loc:$sloc $1 }
   | LPAREN expression RPAREN { {$2 with loc=$sloc} }
+  | parameter_list(init_declarator(IDENTIFIER)) FATARROW declaration_specifiers block
+    { make_expr ~loc:$sloc (Lambda (func ~is_lambda:true $sloc $3 "<lambda>" $1 (Some $4))) }
   ;
 
 (* Due to the way menhir handles reduce/reduce conflicts, the generation rule

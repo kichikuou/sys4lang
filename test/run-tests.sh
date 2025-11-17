@@ -22,3 +22,4 @@ cd $(dirname "$0")
 ./test-runner.sh unicode.jaf
 ./test-runner.sh hllcall.jaf Math.hll
 ./test-runner.sh macro.jaf
+./test-runner.sh lambda.jaf

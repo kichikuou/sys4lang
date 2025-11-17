@@ -207,6 +207,7 @@ rule token = parse
   | "<<="                   { LSHIFTASSIGN }
   | ">>="                   { RSHIFTASSIGN }
   | "<-"                    { REFASSIGN }
+  | "=>"                    { FATARROW }
   | "<=>"                   { SWAP }
   | '.'                     { DOT }
   | ','                     { COMMA }

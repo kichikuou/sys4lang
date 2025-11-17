@@ -107,8 +107,8 @@ void test_dg_func()
 
 int main()
 {
-	// test_dg_set();  // FIXME: xsystem4 doesn't pass this
-	// test_dg_func();  // FIXME: xsystem4 doesn't pass this
+	test_dg_set();
+	test_dg_func();
 	test_dg_add();
 	test_dg_plusa();
 	test_dg_minusa();

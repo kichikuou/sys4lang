@@ -1,0 +1,26 @@
+delegate int nullary();
+delegate int binary(int a, int b);
+
+int call_nullary(nullary func) {
+    return func();
+}
+
+struct S {
+    int m;
+
+    int test_lambda() {
+        m = 42;
+        assert(call_nullary(() => int { return m; }) == 42);
+    }
+};
+
+int main()
+{
+    S s;
+    s.test_lambda();
+
+    binary dg = (int a, int b) => int { return a + b; };
+    assert(dg(3, 5) == 8);
+
+	return 0;
+}

@@ -88,7 +88,7 @@ class const_eval_visitor ctx =
       | ConstChar _ -> ()
       | ConstString _ -> ()
       | Ident (name, _) -> (
-          match environment#resolve name with
+          match self#env#resolve name with
           | ResolvedLocal v | ResolvedGlobal v | ResolvedMember (_, v) -> (
               if v.is_const then
                 match v.initval with
@@ -197,6 +197,7 @@ class const_eval_visitor ctx =
       | DummyRef _ -> ()
       | This -> ()
       | Null -> ()
+      | Lambda _ -> ()
 
     method! visit_toplevel decls =
       (* XXX: evaluate all global constants first *)
@@ -236,7 +237,7 @@ class const_eval_visitor ctx =
               | ConstFloat f -> Ain.Variable.Float f
               | ConstString s -> Ain.Variable.String s
               | Ident (name, _) -> (
-                  match environment#resolve name with
+                  match self#env#resolve name with
                   | ResolvedGlobal v ->
                       Ain.Variable.Int
                         (Int32.of_int_exn (Option.value_exn v.index))
