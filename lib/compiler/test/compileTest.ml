@@ -530,7 +530,7 @@ let%expect_test "ref struct assign" =
       104: EOF
   |}]
 
-let%expect_test "ref int assign" =
+let%expect_test "local ref int assign" =
   compile_test
     {|
       ref int f() {
@@ -575,6 +575,31 @@ let%expect_test "ref int assign" =
       108: FUNC NULL
       114: EOF
   |}]
+
+let%expect_test "struct ref int assign" =
+  compile_test
+    {|
+    struct S { ref int r; };
+    S g_s;
+    void f() {
+      g_s.r = 42;
+    }
+  |};
+  [%expect
+    {|
+    000: FUNC f
+    006: SH_GLOBALREF global(0)
+    012: PUSH 0
+    018: REFREF
+    020: PUSH 42
+    026: ASSIGN
+    028: POP
+    030: RETURN
+    032: ENDFUNC f
+    038: EOF test.jaf
+    044: FUNC NULL
+    050: EOF
+    |}]
 
 let%expect_test "syscall" =
   compile_test {|

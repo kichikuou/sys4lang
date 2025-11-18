@@ -253,6 +253,16 @@ class jaf_compiler ctx debug_info =
       | Some f -> List.nth_exn f.vars i
       | None -> compiler_bug "get_local outside of function" None
 
+    method member_type (expr : expression) =
+      match expr.node with
+      | Member
+          ( { ty = Struct (_, struct_no) | Ref (Struct (_, struct_no)); _ },
+            _,
+            ClassVariable member_no ) ->
+          let struct_type = Ain.get_struct_by_index ctx.ain struct_no in
+          (List.nth_exn struct_type.members member_no).value_type
+      | _ -> compiler_bug "member of non-struct" (Some (ASTExpression expr))
+
     method compile_lock_peek =
       if Ain.version_lt ctx.ain (6, 0) then (
         self#write_instruction1 CALLSYS (int_of_syscall LockPeek);
@@ -374,7 +384,7 @@ class jaf_compiler ctx debug_info =
           | _ ->
               self#compile_lvalue obj;
               self#write_instruction1 PUSH member_no;
-              compile_lvalue_after (jaf_to_ain_type e.ty))
+              compile_lvalue_after (self#member_type e))
       | Subscript (obj, index) ->
           self#compile_lvalue obj;
           self#compile_expression index;
@@ -790,17 +800,9 @@ class jaf_compiler ctx debug_info =
         when ctx.version < 630 && is_scalar expr.ty ->
           self#write_instruction1 SH_STRUCTREF member_no
       | Member (e, _, ClassVariable member_no) ->
-          let struct_type =
-            match e.ty with
-            | Struct (_, struct_no) | Ref (Struct (_, struct_no)) ->
-                Ain.get_struct_by_index ctx.ain struct_no
-            | _ ->
-                compiler_bug "member of non-struct" (Some (ASTExpression expr))
-          in
           self#compile_lvalue e;
           self#write_instruction1 PUSH member_no;
-          self#compile_dereference
-            (List.nth_exn struct_type.members member_no).value_type
+          self#compile_dereference (self#member_type expr)
       | Member (_, _, ClassConst _) ->
           compiler_bug "class constant not eliminated"
             (Some (ASTExpression expr))
