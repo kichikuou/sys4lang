@@ -212,7 +212,7 @@ class jaf_compiler ctx debug_info =
       current_address <- current_address + 2
 
     method write_instruction1 op arg0 =
-      match (Ain.version_lt ctx.ain (8, 0), op) with
+      match (Ain.version_lt ctx.ain (11, 0), op) with
       | true, S_MOD ->
           self#write_instruction1 PUSH arg0;
           self#write_instruction0 S_MOD
