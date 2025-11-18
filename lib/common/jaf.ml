@@ -265,6 +265,7 @@ let mangled_name fdecl =
   | Some s ->
       s
       ^
+      let _, s = parse_qualified_name s in
       if String.equal fdecl.name s then "@0"
       else if String.equal fdecl.name ("~" ^ s) then "@1"
       else "@" ^ fdecl.name
