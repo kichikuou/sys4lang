@@ -298,15 +298,15 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
       | MemberPointer (struc, slot) ->
           fprintf oc "&%s::%s" Ain.ain.strt.(struc).name
             Ain.ain.strt.(struc).members.(slot).name
-      | BoundMethod (Number -1l, f) ->
-          fprintf oc "&%s" (Ain.Function.parse_name f).name
-      | BoundMethod (Page StructPage, ({ is_lambda = true; _ } as func)) -> (
+      | BoundMethod (_, ({ is_lambda = true; _ } as func)) -> (
           match
             List.find (Stack.top_exn current_function).lambdas ~f:(fun f ->
                 Poly.equal f.func func)
           with
           | Some func -> self#print_function ~as_lambda:true func
           | None -> Printf.failwithf "unresolved lambda %s" func.name ())
+      | BoundMethod (Number -1l, f) ->
+          fprintf oc "&%s" (Ain.Function.parse_name f).name
       | BoundMethod (expr, f) ->
           fprintf oc "%a.%s"
             (self#pr_expr (prec_value PREC_DOT))
