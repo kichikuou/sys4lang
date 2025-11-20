@@ -100,6 +100,21 @@ let extract_array_dims stmt vars =
           } ->
             Stdlib.Hashtbl.add h v dims;
             true
+        | {
+            txt =
+              Expression
+                (Call
+                   ( HllFunc ("Array", { name = "Alloc"; _ }),
+                     Deref (PageRef (_, v)) :: dims ));
+            _;
+          } ->
+            let dims =
+              List.take_while dims ~f:(function
+                | Number -1l -> false
+                | _ -> true)
+            in
+            Stdlib.Hashtbl.add h v dims;
+            true
         | _ -> false)
   then
     Some
