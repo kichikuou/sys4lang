@@ -1280,17 +1280,7 @@ and reduce ctx stack rest =
           in
           reduce ctx (top' :: stack') rest
       | _ -> failwith "not implemented")
-  (* ?. method call *)
-  | {
-      code =
-        ( { txt = Jump label2; _ },
-          [ Number 0l; Call (Method (Nullable placeholder, func), args) ],
-          [] );
-      end_addr = addr1;
-      _;
-    }
-    :: ({ code = { txt = Branch (label1, _cond); _ }, estack, stmts; _ } as top)
-    :: stack'
+  (* ?.void_method() *)
   | {
       code =
         ( { txt = Jump label2; _ },
@@ -1315,16 +1305,15 @@ and reduce ctx stack rest =
             (Deref (lvalue ctx page slot), estack)
         | _ -> failwith "unexpected ?. lhs placeholder"
       in
-      match (func.return_type, rest) with
-      | ( Void,
-          {
-            code =
-              ( [ { txt = POP; _ }; { txt = PUSH -1l; _ } ]
-              | [ { txt = POP; _ }; { txt = POP; _ }; { txt = PUSH -1l; _ } ] );
-            end_addr = addr2;
-            _;
-          }
-          :: bb' :: rest' )
+      match rest with
+      | {
+          code =
+            ( [ { txt = POP; _ }; { txt = PUSH -1l; _ } ]
+            | [ { txt = POP; _ }; { txt = POP; _ }; { txt = PUSH -1l; _ } ] );
+          end_addr = addr2;
+          _;
+        }
+        :: bb' :: rest'
         when addr2 = label2 ->
           let bbs =
             { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
@@ -1336,6 +1325,27 @@ and reduce ctx stack rest =
               stmts;
             }
             stack' bbs
+      | _ -> failwith "unhandled ?. method call")
+  (* ?.non_void_method() *)
+  | {
+      code =
+        ( { txt = Jump label2; _ },
+          [ Number 0l; Call (Method (Nullable placeholder, func), args) ],
+          [] );
+      end_addr = addr1;
+      _;
+    }
+    :: ({ code = { txt = Branch (label1, _cond); _ }, estack, stmts; _ } as top)
+    :: stack'
+    when addr1 = label1 -> (
+      let lhs, estack =
+        match (placeholder, estack) with
+        | Void, lhs :: estack -> (lhs, estack)
+        | Deref NullRef, slot :: page :: estack ->
+            (Deref (lvalue ctx page slot), estack)
+        | _ -> failwith "unexpected ?. lhs placeholder"
+      in
+      match (func.return_type, rest) with
       | ( (Int | Bool | Float),
           {
             code =
@@ -1406,7 +1416,14 @@ and reduce ctx stack rest =
               stmts;
             }
             stack' bbs
-      | _ -> failwith "unhandled ?. method call")
+      | _ ->
+          Printf.failwithf "unhandled ?. method call %s\nstack: %s\nrest: %s"
+            (Type.show_ain_type func.return_type)
+            ([%show:
+               (terminator loc * expr list * statement loc list) basic_block
+               list] stack)
+            ([%show: instruction loc list basic_block list] (List.take rest 3))
+            ())
   | ({ code = { txt = Seq; _ }, (_ :: _ as estack), stmts; _ } as top) :: stack'
     -> (
       match rest with
