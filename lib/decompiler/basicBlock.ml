@@ -1370,8 +1370,8 @@ and reduce ctx stack rest =
                  ];
                _;
              }
-          :: ({ code = { txt = POP; _ } :: code'; end_addr = addr3; _ } as bb)
-          :: bb' :: rest' )
+          :: ({ code = { txt = POP; _ } :: code'; _ } as bb)
+          :: rest' )
       | ( String,
           {
             code =
@@ -1396,18 +1396,24 @@ and reduce ctx stack rest =
                  ];
                _;
              }
-          :: ({ code = { txt = DELETE; _ } :: code'; end_addr = addr3; _ } as bb)
-          :: bb' :: rest' )
-        when addr2 = label2 && addr3 = label3 ->
+          :: ({ code = { txt = DELETE; _ } :: code'; _ } as bb)
+          :: rest' )
+        when addr2 = label2 ->
+          let rec insert_pseudo_null_coalesce = function
+            | [] -> failwith "missing jump target"
+            | bb :: rest when bb.addr = label3 ->
+                {
+                  bb with
+                  code =
+                    { txt = PSEUDO_NULL_COALESCE; addr = -1; end_addr = -1 }
+                    :: bb.code;
+                }
+                :: rest
+            | bb :: rest -> bb :: insert_pseudo_null_coalesce rest
+          in
           let bbs =
             { top with code = code'; end_addr = bb.end_addr }
-            :: {
-                 bb' with
-                 code =
-                   { txt = PSEUDO_NULL_COALESCE; addr = -1; end_addr = -1 }
-                   :: bb'.code;
-               }
-            :: rest'
+            :: insert_pseudo_null_coalesce rest'
           in
           analyze_basic_blocks
             {
@@ -1416,6 +1422,101 @@ and reduce ctx stack rest =
               stmts;
             }
             stack' bbs
+      | ( (Int | Bool | Float),
+          {
+            code =
+              ( [
+                  { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ };
+                ]
+              | [
+                  { txt = POP; _ };
+                  { txt = POP; _ };
+                  { txt = PUSH -1l; _ };
+                  { txt = PUSH -1l; _ };
+                ] );
+            end_addr = addr2;
+            _;
+          }
+          :: { code = [ { txt = JUMP label4; _ } ]; _ }
+          :: {
+               code =
+                 [ { txt = PSEUDO_NULL_COALESCE; _ }; { txt = PUSH 0l; _ } ];
+               _;
+             }
+          :: {
+               code =
+                 [
+                   { txt = PUSH -1l; _ };
+                   { txt = EQUALE; _ };
+                   { txt = IFZ label3; _ };
+                 ];
+               addr = addr4;
+               _;
+             }
+          :: ({ code = { txt = POP; _ } :: code'; _ } as bb)
+          :: rest' )
+      | ( String,
+          {
+            code =
+              ( [
+                  { txt = POP; _ }; { txt = PUSH -1l; _ }; { txt = PUSH -1l; _ };
+                ]
+              | [
+                  { txt = POP; _ };
+                  { txt = POP; _ };
+                  { txt = PUSH -1l; _ };
+                  { txt = PUSH -1l; _ };
+                ] );
+            end_addr = addr2;
+            _;
+          }
+          :: { code = [ { txt = JUMP label4; _ } ]; _ }
+          :: {
+               code =
+                 [ { txt = PSEUDO_NULL_COALESCE; _ }; { txt = PUSH 0l; _ } ];
+               _;
+             }
+          :: {
+               code =
+                 [
+                   { txt = PUSH -1l; _ };
+                   { txt = EQUALE; _ };
+                   { txt = IFZ label3; _ };
+                 ];
+               addr = addr4;
+               _;
+             }
+          :: ({ code = { txt = DELETE; _ } :: code'; _ } as bb)
+          :: rest' )
+        when addr2 = label2 && addr4 = label4 -> (
+          let rec insert_pseudo_null_coalesce = function
+            | [] -> failwith "missing jump target"
+            | bb :: rest when bb.addr = label3 ->
+                {
+                  bb with
+                  code =
+                    { txt = PSEUDO_NULL_COALESCE; addr = -1; end_addr = -1 }
+                    :: bb.code;
+                }
+                :: rest
+            | bb :: rest -> bb :: insert_pseudo_null_coalesce rest
+          in
+          let bbs =
+            { top with code = code'; end_addr = bb.end_addr }
+            :: insert_pseudo_null_coalesce rest'
+          in
+          match estack with
+          | hd :: estack ->
+              let e =
+                BinaryOp
+                  ( PSEUDO_NULL_COALESCE,
+                    hd,
+                    Call (Method (Nullable lhs, func), args) )
+              in
+              analyze_basic_blocks
+                { ctx with stack = e :: estack; stmts }
+                stack' bbs
+          | [] -> failwith "unexpected empty estack")
       | _ ->
           Printf.failwithf "unhandled ?. method call %s\nstack: %s\nrest: %s"
             (Type.show_ain_type func.return_type)
