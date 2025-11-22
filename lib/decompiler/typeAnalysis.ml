@@ -56,6 +56,7 @@ let builtin_type receiver_type insn args =
             (show_ain_type receiver_type)
             ())
   | A_REVERSE -> (insn, Void, [])
+  | X_SET -> (insn, Void, [ receiver_type ])
   | S_EMPTY -> (insn, Bool, [])
   | S_LENGTH -> (insn, Int, [])
   | S_LENGTH2 -> (insn, Int, [])
