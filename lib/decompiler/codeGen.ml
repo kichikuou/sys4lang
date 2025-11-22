@@ -475,6 +475,11 @@ class code_printer ?(print_addr = false) (file : string) =
           | Var -> print_string out "unknown_delegate")
       | HllFunc2 -> print_string out "hll_func2"
       | HllParam -> print_string out "hll_param"
+      | Option t -> bprintf out "option<%a>" self#pr_type t
+      | IFace n -> bprintf out "iface<%d>" n
+      | Enum2 n -> bprintf out "enum2<%d>" n
+      | Enum n -> print_string out Ain.ain.enum.(n)
+      | HllFunc -> print_string out "hll_func"
 
     method private pr_vartype out (arg : Ain.Variable.t) =
       bprintf out "%a" self#pr_type arg.type_
