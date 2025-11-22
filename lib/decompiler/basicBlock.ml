@@ -881,6 +881,7 @@ let analyze ctx =
     | A_NUMOF_STRUCT_1 var ->
         push ctx
           (Call (Builtin (A_NUMOF, pageref ctx StructPage var), [ Number 1l ]))
+    | X_SET -> builtin2 ctx X_SET 1
     | DG_COPY -> ()
     | DG_NEW -> push ctx Null
     | DG_CLEAR ->
