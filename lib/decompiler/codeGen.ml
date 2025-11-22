@@ -475,6 +475,11 @@ class code_printer ?(print_addr = false) (oc : Stdio.Out_channel.t)
           | Var -> print_string oc "unknown_delegate")
       | HllFunc2 -> print_string oc "hll_func2"
       | HllParam -> print_string oc "hll_param"
+      | Option t -> fprintf oc "option<%a>" self#pr_type t
+      | IFace n -> fprintf oc "iface<%d>" n
+      | Enum2 n -> fprintf oc "enum2<%d>" n
+      | Enum n -> print_string oc Ain.ain.enum.(n)
+      | HllFunc -> print_string oc "hll_func"
 
     method private pr_vartype oc (arg : Ain.Variable.t) =
       fprintf oc "%a" self#pr_type arg.type_
