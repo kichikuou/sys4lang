@@ -24,6 +24,7 @@ module Variable : sig
 
   type t = {
     name : string;
+    name2 : string; (* ain v12+ *)
     type_ : type_t;
     init_val : init_value option;
     group_index : int;
@@ -138,6 +139,7 @@ type t = {
   mutable fnct : FuncType.t array;
   mutable delg : FuncType.t array;
   mutable objg : string array;
+  mutable enum : string array;
   mutable is_ai2 : bool;
   mutable struct_by_name : (string, Struct.t) Hashtbl.t;
   mutable ifthen_optimized : bool;

@@ -281,7 +281,7 @@ type instruction =
   (* OP_0X102 = 0x102, *)
   | X_GETENV
   | X_SET
-  (* X_ICAST  = 0x105, // some kind of cast operation on interfaces *)
+  | X_ICAST of int (* struct *)
   (* X_OP_SET = 0x106, // some kind of set operation on option types *)
   (* OP_0X107 = 0x107, // unused *)
   (* OP_0X108 = 0x108, // unused *)

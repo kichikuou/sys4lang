@@ -104,6 +104,11 @@ type ain_type =
   | Delegate of func_type TypeVar.t
   | HllFunc2
   | HllParam
+  | Option of ain_type
+  | IFace of int
+  | Enum2 of int
+  | Enum of int
+  | HllFunc
 [@@deriving show]
 
 and func_type = { return_type : ain_type; arg_types : ain_type list }
@@ -157,6 +162,9 @@ let create enum ~struc ~rank =
   | 75 -> Ref HllParam
   | 79 -> make_array Any rank
   | 80 -> Ref (make_array Any rank)
+  | 89 -> IFace struc
+  | 92 -> Enum struc
+  | 95 -> HllFunc
   | _ as tag -> Printf.failwithf "unknown type enum %d" tag ()
 
 let create_ain11 enum ~struc ~subtype =
@@ -173,10 +181,20 @@ let create_ain11 enum ~struc ~subtype =
   | 47 -> Bool
   | 51 -> Ref Bool
   | 63 -> Delegate (TypeVar.create Var)
+  | 67 -> Ref (Delegate (TypeVar.create Var))
   | 79 -> Array (Option.value_exn subtype)
   | 80 -> Ref (Array (Option.value_exn subtype))
   | 82 -> Ref (Option.value_exn subtype)
-  | _ -> Printf.failwithf "unknown type enum %d" enum ()
+  | 86 -> Option (Option.value_exn subtype)
+  | 89 -> IFace struc
+  | 91 -> Enum2 struc
+  | 92 -> Enum struc
+  | 93 -> Ref (Enum struc)
+  | _ ->
+      Printf.failwithf "unknown ain11 type enum %d (struc=%d, subtype=%s)" enum
+        struc
+        ([%show: ain_type option] subtype)
+        ()
 
 let rec array_base_and_rank = function
   | Array t ->

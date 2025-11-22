@@ -75,7 +75,11 @@ let group_by_source_file code =
           let eof = { addr = -1; end_addr = -1; txt = EOF (-1) } in
           aux (("remaining.jaf", List.rev (eof :: curr)) :: acc) [] []
     | ({ txt = EOF n; _ } as hd) :: tl ->
-        aux ((Ain.ain.fnam.(n), List.rev (hd :: curr)) :: acc) [] tl
+        let fname =
+          if Array.is_empty Ain.ain.fnam then Printf.sprintf "%d.jaf" n
+          else Ain.ain.fnam.(n)
+        in
+        aux ((fname, List.rev (hd :: curr)) :: acc) [] tl
     | hd :: tl -> aux acc (hd :: curr) tl
   in
   aux [] [] code

@@ -435,7 +435,7 @@ class code_printer ?(print_addr = false) (file : string) =
       | Bool -> print_string out "bool"
       | LongInt -> print_string out "lint"
       | Void -> print_string out "void"
-      | Struct n ->
+      | Struct n | IFace n ->
           print_string out (if n < 0 then "struct" else Ain.ain.strt.(n).name)
       | Array Any -> print_string out "array"
       | Array _ as t ->
@@ -472,6 +472,9 @@ class code_printer ?(print_addr = false) (file : string) =
           | Var -> print_string out "unknown_delegate")
       | HllFunc2 -> print_string out "hll_func2"
       | HllParam -> print_string out "hll_param"
+      | Option t -> bprintf out "option<%a>" self#pr_type t
+      | Enum n | Enum2 n -> print_string out Ain.ain.enum.(n)
+      | HllFunc -> print_string out "hll_func"
 
     method private pr_vartype out (arg : Ain.Variable.t) =
       bprintf out "%a" self#pr_type arg.type_

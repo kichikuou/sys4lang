@@ -67,6 +67,7 @@ module Variable = struct
 
   type t = {
     name : string;
+    name2 : string; (* ain v12+ *)
     type_ : type_t;
     init_val : init_value option;
     group_index : int;
@@ -75,19 +76,19 @@ module Variable = struct
 
   let read br =
     let name = BR.sjis_string br in
-    (* if (AIN_VERSION_GTE(ain, 12, 0)) { ... } *)
+    let name2 = if br.context.version >= 12 then BR.sjis_string br else "" in
     let type_ = read_variable_type br in
     let init_val =
       if br.context.version >= 8 then read_initval br type_ else None
     in
-    { name; type_; init_val; group_index = -1 }
+    { name; name2; type_; init_val; group_index = -1 }
 
   let read_global br =
     let name = BR.sjis_string br in
-    (* if (AIN_VERSION_GTE(ain, 12, 0)) { ... } *)
+    let name2 = if br.context.version >= 12 then BR.sjis_string br else "" in
     let type_ = read_variable_type br in
     let group_index = if br.context.version >= 5 then BR.int br else -1 in
-    { name; type_; init_val = None; group_index }
+    { name; name2; type_; init_val = None; group_index }
 end
 
 module Function = struct
@@ -194,7 +195,7 @@ module HLL = struct
     let name = BR.sjis_string br in
     (* if (AIN_VERSION_GTE(r->ain, 14, 0)) { ... } *)
     let type_ = Type.create (BR.int br) ~struc:(-1) ~rank:1 in
-    Variable.{ name; type_; init_val = None; group_index = -1 }
+    Variable.{ name; name2 = name; type_; init_val = None; group_index = -1 }
 
   type function_t = {
     name : string;
@@ -329,6 +330,7 @@ let readDELG br =
   read_count_and_array_with_index br FuncType.read
 
 let readOBJG br = read_count_and_array br BR.sjis_string
+let readENUM br = read_count_and_array br BR.sjis_string
 
 type t = {
   mutable vers : int;
@@ -352,6 +354,7 @@ type t = {
   mutable fnct : FuncType.t array;
   mutable delg : FuncType.t array;
   mutable objg : string array;
+  mutable enum : string array;
   mutable is_ai2 : bool;
   mutable struct_by_name : (string, Struct.t) Hashtbl.t;
   mutable ifthen_optimized : bool;
@@ -385,6 +388,7 @@ let ain =
     fnct = [||];
     delg = [||];
     objg = [||];
+    enum = [||];
     is_ai2 = false;
     struct_by_name = Hashtbl.create (module String);
     ifthen_optimized = false;
@@ -423,6 +427,7 @@ let readSections br =
     | "FNCT" -> ain.fnct <- readFNCT br
     | "DELG" -> ain.delg <- readDELG br
     | "OBJG" -> ain.objg <- readOBJG br
+    | "ENUM" -> ain.enum <- readENUM br
     | tag -> failwith ("unknown tag " ^ tag)
   done
 

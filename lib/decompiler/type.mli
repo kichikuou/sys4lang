@@ -43,6 +43,11 @@ type ain_type =
   | Delegate of func_type TypeVar.t
   | HllFunc2
   | HllParam
+  | Option of ain_type
+  | IFace of int
+  | Enum2 of int
+  | Enum of int
+  | HllFunc
 [@@deriving show]
 
 and func_type = { return_type : ain_type; arg_types : ain_type list }
