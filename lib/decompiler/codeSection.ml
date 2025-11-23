@@ -91,7 +91,7 @@ let parse_method_name s =
 
 let rec parse_function func_id parent code =
   let lambdas = ref [] in
-  let rec aux acc = function
+  let rec aux ?carry_lambda acc = function
     | { addr = end_addr; txt = ENDFUNC n; _ } :: tl ->
         if n <> func_id then
           Printf.failwithf "Unexpected ENDFUNC %d at 0x%x (ENDFUNC %d expected)"
@@ -111,12 +111,39 @@ let rec parse_function func_id parent code =
             tl )
     | { txt = FUNC n; _ } :: tl when Ain.ain.func.(n).is_lambda -> (
         let lambda, code = parse_function n (Some Ain.ain.func.(func_id)) tl in
-        lambdas := lambda :: !lambdas;
-        (* Remove JUMP over the lambda *)
+        let lambda =
+          match carry_lambda with
+          | Some l -> { lambda with lambdas = l :: lambda.lambdas }
+          | _ -> lambda
+        in
+        (* A lambda definition is expected to be preceded by a JUMP that skips it.
+           We consume this JUMP. *)
         match (acc, code) with
+        (* Special case: A JUMP can be followed by another JUMP that defines a
+           nested lambda. The sequence looks like:
+             JUMP outer_lambda_end_addr
+             JUMP nested_lambda_def_addr
+             FUNC nested_lambda
+                 ... (body of nested_lambda)
+             ENDFUNC nested_lambda
+             nested_lambda_def_addr:
+             FUNC outer_lambda
+                 ... (body of outer_lambda, using nested_lambda)
+             ENDFUNC outer_lambda
+             outer_lambda_end_addr:
+           In this situation, `nested_lambda` needs to be a child of `outer_lambda`. *)
+        | ( { txt = JUMP addr2; _ } :: acc_tl,
+            { addr = addr2'; txt = FUNC outer_lambda_id; _ } :: _ )
+          when addr2 = addr2' && Ain.ain.func.(outer_lambda_id).is_lambda ->
+            aux acc_tl
+              ~carry_lambda:
+                { lambda with parent = Some Ain.ain.func.(outer_lambda_id) }
+              code
+        (* Standard case: A JUMP skips directly over the lambda definition to the next instruction. *)
         | ( { addr = addr1; txt = JUMP addr2; _ } :: acc_tl,
             { addr = addr2'; end_addr; txt = insn } :: code_tl )
           when addr2 = addr2' ->
+            lambdas := lambda :: !lambdas;
             aux acc_tl ({ addr = addr1; end_addr; txt = insn } :: code_tl)
         | _, _ -> Printf.failwithf "No JUMP that skips %s" lambda.func.name ())
     | { addr = end_addr; txt = FUNC _ | EOF _; _ } :: _ as code ->
