@@ -39,13 +39,15 @@ let output_printer_getter ~print_addr out_dir fname f =
     f (new CodeGen.code_printer ~print_addr outc unix_fname);
     Out_channel.close outc
 
-let sys4dc output_dir inspect_function print_addr move_to_original_file ain_file
-    =
+let sys4dc output_dir inspect_function print_addr move_to_original_file
+    continue_on_error ain_file =
   let output_dir = Option.value output_dir ~default:"." in
   Ain.load ain_file;
   match inspect_function with
   | None ->
-      let decompiled = Decompile.decompile move_to_original_file in
+      let decompiled =
+        Decompile.decompile ~move_to_original_file ~continue_on_error
+      in
       (* reroot ain_file to output_dir if possible *)
       let ain_path =
         Fpath.(
@@ -88,6 +90,10 @@ let cmd =
     in
     Cmdliner.Arg.(value & flag & info [ "move-to-original-file" ] ~doc)
   in
+  let continue_on_error =
+    let doc = "Continue decompilation even if an error is encountered." in
+    Cmdliner.Arg.(value & flag & info [ "continue-on-error" ] ~doc)
+  in
   let ain_file =
     let doc = "The .ain file to decompile" in
     let docv = "AIN_FILE" in
@@ -96,6 +102,6 @@ let cmd =
   Cmd.v info
     Term.(
       const sys4dc $ output_dir $ inspect_function $ print_addr
-      $ move_to_original_file $ ain_file)
+      $ move_to_original_file $ continue_on_error $ ain_file)
 
 let () = Stdlib.exit (Cmd.eval cmd)

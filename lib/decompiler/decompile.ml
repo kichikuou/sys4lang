@@ -18,36 +18,31 @@ open Base
 open Loc
 
 let rec decompile_function (f : CodeSection.function_t) =
-  try
-    let body =
-      BasicBlock.create f
-      |> BasicBlock.generate_var_decls f.func
-      |> ControlFlow.analyze
-      |> TypeAnalysis.analyze_function f.func f.struc
-      |> Transform.expand_else_scope |> Transform.rename_labels
-      |> Transform.recover_loop_initializer
-      |> Transform.remove_implicit_array_free
-      |> Transform.remove_array_free_for_dead_arrays
-      |> Transform.remove_generated_lockpeek
-      |> Transform.remove_redundant_return
-      |> Transform.remove_dummy_variable_assignment
-      |> Transform.remove_vardecl_default_rhs
-      |> Transform.fold_newline_func_to_msg
-      |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
-    in
-    let lambdas = List.map ~f:decompile_function f.lambdas in
-    CodeGen.
-      {
-        func = f.func;
-        struc = f.struc;
-        name = f.name;
-        body;
-        lambdas;
-        parent = f.parent;
-      }
-  with e ->
-    Stdio.eprintf "Error while decompiling function %s\n" f.func.name;
-    raise e
+  let body =
+    BasicBlock.create f
+    |> BasicBlock.generate_var_decls f.func
+    |> ControlFlow.analyze
+    |> TypeAnalysis.analyze_function f.func f.struc
+    |> Transform.expand_else_scope |> Transform.rename_labels
+    |> Transform.recover_loop_initializer
+    |> Transform.remove_implicit_array_free
+    |> Transform.remove_array_free_for_dead_arrays
+    |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
+    |> Transform.remove_dummy_variable_assignment
+    |> Transform.remove_vardecl_default_rhs
+    |> Transform.fold_newline_func_to_msg |> Transform.remove_optional_arguments
+    |> Transform.simplify_boolean_expr
+  in
+  let lambdas = List.map ~f:decompile_function f.lambdas in
+  CodeGen.
+    {
+      func = f.func;
+      struc = f.struc;
+      name = f.name;
+      body;
+      lambdas;
+      parent = f.parent;
+    }
 
 let inspect_function (f : CodeSection.function_t) ~print_addr =
   BasicBlock.create f
@@ -165,7 +160,7 @@ let is_rance7_bad_function (f : CodeGen.function_t) =
   | _ -> false
 [@@ocamlformat "disable"]
 
-let decompile move_to_original_file =
+let decompile ~move_to_original_file ~continue_on_error =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
@@ -184,29 +179,36 @@ let decompile move_to_original_file =
     List.map files ~f:(fun (fname, funcs) ->
         let decompiled_funcs = ref [] in
         let process_func func =
-          let f = decompile_function func in
-          match f with
-          | { struc = Some struc; _ } ->
-              let s = structs.(struc.id) in
-              if String.equal f.name "2" then
-                s.members <- extract_array_dims_exn f.body struc.members
-              else if String.equal f.name "0" then (
-                match extract_array_dims f.body struc.members with
-                | Some (vs, true) -> s.members <- vs
-                | _ ->
-                    s.methods <- f :: s.methods;
-                    let body = Transform.remove_array_initializer_call f.body in
-                    decompiled_funcs := { f with body } :: !decompiled_funcs)
-              else if is_rance7_bad_function f then
-                Stdio.eprintf
-                  "Warning: Removing ill-typed tagBusho::getSp() function\n"
-              else (
-                if not f.func.is_lambda then s.methods <- f :: s.methods;
-                decompiled_funcs := f :: !decompiled_funcs)
-          | { struc = None; name = "0"; _ } ->
-              globals := extract_array_dims_exn f.body Ain.ain.glob
-          | { struc = None; name = "NULL"; _ } -> ()
-          | _ -> decompiled_funcs := f :: !decompiled_funcs
+          try
+            let f = decompile_function func in
+            match f with
+            | { struc = Some struc; _ } ->
+                let s = structs.(struc.id) in
+                if String.equal f.name "2" then
+                  s.members <- extract_array_dims_exn f.body struc.members
+                else if String.equal f.name "0" then (
+                  match extract_array_dims f.body struc.members with
+                  | Some (vs, true) -> s.members <- vs
+                  | _ ->
+                      s.methods <- f :: s.methods;
+                      let body =
+                        Transform.remove_array_initializer_call f.body
+                      in
+                      decompiled_funcs := { f with body } :: !decompiled_funcs)
+                else if is_rance7_bad_function f then
+                  Stdio.eprintf
+                    "Warning: Removing ill-typed tagBusho::getSp() function\n"
+                else (
+                  if not f.func.is_lambda then s.methods <- f :: s.methods;
+                  decompiled_funcs := f :: !decompiled_funcs)
+            | { struc = None; name = "0"; _ } ->
+                globals := extract_array_dims_exn f.body Ain.ain.glob
+            | { struc = None; name = "NULL"; _ } -> ()
+            | _ -> decompiled_funcs := f :: !decompiled_funcs
+          with e ->
+            Stdio.eprintf "Error while decompiling function %s\n" func.func.name;
+            if continue_on_error then Stdio.eprintf "%s\n" (Exn.to_string e)
+            else raise e
         in
         List.iter funcs ~f:process_func;
         (fname, List.rev !decompiled_funcs))

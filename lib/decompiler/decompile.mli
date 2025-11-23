@@ -21,7 +21,9 @@ type decompiled_ain = {
   ain_minor_version : int;
 }
 
-val decompile : bool -> decompiled_ain
+val decompile :
+  move_to_original_file:bool -> continue_on_error:bool -> decompiled_ain
+
 val inspect : string -> print_addr:bool -> unit
 
 val export :
