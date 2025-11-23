@@ -33,6 +33,7 @@ type struct_t = {
   mutable methods : function_t list;
 }
 
+type enum_t = { name : string; mutable values : (string * int32) list }
 type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
 class code_printer : ?print_addr:bool -> string -> object
@@ -40,6 +41,7 @@ class code_printer : ?print_addr:bool -> string -> object
   method print_newline : unit
   method print_function : ?as_lambda:bool -> function_t -> unit
   method print_struct_decl : struct_t -> unit
+  method print_enum_decl : enum_t -> unit
   method print_functype_decl : string -> Ain.FuncType.t -> unit
   method print_globals : variable list -> unit
   method print_constants : unit
