@@ -15,13 +15,16 @@
  *)
 
 open Base
+open Common.Util
 open Loc
 open Instructions
+
+type function_owner = Struct of Ain.Struct.t | Enum of int
 
 type function_t = {
   func : Ain.Function.t;
   name : string; (* without struct name *)
-  struc : Ain.Struct.t option;
+  owner : function_owner option;
   end_addr : int;
   code : instruction loc list;
   lambdas : function_t list;
@@ -86,8 +89,20 @@ let group_by_source_file code =
 
 let parse_method_name s =
   match String.lsplit2 s ~on:'@' with
-  | None -> (None, s)
-  | Some (left, name) -> (Hashtbl.find Ain.ain.struct_by_name left, name)
+  | None -> (
+      match parse_qualified_name s with
+      | None, _ -> (None, s)
+      | Some qualifier, name -> (
+          match Hashtbl.find Ain.ain.enum_by_name qualifier with
+          | Some enum -> (Some (Enum enum), name)
+          | None -> (None, s)))
+  | Some (left, name) -> (
+      match Hashtbl.find Ain.ain.struct_by_name left with
+      | Some struc -> (Some (Struct struc), name)
+      | None -> (
+          match Hashtbl.find Ain.ain.enum_by_name left with
+          | Some enum -> (Some (Enum enum), name)
+          | None -> (None, name)))
 
 let rec parse_function func_id parent code =
   let lambdas = ref [] in
@@ -98,11 +113,11 @@ let rec parse_function func_id parent code =
             n end_addr func_id ()
         else
           let func = Ain.ain.func.(func_id) in
-          let struc, name = parse_method_name func.name in
+          let owner, name = parse_method_name func.name in
           ( {
               func;
               name;
-              struc;
+              owner;
               end_addr;
               code = List.rev acc;
               lambdas = List.rev !lambdas;
@@ -149,11 +164,11 @@ let rec parse_function func_id parent code =
     | { addr = end_addr; txt = FUNC _ | EOF _; _ } :: _ as code ->
         (* constructors are missing ENDFUNCs. *)
         let func = Ain.ain.func.(func_id) in
-        let struc, name = parse_method_name func.name in
+        let owner, name = parse_method_name func.name in
         ( {
             func;
             name;
-            struc;
+            owner;
             end_addr;
             code = List.rev acc;
             lambdas = List.rev !lambdas;

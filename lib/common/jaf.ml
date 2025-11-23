@@ -252,22 +252,12 @@ let ft_of_fundecl fundecl =
 let is_constructor (f : fundecl) =
   match f.class_name with Some s -> String.equal f.name s | _ -> false
 
-let parse_qualified_name name =
-  match String.rindex name ':' with
-  | None -> (None, name)
-  | Some i ->
-      let left = String.sub name ~pos:0 ~len:(i - 1) in
-      let right =
-        String.sub name ~pos:(i + 1) ~len:(String.length name - i - 1)
-      in
-      (Some left, right)
-
 let mangled_name fdecl =
   match fdecl.class_name with
   | Some s ->
       s
       ^
-      let _, s = parse_qualified_name s in
+      let _, s = Util.parse_qualified_name s in
       if String.equal fdecl.name s then "@0"
       else if String.equal fdecl.name ("~" ^ s) then "@1"
       else "@" ^ fdecl.name

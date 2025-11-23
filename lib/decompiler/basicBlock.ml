@@ -1576,23 +1576,63 @@ let rec replace_delegate_calls acc = function
   | insn :: rest -> replace_delegate_calls (insn :: acc) rest
   | [] -> List.rev acc
 
+let from_enum_stringifier (f : CodeSection.function_t) =
+  match List.map ~f:(fun i -> i.txt) f.code with
+  | PUSHLOCALPAGE :: PUSH varno :: REF :: code ->
+      let var =
+        Deref (PageRef (LocalPage, f.func.vars.(Int32.to_int_exn varno)))
+      in
+      let rec parse = function
+        | DUP :: PUSH n :: EQUALE :: IFZ _ :: POP :: S_PUSH s :: RETURN :: rest
+          ->
+            TernaryOp
+              ( BinaryOp (EQUALE, var, Number n),
+                String Ain.ain.str0.(s),
+                parse rest )
+        | [ POP; S_PUSH s; RETURN ] -> String Ain.ain.str0.(s)
+        | _ -> failwith ("unexpected code in enum stringifier " ^ f.name)
+      in
+      let stmt =
+        {
+          txt = Return (Some (parse code));
+          addr = (List.hd_exn f.code).addr;
+          end_addr = f.end_addr;
+        }
+      in
+      let frag = (seq_terminator, [ stmt ]) in
+      {
+        addr = stmt.addr;
+        end_addr = stmt.end_addr;
+        labels = [];
+        code = frag;
+        nr_jump_srcs = 0;
+      }
+  | _ -> failwith ("unexpected prologue in enum stringifier " ^ f.name)
+
 let create (f : CodeSection.function_t) =
-  f.code |> replace_delegate_calls []
-  |> make_basic_blocks f.end_addr
-  |> analyze_basic_blocks
-       {
-         func = f.func;
-         struc = f.struc;
-         parent = f.parent;
-         instructions = [];
-         address = -1;
-         end_address = -1;
-         stack = [];
-         stmts = [];
-         condition = [];
-         predecessors = Hashtbl.create (module Int);
-       }
-       []
+  match f.owner with
+  | Some (Enum _) -> (
+      match f.name with
+      | "String" -> [ from_enum_stringifier f ]
+      | _ -> [] (* Enum functions other than String are ignored *))
+  | _ ->
+      let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
+      f.code |> replace_delegate_calls []
+      |> make_basic_blocks f.end_addr
+      |> analyze_basic_blocks
+           {
+             func = f.func;
+             struc;
+             parent = f.parent;
+             instructions = [];
+             address = -1;
+             end_address = -1;
+             stack = [];
+             stmts = [];
+             condition = [];
+             predecessors = Hashtbl.create (module Int);
+           }
+           []
 
 let generate_var_decls (func : Ain.Function.t) bbs =
   let uninitialized_vars =

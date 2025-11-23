@@ -55,7 +55,7 @@ let decompile_test ?(func = [||]) var_types insns =
     {
       func = make_function "testfunc" ~vars;
       name = "testfunc";
-      struc = None;
+      owner = None;
       end_addr;
       code;
       lambdas = [];
