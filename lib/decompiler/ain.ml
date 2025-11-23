@@ -356,6 +356,7 @@ type t = {
   mutable enum : string array;
   mutable is_ai2 : bool;
   mutable struct_by_name : (string, Struct.t) Hashtbl.t;
+  mutable enum_by_name : (string, int) Hashtbl.t;
   mutable ifthen_optimized : bool;
 }
 
@@ -390,6 +391,7 @@ let ain =
     enum = [||];
     is_ai2 = false;
     struct_by_name = Hashtbl.create (module String);
+    enum_by_name = Hashtbl.create (module String);
     ifthen_optimized = false;
   }
 
@@ -426,7 +428,12 @@ let readSections br =
     | "FNCT" -> ain.fnct <- readFNCT br
     | "DELG" -> ain.delg <- readDELG br
     | "OBJG" -> ain.objg <- readOBJG br
-    | "ENUM" -> ain.enum <- readENUM br
+    | "ENUM" ->
+        ain.enum <- readENUM br;
+        ain.enum_by_name <-
+          Hashtbl.of_alist_exn
+            (module String)
+            (Array.to_list ain.enum |> List.mapi ~f:(fun i name -> (name, i)))
     | tag -> failwith ("unknown tag " ^ tag)
   done
 
