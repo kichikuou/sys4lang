@@ -38,6 +38,8 @@ type struct_t = {
   mutable methods : function_t list;
 }
 
+type enum_t = { name : string; mutable values : (string * int32) list }
+
 type op_prec =
   | PREC_COMMA
   | PREC_ASSIGN
@@ -698,6 +700,14 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
               self#println "(%a);"
                 (pr_param_list self#pr_vardecl)
                 (Ain.Function.args func.func)));
+      self#println "};"
+
+    method print_enum_decl (enum : enum_t) =
+      self#println "enum %s {" enum.name;
+      self#with_indent (fun () ->
+          List.iter enum.values ~f:(fun (name, i) ->
+              self#print_indent;
+              self#println "%s = %ld," name i));
       self#println "};"
 
     method print_functype_decl keyword (ft : Ain.FuncType.t) =

@@ -142,6 +142,7 @@ type t = {
   mutable enum : string array;
   mutable is_ai2 : bool;
   mutable struct_by_name : (string, Struct.t) Hashtbl.t;
+  mutable enum_by_name : (string, int) Hashtbl.t;
   mutable ifthen_optimized : bool;
 }
 

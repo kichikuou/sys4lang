@@ -14,10 +14,12 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+type function_owner = Struct of Ain.Struct.t | Enum of int
+
 type function_t = {
   func : Ain.Function.t;
   name : string; (* without struct name *)
-  struc : Ain.Struct.t option;
+  owner : function_owner option;
   end_addr : int;
   code : Instructions.instruction Loc.loc list;
   lambdas : function_t list;

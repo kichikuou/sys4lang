@@ -67,7 +67,7 @@ class type_declare_visitor ctx =
               self#visit_declaration (Global ds));
           gg_index <- -1
       | Function f ->
-          (match parse_qualified_name f.name with
+          (match Util.parse_qualified_name f.name with
           | None, _ -> ()
           | Some qual, name ->
               if Hashtbl.mem ctx.structs qual then (
@@ -85,7 +85,9 @@ class type_declare_visitor ctx =
           Hashtbl.set ctx.delegates ~key:f.name
             ~data:{ f with index = Some (-1) }
       | StructDef s ->
-          let unqualified_struct_name = snd (parse_qualified_name s.name) in
+          let unqualified_struct_name =
+            snd (Util.parse_qualified_name s.name)
+          in
           let ain_s =
             Option.value_or_thunk (Ain.get_struct ctx.ain s.name)
               ~default:(fun () -> Ain.add_struct ctx.ain s.name)

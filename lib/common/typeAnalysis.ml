@@ -410,7 +410,7 @@ class type_analyze_visitor ctx =
               expr.node <- FuncAddr (name, f.index);
               expr.ty <- TyFunction (ft_of_fundecl f)
           | None -> (
-              match Jaf.parse_qualified_name name with
+              match Util.parse_qualified_name name with
               | None, name -> undefined_variable_error name (ASTExpression expr)
               | Some sname, name -> (
                   match self#env#resolve_qualified sname name with

@@ -79,7 +79,7 @@ class type_declare_visitor ctx =
               self#visit_declaration (Global ds));
           gg_index <- -1
       | Function f ->
-          (match parse_qualified_name f.name with
+          (match Util.parse_qualified_name f.name with
           | None, _ -> ()
           | Some qual, name ->
               if Hashtbl.mem ctx.structs qual then (
@@ -103,7 +103,9 @@ class type_declare_visitor ctx =
                 (ASTDeclaration decl)
           | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
       | StructDef s -> (
-          let unqualified_struct_name = snd (parse_qualified_name s.name) in
+          let unqualified_struct_name =
+            snd (Util.parse_qualified_name s.name)
+          in
           let ain_s = Ain.add_struct ctx.ain s.name in
           let jaf_s = new_jaf_struct s.name s.loc ain_s.index in
           let next_index = ref 0 in

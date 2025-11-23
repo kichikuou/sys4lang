@@ -18,11 +18,12 @@ open Base
 open Loc
 
 let rec decompile_function (f : CodeSection.function_t) =
+  let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   let body =
     BasicBlock.create f
     |> BasicBlock.generate_var_decls f.func
     |> ControlFlow.analyze
-    |> (new TypeAnalysis.analyzer f.func f.struc)#analyze_statement
+    |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
     |> Transform.expand_else_scope |> Transform.rename_labels
     |> Transform.recover_loop_initializer |> Transform.recognize_foreach
     |> Transform.remove_implicit_array_free
@@ -35,16 +36,10 @@ let rec decompile_function (f : CodeSection.function_t) =
   in
   let lambdas = List.map ~f:decompile_function f.lambdas in
   CodeGen.
-    {
-      func = f.func;
-      struc = f.struc;
-      name = f.name;
-      body;
-      lambdas;
-      parent = f.parent;
-    }
+    { func = f.func; struc; name = f.name; body; lambdas; parent = f.parent }
 
 let inspect_function (f : CodeSection.function_t) ~print_addr =
+  let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   BasicBlock.create f
   |> (fun bbs ->
   Stdio.printf "BasicBlock representation:\n%s\n\n"
@@ -55,7 +50,7 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   |> (fun stmt ->
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
-  |> (new TypeAnalysis.analyzer f.func f.struc)#analyze_statement
+  |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
   |> Transform.expand_else_scope |> Transform.rename_labels
   |> Transform.recover_loop_initializer |> Transform.recognize_foreach
   |> Transform.remove_implicit_array_free
@@ -68,14 +63,7 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   let printer = new CodeGen.code_printer ~print_addr "" in
   let lambdas = List.map ~f:decompile_function f.lambdas in
   printer#print_function
-    {
-      func = f.func;
-      struc = f.struc;
-      name = f.name;
-      body;
-      lambdas;
-      parent = f.parent;
-    };
+    { func = f.func; struc; name = f.name; body; lambdas; parent = f.parent };
   Stdio.printf "\nDecompiled code:\n%s\n" (Buffer.contents printer#get_buffer)
 
 let to_variable_list vars =
@@ -127,9 +115,21 @@ let extract_array_dims_exn stmt vars =
     ~message:"unexpected statement in array initializer"
   |> fst
 
+let extract_enum_values = function
+  | Ast.Return (Some e) ->
+      let rec extract = function
+        | Ast.TernaryOp (BinaryOp (EQUALE, _, Number n), String s, rest) ->
+            (s, n) :: extract rest
+        | String "" -> []
+        | _ -> failwith "unexpected expression in enum stringifier"
+      in
+      extract e
+  | _ -> failwith "unexpected statement in enum stringifier"
+
 type decompiled_ain = {
   structs : CodeGen.struct_t array;
   globals : CodeGen.variable list;
+  enums : CodeGen.enum_t array;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
 }
@@ -175,6 +175,9 @@ let decompile ~move_to_original_file ~continue_on_error =
         CodeGen.
           { struc; members = to_variable_list struc.members; methods = [] })
   in
+  let enums =
+    Array.map Ain.ain.enum ~f:(fun name -> CodeGen.{ name; values = [] })
+  in
   let globals = ref (to_variable_list Ain.ain.glob) in
   let srcs =
     List.map files ~f:(fun (fname, funcs) ->
@@ -182,8 +185,11 @@ let decompile ~move_to_original_file ~continue_on_error =
         let process_func func =
           try
             let f = decompile_function func in
-            match f with
-            | { struc = Some struc; _ } ->
+            match func with
+            | { owner = Some (Enum id); name = "String"; _ } ->
+                enums.(id).values <- extract_enum_values f.body.txt
+            | { owner = Some (Enum _); _ } -> () (* ignore *)
+            | { owner = Some (Struct struc); _ } ->
                 let s = structs.(struc.id) in
                 if String.equal f.name "2" then
                   s.members <- extract_array_dims_exn f.body struc.members
@@ -202,9 +208,9 @@ let decompile ~move_to_original_file ~continue_on_error =
                 else (
                   if not f.func.is_lambda then s.methods <- f :: s.methods;
                   decompiled_funcs := f :: !decompiled_funcs)
-            | { struc = None; name = "0"; _ } ->
+            | { owner = None; name = "0"; _ } ->
                 globals := extract_array_dims_exn f.body Ain.ain.glob
-            | { struc = None; name = "NULL"; _ } -> ()
+            | { owner = None; name = "NULL"; _ } -> ()
             | _ -> decompiled_funcs := f :: !decompiled_funcs
           with e ->
             Stdio.eprintf "Error while decompiling function %s\n" func.func.name;
@@ -216,7 +222,7 @@ let decompile ~move_to_original_file ~continue_on_error =
   in
   Array.iter structs ~f:(fun s -> s.methods <- List.rev s.methods);
   let ain_minor_version = determine_ain_minor_version code in
-  { srcs; structs; globals = !globals; ain_minor_version }
+  { srcs; structs; globals = !globals; enums; ain_minor_version }
 
 let inspect funcname =
   let code = Instructions.decode Ain.ain.code in
@@ -249,6 +255,9 @@ let export ~print_addr decompiled ain_path write_to_file =
   generate "classes.jaf" (fun pr ->
       Array.iter decompiled.structs ~f:(fun struc ->
           pr#print_struct_decl struc;
+          pr#print_newline);
+      Array.iter decompiled.enums ~f:(fun enum ->
+          pr#print_enum_decl enum;
           pr#print_newline);
       Array.iter Ain.ain.fnct ~f:(fun ft ->
           pr#print_functype_decl "functype" ft);

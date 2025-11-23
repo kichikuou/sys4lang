@@ -17,6 +17,7 @@
 type decompiled_ain = {
   structs : CodeGen.struct_t array;
   globals : CodeGen.variable list;
+  enums : CodeGen.enum_t array;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
 }
