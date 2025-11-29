@@ -17,18 +17,15 @@ open Common
 open Base
 open Document
 
-type encoding = UTF8 | ShiftJIS
-
 let encoding_of_string s =
   match String.lowercase s with
-  | "utf-8" -> UTF8
-  | "shift_jis" -> ShiftJIS
+  | "utf-8" -> Pje.UTF8
+  | "shift_jis" -> Pje.SJIS
   | _ -> raise (Invalid_argument ("Invalid encoding: " ^ s))
 
 type t = {
   mutable ctx : Jaf.context;
-  mutable srcdir : string;
-  mutable srcEncoding : encoding;
+  mutable pje : Pje.t;
   documents : (string, Document.t) Hashtbl.t;
 }
 
@@ -62,19 +59,25 @@ let predefined_constants =
 let create () =
   {
     ctx = Jaf.context_from_ain ~constants:predefined_constants (Ain.create 4 0);
-    srcdir = "";
-    srcEncoding = ShiftJIS;
+    pje = Pje.default_pje "default.pje" SJIS;
     documents = Hashtbl.create (module String);
   }
 
 let initialize proj (options : Types.InitializationOptions.t) =
-  proj.srcdir <- options.srcDir;
   if not (String.is_empty options.ainPath) then
     proj.ctx <-
       Jaf.context_from_ain ~constants:predefined_constants
         (Ain.load options.ainPath);
-  if not (String.is_empty options.srcEncoding) then
-    proj.srcEncoding <- encoding_of_string options.srcEncoding
+  match options.pjePath with
+  | "" ->
+      proj.pje.source_dir <- options.srcDir;
+      if not (String.is_empty options.srcEncoding) then
+        proj.pje.encoding <- encoding_of_string options.srcEncoding
+  | pjePath ->
+      proj.pje <- PjeLoader.load Stdio.In_channel.read_all pjePath;
+      let open Stdlib.Filename in
+      if is_relative proj.pje.source_dir then
+        proj.pje.source_dir <- concat (dirname pjePath) proj.pje.source_dir
 
 let update_document proj uri contents =
   let doc =
@@ -85,9 +88,9 @@ let update_document proj uri contents =
       Lsp.Types.Diagnostic.create ~range ~message:(`String message) ())
 
 let load_document proj fname =
-  let path = Stdlib.Filename.concat proj.srcdir fname in
+  let path = Stdlib.Filename.concat proj.pje.source_dir fname in
   let to_utf8 =
-    match proj.srcEncoding with UTF8 -> Fn.id | ShiftJIS -> Sjis.to_utf8
+    match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
   in
   let contents = Stdio.In_channel.read_all path |> to_utf8 in
   update_document proj (Lsp.Types.DocumentUri.of_path path) contents |> ignore

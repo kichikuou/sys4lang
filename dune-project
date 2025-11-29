@@ -37,6 +37,7 @@
    menhir
    yojson
    ppx_deriving
+   (ppx_yojson_conv :with-test)
    ppx_yojson_conv_lib
    (ppx_expect :with-test)
    (ocamlformat (and (= 0.28.1) :with-test))))
