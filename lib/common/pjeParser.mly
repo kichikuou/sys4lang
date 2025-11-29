@@ -34,7 +34,7 @@ let to_pje toplevels path initial_encoding =
   let decode s =
     match pje.encoding with
     | UTF8 -> s
-    | SJIS -> Common.Sjis.to_utf8 s
+    | SJIS -> Sjis.to_utf8 s
   in
   let to_unix_path s = Base.String.tr ~target:'\\' ~replacement:'/' (decode s) in
   let uses_msg1 = ref false in

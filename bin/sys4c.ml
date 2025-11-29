@@ -72,7 +72,7 @@ let do_compile sources output major minor import_as input_encoding =
 let do_build pje_file output_dir_override =
   let pje =
     handle_errors
-      (fun () -> Project.load_pje read_text_file pje_file)
+      (fun () -> PjeLoader.load read_text_file pje_file)
       (fun _ -> None)
   in
   let ctx = Jaf.context_from_ain (Pje.create_ain pje) in

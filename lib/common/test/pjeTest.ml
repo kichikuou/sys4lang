@@ -16,13 +16,12 @@
 
 open Common
 open Base
-open Compiler
 
 let unix_path = String.map ~f:(function '\\' -> '/' | c -> c)
 
 let pje_load_test pje_name mock_read_file =
   try
-    let pje = Project.load_pje mock_read_file pje_name in
+    let pje = PjeLoader.load mock_read_file pje_name in
     List.iter (Pje.collect_sources pje) ~f:(function
       | Pje.Jaf f -> Stdio.print_endline (unix_path f)
       | Pje.Hll (f, name) -> Stdio.printf "%s as %s\n" (unix_path f) name

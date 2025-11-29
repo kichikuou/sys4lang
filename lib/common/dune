@@ -2,7 +2,7 @@
  (name common)
  (libraries base stdio camlzip))
 
-(ocamllex lexer)
+(ocamllex lexer pjeLexer)
 
 (menhir
- (modules parser))
+ (modules parser pjeParser))

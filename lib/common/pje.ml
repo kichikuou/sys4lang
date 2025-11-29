@@ -14,7 +14,6 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Common
 open Base
 
 exception KeyError of string

@@ -14,11 +14,10 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
-open Common
 open Base
 open Pje
 
-let rec load read_file pje_file initial_encoding =
+let rec load_internal read_file pje_file initial_encoding =
   let pje_text = read_file pje_file in
   let lexbuf = Lexing.from_string pje_text in
   Lexing.set_filename lexbuf pje_file;
@@ -53,7 +52,7 @@ let rec load read_file pje_file initial_encoding =
                 ("No import name for " ^ f)
                 (Lexing.lexeme_start_p lexbuf, Lexing.lexeme_end_p lexbuf)
         else if String.is_suffix f_lower ~suffix:".inc" then
-          Include (load read_file (resolve f) pje.encoding)
+          Include (load_internal read_file (resolve f) pje.encoding)
           :: analyze_source_list rest
         else Jaf (resolve f) :: analyze_source_list rest
     | _ -> failwith "unreachable"
@@ -62,12 +61,14 @@ let rec load read_file pje_file initial_encoding =
   pje.source <- analyze_source_list pje.source;
   pje
 
-let load_pje read_file pje_file =
+let load read_file pje_file =
   let read_file =
     match Stdlib.Filename.dirname pje_file with
     | "." -> read_file
     | dir -> fun file -> read_file (Stdlib.Filename.concat dir file)
   in
-  let pje = load read_file (Stdlib.Filename.basename pje_file) Pje.SJIS in
+  let pje =
+    load_internal read_file (Stdlib.Filename.basename pje_file) Pje.SJIS
+  in
   pje.pje_path <- pje_file;
   pje
