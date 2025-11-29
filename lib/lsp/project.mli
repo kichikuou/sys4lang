@@ -2,10 +2,11 @@ open Base
 
 type t
 
-val create : unit -> t
+val create : read_file:(string -> string) -> t
 val initialize : t -> Types.InitializationOptions.t -> unit
 val update_document : t -> Lsp.Uri.t -> string -> Lsp.Types.Diagnostic.t list
 val load_document : t -> string -> unit
+val initial_scan : t -> unit
 
 (* LSP request handlers *)
 

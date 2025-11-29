@@ -93,6 +93,15 @@ let create ctx ~fname text =
       errors = [ make_error lexbuf e ];
     }
 
+let initial_scan ctx ~fname text =
+  let lexbuf = Lexing.from_string text in
+  Lexing.set_filename lexbuf fname;
+  try
+    let toplevel = Parser.jaf Lexer.token lexbuf in
+    Declarations.register_type_declarations ctx toplevel;
+    Declarations.resolve_types ctx toplevel true
+  with _ -> ()
+
 class ast_locator (doc : t) (pos : Lsp.Types.Position.t) =
   object
     inherit Jaf.ivisitor doc.ctx as super

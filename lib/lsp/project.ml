@@ -24,6 +24,7 @@ let encoding_of_string s =
   | _ -> raise (Invalid_argument ("Invalid encoding: " ^ s))
 
 type t = {
+  read_file : string -> string;
   mutable ctx : Jaf.context;
   mutable pje : Pje.t;
   documents : (string, Document.t) Hashtbl.t;
@@ -56,8 +57,9 @@ let predefined_constants =
       };
     ]
 
-let create () =
+let create ~read_file =
   {
+    read_file;
     ctx = Jaf.context_from_ain ~constants:predefined_constants (Ain.create 4 0);
     pje = Pje.default_pje "default.pje" SJIS;
     documents = Hashtbl.create (module String);
@@ -74,7 +76,7 @@ let initialize proj (options : Types.InitializationOptions.t) =
       if not (String.is_empty options.srcEncoding) then
         proj.pje.encoding <- encoding_of_string options.srcEncoding
   | pjePath ->
-      proj.pje <- PjeLoader.load Stdio.In_channel.read_all pjePath;
+      proj.pje <- PjeLoader.load proj.read_file pjePath;
       let open Stdlib.Filename in
       if is_relative proj.pje.source_dir then
         proj.pje.source_dir <- concat (dirname pjePath) proj.pje.source_dir
@@ -92,8 +94,21 @@ let load_document proj fname =
   let to_utf8 =
     match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
   in
-  let contents = Stdio.In_channel.read_all path |> to_utf8 in
+  let contents = proj.read_file path |> to_utf8 in
   update_document proj (Lsp.Types.DocumentUri.of_path path) contents |> ignore
+
+let initial_scan proj =
+  let to_utf8 =
+    match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
+  in
+  try
+    List.iter (Pje.collect_sources proj.pje) ~f:(function
+      | Jaf fname ->
+          let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+          let contents = proj.read_file path |> to_utf8 in
+          Document.initial_scan proj.ctx ~fname:path contents
+      | _ -> ())
+  with _ -> ()
 
 let rec jaf_base_type = function
   | Jaf.Ref t | Jaf.Array t | Jaf.Wrap t -> jaf_base_type t

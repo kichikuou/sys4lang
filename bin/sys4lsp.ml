@@ -28,15 +28,20 @@ let () =
     | Sys_error msg -> Some msg
     | _ -> None)
 
-class lsp_server =
+class lsp_server ~sw ~fs =
   object (self)
     inherit Linol_eio.Jsonrpc2.server as super
-    val project = Project.create ()
+
+    val project =
+      Project.create ~read_file:(fun path -> Eio.Path.(load (fs / path)))
+
+    val initial_scan_done = Eio.Promise.create ()
     method spawn_query_handler f = Linol_eio.spawn f
 
     method private _on_doc ~(notify_back : Linol_eio.Jsonrpc2.notify_back)
         (uri : Lsp.Types.DocumentUri.t) (contents : string) =
       try
+        Eio.Promise.await (fst initial_scan_done);
         let diagnostics = update_document project uri contents in
         notify_back#send_diagnostic diagnostics
       with e -> show_exn notify_back e
@@ -70,13 +75,9 @@ class lsp_server =
       in
       (try
          Project.initialize project options;
-         (* AinDecompiler generates type definitions in classes.jaf and global
-            variables in globals.jaf. Loading these helps with Goto Definition
-            and type checking for functypes. *)
-         (try
-            load_document project "classes.jaf";
-            load_document project "globals.jaf"
-          with _ -> ());
+         Eio.Fiber.fork ~sw (fun () ->
+             Project.initial_scan project;
+             Eio.Promise.resolve (snd initial_scan_done) ());
          notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
            (options.ainPath ^ " loaded")
        with e -> show_exn notify_back e);
@@ -112,7 +113,9 @@ class lsp_server =
 let run () =
   Common.TypeAnalysis.loose_functype_check := true;
   Eio_main.run @@ fun env ->
-  let s = new lsp_server in
+  Eio.Switch.run @@ fun sw ->
+  let fs = Eio.Stdenv.fs env in
+  let s = new lsp_server ~sw ~fs in
   let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
   let task () =
     let shutdown () = Poly.(s#get_status = `ReceivedExit) in
