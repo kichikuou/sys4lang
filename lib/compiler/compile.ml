@@ -50,12 +50,12 @@ let type_resolve_pass ctx program =
   let array_init_visitor = new ArrayInit.visitor ctx in
   List.iter program ~f:(function
     | Jaf (_, jaf) ->
-        Declarations.resolve_types ctx jaf false;
+        Declarations.resolve_types ctx jaf;
         Declarations.define_types ctx jaf;
         List.iter ~f:array_init_visitor#visit_declaration jaf
     | Hll (hll_name, import_name, hll) ->
         Declarations.resolve_hll_types ctx hll;
-        Declarations.resolve_types ctx hll false;
+        Declarations.resolve_types ctx hll;
         Declarations.define_library ctx hll hll_name import_name);
   let initializers = array_init_visitor#generate_initializers () in
   program @ [ Jaf ("", initializers) ]

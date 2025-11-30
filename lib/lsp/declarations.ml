@@ -152,7 +152,7 @@ let resolve_hll_types ctx decls =
 (*
  * AST pass to resolve user-defined types (struct/enum/function types).
  *)
-class type_resolve_visitor ctx decl_only =
+class type_resolve_visitor ctx ~decl_only =
   object (self)
     inherit ivisitor ctx as super
 
@@ -188,7 +188,8 @@ class type_resolve_visitor ctx decl_only =
              decl.class_name <- Some name;
              decl.class_index <- Some index
          | _ -> ());
-      super#visit_fundecl decl
+      if decl_only then super#visit_fundecl { decl with body = None }
+      else super#visit_fundecl decl
 
     method! visit_declaration decl =
       (match decl with
@@ -202,11 +203,11 @@ class type_resolve_visitor ctx decl_only =
           ()
       | Enum _ ->
           compile_error "enum types not yet supported" (ASTDeclaration decl));
-      if not decl_only then super#visit_declaration decl
+      super#visit_declaration decl
   end
 
-let resolve_types ctx decls decl_only =
-  (new type_resolve_visitor ctx decl_only)#visit_toplevel decls
+let resolve_types ?(decl_only = false) ctx decls =
+  (new type_resolve_visitor ctx ~decl_only)#visit_toplevel decls
 
 let define_library ctx decls hll_name import_name =
   let functions =

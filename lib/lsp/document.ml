@@ -78,7 +78,7 @@ let create ctx ~fname text =
   try
     let toplevel = Parser.jaf Lexer.token lexbuf in
     Declarations.register_type_declarations ctx toplevel;
-    Declarations.resolve_types ctx toplevel false;
+    Declarations.resolve_types ctx toplevel;
     let errors =
       TypeAnalysis.check_types ctx toplevel
       |> List.map ~f:(fun ce ->
@@ -101,12 +101,12 @@ let initial_scan ctx ~fname ?hll_import_name text =
     | None ->
         let decls = Parser.jaf Lexer.token lexbuf in
         Declarations.register_type_declarations ctx decls;
-        Declarations.resolve_types ctx decls true
+        Declarations.resolve_types ctx decls ~decl_only:true
     | Some import_name ->
         let hll_name = Stdlib.Filename.(chop_extension (basename fname)) in
         let decls = Parser.hll Lexer.token lexbuf in
         Declarations.resolve_hll_types ctx decls;
-        Declarations.resolve_types ctx decls false;
+        Declarations.resolve_types ctx decls;
         Declarations.define_library ctx decls hll_name import_name
   with _ -> ()
 
