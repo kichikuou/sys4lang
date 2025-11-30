@@ -209,27 +209,24 @@ let resolve_types ctx decls decl_only =
   (new type_resolve_visitor ctx decl_only)#visit_toplevel decls
 
 let define_library ctx decls hll_name import_name =
-  let is_struct_def decl = match decl with StructDef _ -> true | _ -> false in
-  let struct_defs, fun_decls = List.partition_tf decls ~f:is_struct_def in
-  (* handle struct definitions *)
-  register_type_declarations ctx struct_defs;
-  resolve_types ctx struct_defs true;
-  (* define library *)
   let functions =
-    List.map fun_decls ~f:(function
+    List.map decls ~f:(function
       | Function f -> f
       | decl ->
           compiler_bug "unexpected declaration in .hll file"
             (Some (ASTDeclaration decl)))
   in
-  Ain.write_library ctx.ain
-    {
-      (Ain.add_library ctx.ain hll_name) with
-      functions = List.map ~f:jaf_to_ain_hll_function functions;
-    };
-  let functions =
-    Hashtbl.of_alist_exn
-      (module String)
-      (List.map ~f:(fun d -> (d.name, d)) functions)
+  let lib =
+    match Ain.get_library_index ctx.ain hll_name with
+    | Some i -> Ain.get_library_by_index ctx.ain i
+    | None -> Ain.add_library ctx.ain hll_name
   in
-  Hashtbl.add_exn ctx.libraries ~key:import_name ~data:{ hll_name; functions }
+  Ain.write_library ctx.ain
+    { lib with functions = List.map ~f:jaf_to_ain_hll_function functions };
+  let functions =
+    Hashtbl.create_with_key_exn
+      (module String)
+      ~get_key:(fun (d : fundecl) -> d.name)
+      functions
+  in
+  Hashtbl.set ctx.libraries ~key:import_name ~data:{ hll_name; functions }

@@ -93,13 +93,21 @@ let create ctx ~fname text =
       errors = [ make_error lexbuf e ];
     }
 
-let initial_scan ctx ~fname text =
+let initial_scan ctx ~fname ?hll_import_name text =
   let lexbuf = Lexing.from_string text in
   Lexing.set_filename lexbuf fname;
   try
-    let toplevel = Parser.jaf Lexer.token lexbuf in
-    Declarations.register_type_declarations ctx toplevel;
-    Declarations.resolve_types ctx toplevel true
+    match hll_import_name with
+    | None ->
+        let decls = Parser.jaf Lexer.token lexbuf in
+        Declarations.register_type_declarations ctx decls;
+        Declarations.resolve_types ctx decls true
+    | Some import_name ->
+        let hll_name = Stdlib.Filename.(chop_extension (basename fname)) in
+        let decls = Parser.hll Lexer.token lexbuf in
+        Declarations.resolve_hll_types ctx decls;
+        Declarations.resolve_types ctx decls false;
+        Declarations.define_library ctx decls hll_name import_name
   with _ -> ()
 
 class ast_locator (doc : t) (pos : Lsp.Types.Position.t) =

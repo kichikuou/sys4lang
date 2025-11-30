@@ -107,7 +107,11 @@ let initial_scan proj =
           let path = Stdlib.Filename.concat proj.pje.source_dir fname in
           let contents = proj.read_file path |> to_utf8 in
           Document.initial_scan proj.ctx ~fname:path contents
-      | _ -> ())
+      | Hll (fname, hll_import_name) ->
+          let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+          let contents = proj.read_file path |> to_utf8 in
+          Document.initial_scan proj.ctx ~fname:path ~hll_import_name contents
+      | Include _ -> failwith "unexpected include")
   with _ -> ()
 
 let rec jaf_base_type = function

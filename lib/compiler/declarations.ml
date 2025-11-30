@@ -291,15 +291,8 @@ class type_define_visitor ctx =
 let define_types ctx decls = (new type_define_visitor ctx)#visit_toplevel decls
 
 let define_library ctx decls hll_name import_name =
-  let is_struct_def decl = match decl with StructDef _ -> true | _ -> false in
-  let struct_defs, fun_decls = List.partition_tf decls ~f:is_struct_def in
-  (* handle struct definitions *)
-  register_type_declarations ctx struct_defs;
-  resolve_types ctx struct_defs true;
-  define_types ctx struct_defs;
-  (* define library *)
   let functions =
-    List.map fun_decls ~f:(function
+    List.map decls ~f:(function
       | Function f -> f
       | decl ->
           compiler_bug "unexpected declaration in .hll file"
@@ -311,8 +304,9 @@ let define_library ctx decls hll_name import_name =
       functions = List.map ~f:jaf_to_ain_hll_function functions;
     };
   let functions =
-    Hashtbl.of_alist_exn
+    Hashtbl.create_with_key_exn
       (module String)
-      (List.map ~f:(fun d -> (d.name, d)) functions)
+      ~get_key:(fun (d : fundecl) -> d.name)
+      functions
   in
   Hashtbl.add_exn ctx.libraries ~key:import_name ~data:{ hll_name; functions }
