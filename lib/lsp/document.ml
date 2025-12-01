@@ -72,19 +72,32 @@ let make_error lexbuf exn =
   | CompileError.Compile_error (Error (msg, loc)) -> make lexbuf loc msg
   | e -> reraise e
 
-let create ctx ~fname text =
+let create ctx ~fname ?hll_import_name ?(decl_only = false) text =
   let lexbuf = Lexing.from_string text in
   Lexing.set_filename lexbuf fname;
   try
-    let toplevel = Parser.jaf Lexer.token lexbuf in
-    Declarations.register_type_declarations ctx toplevel;
-    Declarations.resolve_types ctx toplevel;
-    let errors =
-      TypeAnalysis.check_types ctx toplevel
-      |> List.map ~f:(fun ce ->
-          make_error lexbuf (CompileError.Compile_error ce))
-    in
-    { ctx; text = lexbuf.lex_buffer; toplevel; errors }
+    match hll_import_name with
+    | None ->
+        (* .jaf *)
+        let toplevel = Parser.jaf Lexer.token lexbuf in
+        Declarations.register_type_declarations ctx toplevel;
+        Declarations.resolve_types ctx toplevel ~decl_only;
+        let errors =
+          if decl_only then []
+          else
+            TypeAnalysis.check_types ctx toplevel
+            |> List.map ~f:(fun ce ->
+                make_error lexbuf (CompileError.Compile_error ce))
+        in
+        { ctx; text = lexbuf.lex_buffer; toplevel; errors }
+    | Some import_name ->
+        (* .hll *)
+        let hll_name = Stdlib.Filename.(chop_extension (basename fname)) in
+        let toplevel = Parser.hll Lexer.token lexbuf in
+        Declarations.resolve_hll_types ctx toplevel;
+        Declarations.resolve_types ctx toplevel;
+        Declarations.define_library ctx toplevel hll_name import_name;
+        { ctx; text = lexbuf.lex_buffer; toplevel; errors = [] }
   with e ->
     {
       ctx;
@@ -92,23 +105,6 @@ let create ctx ~fname text =
       toplevel = [];
       errors = [ make_error lexbuf e ];
     }
-
-let initial_scan ctx ~fname ?hll_import_name text =
-  let lexbuf = Lexing.from_string text in
-  Lexing.set_filename lexbuf fname;
-  try
-    match hll_import_name with
-    | None ->
-        let decls = Parser.jaf Lexer.token lexbuf in
-        Declarations.register_type_declarations ctx decls;
-        Declarations.resolve_types ctx decls ~decl_only:true
-    | Some import_name ->
-        let hll_name = Stdlib.Filename.(chop_extension (basename fname)) in
-        let decls = Parser.hll Lexer.token lexbuf in
-        Declarations.resolve_hll_types ctx decls;
-        Declarations.resolve_types ctx decls;
-        Declarations.define_library ctx decls hll_name import_name
-  with _ -> ()
 
 class ast_locator (doc : t) (pos : Lsp.Types.Position.t) =
   object

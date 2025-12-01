@@ -106,11 +106,17 @@ let initial_scan proj =
       | Jaf fname ->
           let path = Stdlib.Filename.concat proj.pje.source_dir fname in
           let contents = proj.read_file path |> to_utf8 in
-          Document.initial_scan proj.ctx ~fname:path contents
+          let doc =
+            Document.create proj.ctx ~fname:path ~decl_only:true contents
+          in
+          Hashtbl.set proj.documents ~key:path ~data:doc
       | Hll (fname, hll_import_name) ->
           let path = Stdlib.Filename.concat proj.pje.source_dir fname in
           let contents = proj.read_file path |> to_utf8 in
-          Document.initial_scan proj.ctx ~fname:path ~hll_import_name contents
+          let doc =
+            Document.create proj.ctx ~fname:path ~hll_import_name contents
+          in
+          Hashtbl.set proj.documents ~key:path ~data:doc
       | Include _ -> failwith "unexpected include")
   with _ -> ()
 
@@ -230,6 +236,11 @@ let get_definition proj uri pos =
     | Jaf.ASTExpression { node = Member (_, _, ClassMethod (name, _)); _ } :: _
       ->
         location_of_func proj name
+    | Jaf.ASTExpression
+        { node = Member (_, _, HLLFunction (lib_name, fun_name)); _ }
+      :: _ ->
+        Option.map (Jaf.find_hll_function proj.ctx lib_name fun_name)
+          ~f:(fun decl -> decl.loc)
     | Jaf.ASTExpression
         {
           node = Member ({ ty = Struct (s_name, _); _ }, m_name, ClassVariable _);
