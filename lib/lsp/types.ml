@@ -17,8 +17,8 @@ open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 
 module InitializationOptions = struct
   type t = {
-    ainPath : string; [@default ""]
     pjePath : string; [@default ""]
+    ainPath : string; [@default ""] (* deprecated, use pjePath *)
     srcDir : string; [@default ""] (* deprecated, use pjePath *)
     srcEncoding : string; [@default ""] (* deprecated, use pjePath *)
   }

@@ -79,7 +79,7 @@ class lsp_server ~sw ~fs =
              Project.initial_scan project;
              Eio.Promise.resolve (snd initial_scan_done) ());
          notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
-           (options.ainPath ^ " loaded")
+           (options.pjePath ^ " loaded")
        with e -> show_exn notify_back e);
       super#on_req_initialize ~notify_back i
 

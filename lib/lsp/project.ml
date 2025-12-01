@@ -66,12 +66,12 @@ let create ~read_file =
   }
 
 let initialize proj (options : Types.InitializationOptions.t) =
-  if not (String.is_empty options.ainPath) then
-    proj.ctx <-
-      Jaf.context_from_ain ~constants:predefined_constants
-        (Ain.load options.ainPath);
   match options.pjePath with
   | "" ->
+      if not (String.is_empty options.ainPath) then
+        proj.ctx <-
+          Jaf.context_from_ain ~constants:predefined_constants
+            (Ain.load options.ainPath);
       proj.pje.source_dir <- options.srcDir;
       if not (String.is_empty options.srcEncoding) then
         proj.pje.encoding <- encoding_of_string options.srcEncoding
