@@ -38,7 +38,18 @@ class type_declare_visitor ctx =
         decl.class_name <- parent.class_name);
       decl.index <- Some (-1);
       let name = mangled_name decl in
-      Hashtbl.set ctx.functions ~key:name ~data:decl;
+      Hashtbl.update ctx.functions name ~f:(function
+        | Some prev_decl
+          when Option.is_some decl.body
+               && Option.is_none prev_decl.body
+               && ft_compatible (ft_of_fundecl decl) (ft_of_fundecl prev_decl)
+          ->
+            (* Make sure the declaration has the default parameters specified
+                in the method declaration (default values cannot be specified
+                in method definition) *)
+            decl.params <- prev_decl.params;
+            decl
+        | _ -> decl);
       let prev_lambda_index = lambda_index in
       lambda_index <- 0;
       super#visit_fundecl decl;
