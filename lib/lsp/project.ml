@@ -102,22 +102,19 @@ let initial_scan proj =
     match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
   in
   try
-    List.iter (Pje.collect_sources proj.pje) ~f:(function
-      | Jaf fname ->
-          let path = Stdlib.Filename.concat proj.pje.source_dir fname in
-          let contents = proj.read_file path |> to_utf8 in
-          let doc =
-            Document.create proj.ctx ~fname:path ~decl_only:true contents
-          in
-          Hashtbl.set proj.documents ~key:path ~data:doc
-      | Hll (fname, hll_import_name) ->
-          let path = Stdlib.Filename.concat proj.pje.source_dir fname in
-          let contents = proj.read_file path |> to_utf8 in
-          let doc =
-            Document.create proj.ctx ~fname:path ~hll_import_name contents
-          in
-          Hashtbl.set proj.documents ~key:path ~data:doc
-      | Include _ -> failwith "unexpected include")
+    List.map (Pje.collect_sources proj.pje) ~f:(fun source ->
+        match source with
+        | Jaf fname ->
+            let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+            Document.parse proj.ctx ~fname:path (proj.read_file path |> to_utf8)
+        | Hll (fname, hll_import_name) ->
+            let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+            Document.parse proj.ctx ~fname:path ~hll_import_name
+              (proj.read_file path |> to_utf8)
+        | Include _ -> failwith "unexpected include")
+    |> List.iter ~f:(fun doc ->
+        Document.resolve ~decl_only:true doc;
+        Hashtbl.set proj.documents ~key:doc.path ~data:doc)
   with _ -> ()
 
 let rec jaf_base_type = function
@@ -134,7 +131,7 @@ let get_hover proj uri pos =
              ~contents:
                (`MarkupContent
                   (Lsp.Types.MarkupContent.create ~kind:PlainText ~value:content))
-             ~range:(to_lsp_range doc.text location)
+             ~range:(to_lsp_range doc.lexbuf.lex_buffer location)
              ())
       in
       match get_nodes_for_pos doc pos with
@@ -217,7 +214,7 @@ let find_location proj uri pos f =
           match Hashtbl.find proj.documents fname with
           | None -> None
           | Some doc ->
-              let range = to_lsp_range doc.text loc in
+              let range = to_lsp_range doc.lexbuf.lex_buffer loc in
               let uri = Lsp.Types.DocumentUri.of_path fname in
               Some (`Location [ Lsp.Types.Location.create ~uri ~range ]))
       | None -> None)
@@ -281,7 +278,7 @@ let get_entrypoint proj =
       match Hashtbl.find proj.documents fname with
       | None -> None
       | Some doc ->
-          let range = to_lsp_range doc.text loc in
+          let range = to_lsp_range doc.lexbuf.lex_buffer loc in
           let uri = Lsp.Types.DocumentUri.of_path fname in
           Some (Lsp.Types.Location.create ~uri ~range))
   | None -> None

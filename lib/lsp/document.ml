@@ -54,9 +54,11 @@ let range_contains text range (pos : Lsp.Types.Position.t) =
 
 type t = {
   ctx : Jaf.context;
-  text : bytes;
+  path : string;
+  import_name : string option;
+  lexbuf : Lexing.lexbuf;
   toplevel : Jaf.declaration list;
-  errors : (Lsp.Types.Range.t * string) list;
+  mutable errors : (Lsp.Types.Range.t * string) list;
 }
 
 external reraise : exn -> 'a = "%reraise"
@@ -72,39 +74,63 @@ let make_error lexbuf exn =
   | CompileError.Compile_error (Error (msg, loc)) -> make lexbuf loc msg
   | e -> reraise e
 
-let create ctx ~fname ?hll_import_name ?(decl_only = false) text =
+let parse ctx ~fname ?hll_import_name text =
   let lexbuf = Lexing.from_string text in
   Lexing.set_filename lexbuf fname;
   try
-    match hll_import_name with
-    | None ->
+    let toplevel =
+      if Option.is_none hll_import_name then (
         (* .jaf *)
-        let toplevel = Parser.jaf Lexer.token lexbuf in
-        Declarations.register_type_declarations ctx toplevel;
-        Declarations.resolve_types ctx toplevel ~decl_only;
-        let errors =
-          if decl_only then []
-          else
-            TypeAnalysis.check_types ctx toplevel
-            |> List.map ~f:(fun ce ->
-                make_error lexbuf (CompileError.Compile_error ce))
-        in
-        { ctx; text = lexbuf.lex_buffer; toplevel; errors }
-    | Some import_name ->
+        let decls = Parser.jaf Lexer.token lexbuf in
+        Declarations.register_type_declarations ctx decls;
+        decls)
+      else
         (* .hll *)
-        let hll_name = Stdlib.Filename.(chop_extension (basename fname)) in
-        let toplevel = Parser.hll Lexer.token lexbuf in
-        Declarations.resolve_hll_types ctx toplevel;
-        Declarations.resolve_types ctx toplevel;
-        Declarations.define_library ctx toplevel hll_name import_name;
-        { ctx; text = lexbuf.lex_buffer; toplevel; errors = [] }
+        Parser.hll Lexer.token lexbuf
+    in
+    {
+      ctx;
+      path = fname;
+      import_name = hll_import_name;
+      lexbuf;
+      toplevel;
+      errors = [];
+    }
   with e ->
     {
       ctx;
-      text = lexbuf.lex_buffer;
+      path = fname;
+      import_name = hll_import_name;
+      lexbuf;
       toplevel = [];
       errors = [ make_error lexbuf e ];
     }
+
+let resolve ?(decl_only = false) doc =
+  if not (List.is_empty doc.errors) then ()
+  else
+    try
+      match doc.import_name with
+      | None ->
+          (* .jaf *)
+          Declarations.resolve_types doc.ctx doc.toplevel ~decl_only;
+          if not decl_only then
+            doc.errors <-
+              TypeAnalysis.check_types doc.ctx doc.toplevel
+              |> List.map ~f:(fun ce ->
+                  make_error doc.lexbuf (CompileError.Compile_error ce))
+      | Some import_name ->
+          (* .hll *)
+          let hll_name = Stdlib.Filename.(chop_extension (basename doc.path)) in
+          Declarations.resolve_hll_types doc.ctx doc.toplevel;
+          Declarations.resolve_types doc.ctx doc.toplevel;
+          Declarations.define_library doc.ctx doc.toplevel hll_name import_name
+    with e -> doc.errors <- [ make_error doc.lexbuf e ]
+
+let create ctx ~fname ?hll_import_name ?(decl_only = false) text =
+  let doc = parse ctx ~fname ?hll_import_name text in
+  resolve ~decl_only doc;
+  doc
 
 class ast_locator (doc : t) (pos : Lsp.Types.Position.t) =
   object
@@ -113,36 +139,36 @@ class ast_locator (doc : t) (pos : Lsp.Types.Position.t) =
     method nodes = nodes
 
     method! visit_expression expr =
-      if range_contains doc.text expr.loc pos then (
+      if range_contains doc.lexbuf.lex_buffer expr.loc pos then (
         nodes <- ASTExpression expr :: nodes;
         super#visit_expression expr)
 
     method! visit_statement stmt =
-      if range_contains doc.text stmt.loc pos then (
+      if range_contains doc.lexbuf.lex_buffer stmt.loc pos then (
         nodes <- ASTStatement stmt :: nodes;
         super#visit_statement stmt)
 
     method! visit_declaration decl =
       let node = Jaf.ASTDeclaration decl in
-      if range_contains doc.text (Jaf.ast_node_pos node) pos then (
+      if range_contains doc.lexbuf.lex_buffer (Jaf.ast_node_pos node) pos then (
         nodes <- node :: nodes;
         super#visit_declaration decl)
 
     method! visit_struct_declaration decl =
       let node = Jaf.ASTStructDecl decl in
-      if range_contains doc.text (Jaf.ast_node_pos node) pos then (
+      if range_contains doc.lexbuf.lex_buffer (Jaf.ast_node_pos node) pos then (
         nodes <- node :: nodes;
         super#visit_struct_declaration decl)
 
     method! visit_variable var =
       let node = Jaf.ASTVariable var in
-      if range_contains doc.text (Jaf.ast_node_pos node) pos then (
+      if range_contains doc.lexbuf.lex_buffer (Jaf.ast_node_pos node) pos then (
         nodes <- node :: nodes;
         super#visit_variable var)
 
     method! visit_type_specifier t =
       let node = Jaf.ASTType t in
-      if range_contains doc.text (Jaf.ast_node_pos node) pos then (
+      if range_contains doc.lexbuf.lex_buffer (Jaf.ast_node_pos node) pos then (
         nodes <- node :: nodes;
         super#visit_type_specifier t)
   end
