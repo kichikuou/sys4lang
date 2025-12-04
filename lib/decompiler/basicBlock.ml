@@ -1576,6 +1576,87 @@ let rec replace_delegate_calls acc = function
   | insn :: rest -> replace_delegate_calls (insn :: acc) rest
   | [] -> List.rev acc
 
+let from_instructions (f : CodeSection.function_t) code =
+  code |> replace_delegate_calls []
+  |> make_basic_blocks f.end_addr
+  |> analyze_basic_blocks
+       {
+         func = f.func;
+         struc = (match f.owner with Some (Struct s) -> Some s | _ -> None);
+         parent = f.parent;
+         instructions = [];
+         address = -1;
+         end_address = -1;
+         stack = [];
+         stmts = [];
+         condition = [];
+         predecessors = Hashtbl.create (module Int);
+       }
+       []
+
+let from_stmt (stmt : statement loc) =
+  {
+    addr = stmt.addr;
+    end_addr = stmt.end_addr;
+    labels = [];
+    code = (seq_terminator, [ stmt ]);
+    nr_jump_srcs = 0;
+  }
+
+let from_generated_constructor (s : Ain.Struct.t) (f : CodeSection.function_t) =
+  match f.code with
+  | { txt = PUSHSTRUCTPAGE; _ }
+    :: { txt = PUSH varno; _ }
+    :: { txt = REF; _ }
+    :: { txt = DUP; _ }
+    :: { txt = PUSH d1; _ }
+    :: { txt = PUSH d2; _ }
+    :: { txt = PUSH d3; _ }
+    :: { txt = PUSH d4; _ }
+    :: { txt = CALLHLL (lib, func, _); _ }
+    :: code
+    when let var = s.members.(Int32.to_int_exn varno) in
+         let lib = Ain.ain.hll0.(lib) in
+         let func = lib.functions.(func) in
+         String.(
+           var.name = "<vtable>" && lib.name = "Array" && func.name = "Alloc")
+    ->
+      let var =
+        Deref (PageRef (StructPage, s.members.(Int32.to_int_exn varno)))
+      in
+      let alloc =
+        Expression
+          (Call
+             ( HllFunc ("Array", Ain.ain.hll0.(lib).functions.(func)),
+               [ var; Number d1; Number d2; Number d3; Number d4 ] ))
+      in
+      let rec parse_vtable_initializer acc = function
+        | { txt = DUP; _ }
+          :: { txt = PUSH i; _ }
+          :: { txt = PUSH m; _ }
+          :: { txt = ASSIGN; _ }
+          :: { txt = POP; _ }
+          :: rest ->
+            parse_vtable_initializer
+              (Expression (AssignOp (ASSIGN, ObjRef (var, Number i), Number m))
+              :: acc)
+              rest
+        | { txt = POP; _ } :: rest -> (acc, rest)
+        | _ -> failwith "unexpected code in vtable initializer"
+      in
+      let stmts, rest = parse_vtable_initializer [ alloc ] code in
+      let stmts =
+        List.map stmts ~f:(fun stmt ->
+            from_stmt
+              {
+                txt = stmt;
+                addr = f.end_addr (* FIMXE *);
+                end_addr = f.end_addr;
+              })
+      in
+      List.rev_append stmts (from_instructions f rest)
+  | _ -> from_instructions f f.code
+
 let from_enum_stringifier (f : CodeSection.function_t) =
   match List.map ~f:(fun i -> i.txt) f.code with
   | PUSHLOCALPAGE :: PUSH varno :: REF :: code ->
@@ -1592,47 +1673,22 @@ let from_enum_stringifier (f : CodeSection.function_t) =
         | [ POP; S_PUSH s; RETURN ] -> String Ain.ain.str0.(s)
         | _ -> failwith ("unexpected code in enum stringifier " ^ f.name)
       in
-      let stmt =
+      from_stmt
         {
           txt = Return (Some (parse code));
           addr = (List.hd_exn f.code).addr;
           end_addr = f.end_addr;
         }
-      in
-      let frag = (seq_terminator, [ stmt ]) in
-      {
-        addr = stmt.addr;
-        end_addr = stmt.end_addr;
-        labels = [];
-        code = frag;
-        nr_jump_srcs = 0;
-      }
   | _ -> failwith ("unexpected prologue in enum stringifier " ^ f.name)
 
 let create (f : CodeSection.function_t) =
-  match f.owner with
-  | Some (Enum _) -> (
+  match (f.owner, f.name) with
+  | Some (Enum _), _ -> (
       match f.name with
       | "String" -> [ from_enum_stringifier f ]
       | _ -> [] (* Enum functions other than String are ignored *))
-  | _ ->
-      let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
-      f.code |> replace_delegate_calls []
-      |> make_basic_blocks f.end_addr
-      |> analyze_basic_blocks
-           {
-             func = f.func;
-             struc;
-             parent = f.parent;
-             instructions = [];
-             address = -1;
-             end_address = -1;
-             stack = [];
-             stmts = [];
-             condition = [];
-             predecessors = Hashtbl.create (module Int);
-           }
-           []
+  | Some (Struct s), ("0" | "2") -> from_generated_constructor s f
+  | _ -> from_instructions f f.code
 
 let generate_var_decls (func : Ain.Function.t) bbs =
   let uninitialized_vars =
