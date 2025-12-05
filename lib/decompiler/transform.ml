@@ -268,7 +268,7 @@ let remove_array_free_for_dead_arrays stmt =
   in
   map_block stmt ~f:process_block
 
-let remove_array_initializer_call = function
+let remove_generated_initializer_call = function
   | { txt = Block stmts; _ } as stmt -> (
       match List.rev stmts with
       | { txt = Expression (Call (Method (Page StructPage, f), [])); _ } :: rest

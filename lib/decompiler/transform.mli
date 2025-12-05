@@ -36,7 +36,7 @@ val remove_implicit_array_free : ast_transform
 val remove_array_free_for_dead_arrays : ast_transform
 
 (* Removes `this.2();` call inserted at the beginning of constructors. *)
-val remove_array_initializer_call : ast_transform
+val remove_generated_initializer_call : ast_transform
 val remove_generated_lockpeek : ast_transform
 val remove_dummy_variable_assignment : ast_transform
 val remove_vardecl_default_rhs : ast_transform

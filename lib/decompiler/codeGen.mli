@@ -16,7 +16,13 @@
 
 open Loc
 
-type variable = { v : Ain.Variable.t; dims : Ast.expr list }
+type variable = {
+  v : Ain.Variable.t;
+  dims : Ast.expr list;
+  initval : Ast.expr option;
+}
+
+val from_ain_variable : Ain.Variable.t -> variable
 
 type function_t = {
   func : Ain.Function.t;

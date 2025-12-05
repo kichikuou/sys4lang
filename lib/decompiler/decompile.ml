@@ -67,53 +67,91 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   Stdio.printf "\nDecompiled code:\n%s\n" (Buffer.contents printer#get_buffer)
 
 let to_variable_list vars =
-  List.map (Array.to_list vars) ~f:(fun v -> CodeGen.{ v; dims = [] })
+  List.map (Array.to_list vars) ~f:CodeGen.from_ain_variable
 
-let extract_array_dims stmt vars =
-  let h = Stdlib.Hashtbl.create (Array.length vars) in
-  if
-    List.for_all
-      (match stmt with { txt = Ast.Block stmts; _ } -> stmts | _ -> [ stmt ])
-      ~f:(function
-        | { txt = Ast.Return _; _ } -> true
-        | {
-            txt =
-              Expression
-                (Call (Builtin (Instructions.A_ALLOC, PageRef (_, v)), dims));
-            _;
-          } ->
-            Stdlib.Hashtbl.add h v dims;
-            true
-        | {
-            txt =
-              Expression
-                (Call
-                   ( HllFunc ("Array", { name = "Alloc"; _ }),
-                     Deref (PageRef (_, v)) :: dims ));
-            _;
-          } ->
-            let dims =
-              List.take_while dims ~f:(function
-                | Number -1l -> false
-                | _ -> true)
-            in
-            Stdlib.Hashtbl.add h v dims;
-            true
-        | _ -> false)
-  then
-    Some
-      ( List.map (Array.to_list vars) ~f:(fun v ->
-            match Stdlib.Hashtbl.find_opt h v with
-            | Some dims -> CodeGen.{ v; dims }
-            | None -> { v; dims = [] }),
-        Stdlib.Hashtbl.length h > 0 )
-  else None
+type analyzed_initializer_function = {
+  is_empty : bool;
+  vtable : int array option;
+  vars : CodeGen.variable list;
+}
 
-let extract_array_dims_exn stmt vars =
-  Option.value_exn
-    (extract_array_dims stmt vars)
-    ~message:"unexpected statement in array initializer"
-  |> fst
+let analyze_initializer_function stmt vars =
+  let stmts =
+    match stmt with
+    | { txt = Ast.Block stmts; _ } -> List.rev stmts
+    | _ -> [ stmt ]
+  in
+  let h_dims = Stdlib.Hashtbl.create (Array.length vars) in
+  let h_initvals = Stdlib.Hashtbl.create (Array.length vars) in
+  let vtable = ref [||] in
+  List.iter stmts ~f:(function
+    | {
+        txt =
+          Expression
+            (Call (Builtin (Instructions.A_ALLOC, PageRef (_, v)), dims));
+        _;
+      } ->
+        Stdlib.Hashtbl.add h_dims v dims
+    | {
+        txt =
+          Expression
+            (Call
+               ( HllFunc ("Array", { name = "Alloc"; _ }),
+                 Deref (PageRef (_, v)) :: dims ));
+        _;
+      } -> (
+        let dims =
+          List.take_while dims ~f:(function Number -1l -> false | _ -> true)
+        in
+        match (v.name, dims) with
+        | "<vtable>", [ Number len ] ->
+            vtable := Array.create ~len:(Int32.to_int_exn len) (-1)
+        | _ -> Stdlib.Hashtbl.add h_dims v dims)
+    | {
+        txt =
+          Expression
+            (AssignOp
+               ( ASSIGN,
+                 ArrayRef (Deref (PageRef (StructPage, v)), Number i),
+                 Number m ));
+        _;
+      }
+      when String.equal v.name "<vtable>" ->
+        !vtable.(Int32.to_int_exn i) <- Int32.to_int_exn m
+    | {
+        txt =
+          Expression
+            ( AssignOp (_, PageRef ((StructPage | GlobalPage), v), e)
+            | Call
+                ( Builtin2
+                    (X_SET, Deref (PageRef ((StructPage | GlobalPage), v))),
+                  [ e ] ) );
+        _;
+      }
+      when Ain.ain.vers >= 12 ->
+        Stdlib.Hashtbl.add h_initvals v e
+    | stmt ->
+        Printf.failwithf "unexpected statement in initializer function: %s"
+          (Ast.show_statement stmt.txt)
+          ());
+  {
+    is_empty = List.is_empty stmts;
+    vars =
+      List.map (Array.to_list vars) ~f:(fun v ->
+          let var = CodeGen.from_ain_variable v in
+          {
+            var with
+            dims =
+              (match Stdlib.Hashtbl.find_opt h_dims v with
+              | None -> var.dims
+              | Some dims -> dims);
+            initval =
+              Option.first_some
+                (Stdlib.Hashtbl.find_opt h_initvals v)
+                var.initval;
+          });
+    vtable = (if Array.is_empty !vtable then None else Some !vtable);
+  }
 
 let extract_enum_values = function
   | Ast.Return (Some e) ->
@@ -162,19 +200,45 @@ let is_rance7_bad_function (f : CodeGen.function_t) =
   | _ -> false
 [@@ocamlformat "disable"]
 
+let process_generated_constructors (structs : CodeGen.struct_t array) =
+  List.map ~f:(fun (fname, funcs) ->
+      let funcs =
+        List.filter funcs ~f:(fun func ->
+            match func with
+            | { CodeSection.owner = Some (Struct struc); name = "0" | "2"; _ }
+              -> (
+                try
+                  let f = decompile_function func in
+                  let inits =
+                    analyze_initializer_function f.body struc.members
+                  in
+                  if String.equal f.name "2" || not inits.is_empty then (
+                    let s = structs.(struc.id) in
+                    s.members <- inits.vars;
+                    Option.iter inits.vtable ~f:(fun vt ->
+                        Ain.ain.strt.(struc.id).vtable <- vt);
+                    false)
+                  else true
+                with _ -> true)
+            | _ -> true)
+      in
+      (fname, funcs))
+
 let decompile ~move_to_original_file ~continue_on_error =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
-  let files =
-    CodeSection.parse code
-    |> CodeSection.remove_overridden_functions ~move_to_original_file
-    |> CodeSection.fix_or_remove_known_broken_functions
-  in
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->
         CodeGen.
           { struc; members = to_variable_list struc.members; methods = [] })
+  in
+  let files =
+    CodeSection.parse code
+    |> CodeSection.remove_overridden_functions ~move_to_original_file
+    |> CodeSection.fix_or_remove_known_broken_functions
+    (* For vtable analysis, generated constructors need to be processed first. *)
+    |> process_generated_constructors structs
   in
   let enums =
     Array.map Ain.ain.enum ~f:(fun name -> CodeGen.{ name; values = [] })
@@ -192,25 +256,23 @@ let decompile ~move_to_original_file ~continue_on_error =
             | { owner = Some (Enum _); _ } -> () (* ignore *)
             | { owner = Some (Struct struc); _ } ->
                 let s = structs.(struc.id) in
-                if String.equal f.name "2" then
-                  s.members <- extract_array_dims_exn f.body struc.members
-                else if String.equal f.name "0" then (
-                  match extract_array_dims f.body struc.members with
-                  | Some (vs, true) -> s.members <- vs
-                  | _ ->
-                      s.methods <- f :: s.methods;
-                      let body =
-                        Transform.remove_array_initializer_call f.body
-                      in
-                      decompiled_funcs := { f with body } :: !decompiled_funcs)
-                else if is_rance7_bad_function f then
+                let f =
+                  if String.equal f.name "0" then
+                    {
+                      f with
+                      body = Transform.remove_generated_initializer_call f.body;
+                    }
+                  else f
+                in
+                if is_rance7_bad_function f then
                   Stdio.eprintf
                     "Warning: Removing ill-typed tagBusho::getSp() function\n"
                 else (
                   if not f.func.is_lambda then s.methods <- f :: s.methods;
                   decompiled_funcs := f :: !decompiled_funcs)
             | { owner = None; name = "0"; _ } ->
-                globals := extract_array_dims_exn f.body Ain.ain.glob
+                globals :=
+                  (analyze_initializer_function f.body Ain.ain.glob).vars
             | { owner = None; name = "NULL"; _ } -> ()
             | _ -> decompiled_funcs := f :: !decompiled_funcs
           with e ->
@@ -229,9 +291,15 @@ let inspect funcname =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
+  let structs =
+    Array.map Ain.ain.strt ~f:(fun struc ->
+        CodeGen.
+          { struc; members = to_variable_list struc.members; methods = [] })
+  in
   let files =
     CodeSection.parse code
     |> CodeSection.remove_overridden_functions ~move_to_original_file:false
+    |> process_generated_constructors structs
   in
   match
     List.find_map files ~f:(fun (_, funcs) ->
