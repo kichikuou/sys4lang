@@ -200,19 +200,45 @@ let is_rance7_bad_function (f : CodeGen.function_t) =
   | _ -> false
 [@@ocamlformat "disable"]
 
+let process_generated_constructors (structs : CodeGen.struct_t array) =
+  List.map ~f:(fun (fname, funcs) ->
+      let funcs =
+        List.filter funcs ~f:(fun func ->
+            match func with
+            | { CodeSection.owner = Some (Struct struc); name = "0" | "2"; _ }
+              -> (
+                try
+                  let f = decompile_function func in
+                  let inits =
+                    analyze_initializer_function_exn f.body struc.members
+                  in
+                  if String.equal f.name "2" || not inits.is_empty then (
+                    let s = structs.(struc.id) in
+                    s.members <- inits.vars;
+                    Option.iter inits.vtable ~f:(fun vt ->
+                        Ain.ain.strt.(struc.id).vtable <- vt);
+                    false)
+                  else true
+                with _ -> true)
+            | _ -> true)
+      in
+      (fname, funcs))
+
 let decompile ~move_to_original_file ~continue_on_error =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
-  let files =
-    CodeSection.parse code
-    |> CodeSection.remove_overridden_functions ~move_to_original_file
-    |> CodeSection.fix_or_remove_known_broken_functions
-  in
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->
         CodeGen.
           { struc; members = to_variable_list struc.members; methods = [] })
+  in
+  let files =
+    CodeSection.parse code
+    |> CodeSection.remove_overridden_functions ~move_to_original_file
+    |> CodeSection.fix_or_remove_known_broken_functions
+    (* For vtable analysis, generated constructors need to be processed first. *)
+    |> process_generated_constructors structs
   in
   let enums =
     Array.map Ain.ain.enum ~f:(fun name -> CodeGen.{ name; values = [] })
@@ -230,26 +256,15 @@ let decompile ~move_to_original_file ~continue_on_error =
             | { owner = Some (Enum _); _ } -> () (* ignore *)
             | { owner = Some (Struct struc); _ } ->
                 let s = structs.(struc.id) in
-                if String.equal f.name "2" then (
-                  let inits =
-                    analyze_initializer_function_exn f.body struc.members
-                  in
-                  s.members <- inits.vars;
-                  Option.iter inits.vtable ~f:(fun vt ->
-                      Ain.ain.strt.(struc.id).vtable <- vt))
-                else if String.equal f.name "0" then (
-                  match analyze_initializer_function f.body struc.members with
-                  | Some { is_empty = false; vars; vtable } ->
-                      s.members <- vars;
-                      Option.iter vtable ~f:(fun vt ->
-                          Ain.ain.strt.(struc.id).vtable <- vt)
-                  | _ ->
-                      s.methods <- f :: s.methods;
-                      let body =
-                        Transform.remove_array_initializer_call f.body
-                      in
-                      decompiled_funcs := { f with body } :: !decompiled_funcs)
-                else if is_rance7_bad_function f then
+                let f =
+                  if String.equal f.name "0" then
+                    {
+                      f with
+                      body = Transform.remove_array_initializer_call f.body;
+                    }
+                  else f
+                in
+                if is_rance7_bad_function f then
                   Stdio.eprintf
                     "Warning: Removing ill-typed tagBusho::getSp() function\n"
                 else (
