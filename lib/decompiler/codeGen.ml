@@ -21,7 +21,25 @@ open Type
 open Ast
 open Instructions
 
-type variable = { v : Ain.Variable.t; dims : Ast.expr list }
+type variable = {
+  v : Ain.Variable.t;
+  dims : Ast.expr list;
+  initval : Ast.expr option;
+}
+
+let from_ain_variable (v : Ain.Variable.t) =
+  let initval =
+    Option.map v.init_val ~f:(function
+      | Ain.Variable.Int n -> (
+          match v.type_ with
+          | Bool -> UnaryOp (ITOB, Number n)
+          | Ref _ ->
+              Deref (PageRef (GlobalPage, Ain.ain.glob.(Int32.to_int_exn n)))
+          | _ -> Number n)
+      | String s -> String s
+      | Float f -> Float f)
+  in
+  { v; dims = []; initval }
 
 type function_t = {
   func : Ain.Function.t;
@@ -36,6 +54,7 @@ type struct_t = {
   struc : Ain.Struct.t;
   mutable members : variable list;
   mutable methods : function_t list;
+  mutable vtable : int array option;
 }
 
 type enum_t = { name : string; mutable values : (string * int32) list }
@@ -120,17 +139,6 @@ let pr_number out = function
 
 let pr_array_dims ?(pr_expr = pr_number) out dims =
   List.iter dims ~f:(fun e -> bprintf out "[%a]" pr_expr e)
-
-let pr_initval out (v : Ain.Variable.t) =
-  match v.init_val with
-  | None -> ()
-  | Some (Int n) -> (
-      match v.type_ with
-      | Bool -> bprintf out " = %s" (if Int32.(n = 0l) then "false" else "true")
-      | Ref _ -> bprintf out " = %s" Ain.ain.glob.(Int32.to_int_exn n).name
-      | _ -> bprintf out " = %ld" n)
-  | Some (Float f) -> bprintf out " = %s" (format_float f)
-  | Some (Ain.Variable.String s) -> bprintf out " = \"%s\"" (escape_dq s)
 
 type operator = { sym : string; prec : int; lprec : int; rprec : int }
 
@@ -684,6 +692,8 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
                   self#print_indent;
                   self#pr_vardecl out v.v;
                   pr_array_dims out v.dims;
+                  Option.iter v.initval ~f:(fun e ->
+                      bprintf out " = %a" (self#pr_expr 0) e);
                   self#println ";");
           if
             (not (Array.is_empty struc.struc.members))
@@ -728,7 +738,8 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
             self#print_indent;
             self#pr_vardecl out v.v;
             pr_array_dims out v.dims;
-            pr_initval out v.v;
+            Option.iter v.initval ~f:(fun e ->
+                bprintf out " = %a" (self#pr_expr 0) e);
             self#println ";")
       in
       List.iter groups ~f:(fun group ->
