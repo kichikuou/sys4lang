@@ -37,7 +37,6 @@ type struct_t = {
   struc : Ain.Struct.t;
   mutable members : variable list;
   mutable methods : function_t list;
-  mutable vtable : int array option;
 }
 
 type debug_info

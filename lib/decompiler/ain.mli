@@ -68,6 +68,7 @@ module Struct : sig
     constructor : int;
     destructor : int;
     members : Variable.t array;
+    mutable vtable : int array;
   }
   [@@deriving show]
 end

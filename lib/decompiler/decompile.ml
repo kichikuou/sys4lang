@@ -212,12 +212,7 @@ let decompile ~move_to_original_file ~continue_on_error =
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->
         CodeGen.
-          {
-            struc;
-            members = to_variable_list struc.members;
-            methods = [];
-            vtable = None;
-          })
+          { struc; members = to_variable_list struc.members; methods = [] })
   in
   let enums =
     Array.map Ain.ain.enum ~f:(fun name -> CodeGen.{ name; values = [] })
@@ -240,12 +235,14 @@ let decompile ~move_to_original_file ~continue_on_error =
                     analyze_initializer_function_exn f.body struc.members
                   in
                   s.members <- inits.vars;
-                  s.vtable <- inits.vtable)
+                  Option.iter inits.vtable ~f:(fun vt ->
+                      Ain.ain.strt.(struc.id).vtable <- vt))
                 else if String.equal f.name "0" then (
                   match analyze_initializer_function f.body struc.members with
                   | Some { is_empty = false; vars; vtable } ->
                       s.members <- vars;
-                      s.vtable <- vtable
+                      Option.iter vtable ~f:(fun vt ->
+                          Ain.ain.strt.(struc.id).vtable <- vt)
                   | _ ->
                       s.methods <- f :: s.methods;
                       let body =

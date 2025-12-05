@@ -175,6 +175,7 @@ module Struct = struct
     constructor : int;
     destructor : int;
     members : Variable.t array;
+    mutable vtable : int array;
   }
   [@@deriving show]
 
@@ -187,7 +188,8 @@ module Struct = struct
     let constructor = BR.int br in
     let destructor = BR.int br in
     let members = read_count_and_array br Variable.read in
-    { id; name; interfaces; constructor; destructor; members }
+    let vtable = [||] in
+    { id; name; interfaces; constructor; destructor; members; vtable }
 end
 
 module HLL = struct

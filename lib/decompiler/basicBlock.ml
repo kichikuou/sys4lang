@@ -698,6 +698,33 @@ let analyze ctx =
                   else emit_expression ctx e
               | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
               | _ -> push ctx e)
+          | obj, Deref (ObjRef (_, BinaryOp (ADD, Number 0l, Number index)))
+            -> (
+              match
+                (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr Any
+                  obj
+              with
+              | _, Ref (Struct s) -> (
+                  let fid = Ain.ain.strt.(s).vtable.(Int32.to_int_exn index) in
+                  let func = Ain.ain.func.(fid) in
+                  let e =
+                    Call
+                      ( Method (obj, func),
+                        reshape_args ctx (Ain.Function.arg_types func) args )
+                  in
+                  match func.return_type with
+                  | Void ->
+                      if
+                        n = 1
+                        && Option.exists (List.hd ctx.stack) ~f:(fun v ->
+                            Poly.(v = List.hd_exn args))
+                      then (
+                        ctx.stack <- List.tl_exn ctx.stack;
+                        push ctx (PropertySet (obj, func, List.hd_exn args)))
+                      else emit_expression ctx e
+                  | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
+                  | _ -> push ctx e)
+              | _ -> failwith "virtual call on non-struct")
           | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)
         else
           let func = Ain.ain.func.(n) in
