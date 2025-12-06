@@ -688,7 +688,63 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       Stack.pop_exn current_function |> ignore
 
     method print_struct_decl (struc : struct_t) =
-      self#println "class %s {" struc.struc.name;
+      if List.is_empty struc.struc.implementers then self#print_class_decl struc
+      else self#print_interface_decl struc
+
+    method private print_interface_decl (struc : struct_t) =
+      self#println "interface %s {" struc.struc.name;
+      (* Reconstruct interface methods by finding common signatures across all
+         implementing structs' vtables. *)
+      let vtables =
+        List.map struc.struc.implementers
+          ~f:(fun { struct_type; vtable_offset } ->
+            (Ain.ain.strt.(struct_type).vtable, vtable_offset))
+      in
+      let compare (f : Ain.Function.t) (f' : Ain.Function.t) =
+        String.equal (strip_class_name f.name) (strip_class_name f'.name)
+        && Poly.(f.return_type = f'.return_type)
+        && f.nr_args = f'.nr_args
+        &&
+        let rec loop i =
+          if i >= f.nr_args then true
+          else Poly.(f.vars.(i).type_ = f'.vars.(i).type_) && loop (i + 1)
+        in
+        loop 0
+      in
+      let rec loop i =
+        match vtables with
+        | (vtbl, offset) :: rest when offset + i < Array.length vtbl ->
+            let func = Ain.ain.func.(vtbl.(offset + i)) in
+            if
+              List.for_all rest ~f:(fun (vtbl', offset') ->
+                  offset' + i < Array.length vtbl'
+                  &&
+                  let func' = Ain.ain.func.(vtbl'.(offset' + i)) in
+                  compare func func')
+            then (
+              self#print_indent;
+              bprintf out "%a %s" self#pr_type func.return_type
+                (strip_class_name func.name);
+              self#println "(%a);"
+                (pr_param_list self#pr_vardecl)
+                (Ain.Function.args func);
+              loop (i + 1))
+            else ()
+        | _ -> ()
+      in
+      self#with_indent (fun () -> loop 0);
+      self#println "};"
+
+    method private print_class_decl (struc : struct_t) =
+      bprintf out "class %s" struc.struc.name;
+      if not (Array.is_empty struc.struc.interfaces) then (
+        bprintf out " implements ";
+        print_list ", "
+          (fun out (iface : Ain.Struct.interface) ->
+            print_string out Ain.ain.strt.(iface.struct_type).name)
+          out
+          (Array.to_list struc.struc.interfaces));
+      self#println " {";
       self#println "public:";
       self#with_indent (fun () ->
           List.iter struc.members ~f:(fun v ->

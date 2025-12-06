@@ -69,6 +69,7 @@ module Struct : sig
     destructor : int;
     members : Variable.t array;
     mutable vtable : int array;
+    mutable implementers : interface list;
   }
   [@@deriving show]
 end
