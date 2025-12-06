@@ -176,6 +176,7 @@ module Struct = struct
     destructor : int;
     members : Variable.t array;
     mutable vtable : int array;
+    mutable implementers : interface list;
   }
   [@@deriving show]
 
@@ -189,7 +190,17 @@ module Struct = struct
     let destructor = BR.int br in
     let members = read_count_and_array br Variable.read in
     let vtable = [||] in
-    { id; name; interfaces; constructor; destructor; members; vtable }
+    let implementers = [] in
+    {
+      id;
+      name;
+      interfaces;
+      constructor;
+      destructor;
+      members;
+      vtable;
+      implementers;
+    }
 end
 
 module HLL = struct
@@ -305,7 +316,16 @@ let readCODE br =
 let readFUNC br = read_count_and_array br Function.read
 let readGLOB br = read_count_and_array br Variable.read_global
 let readGSET br = read_count_and_array br InitVal.read
-let readSTRT br = read_count_and_array_with_index br Struct.read
+
+let readSTRT br =
+  let structs = read_count_and_array_with_index br Struct.read in
+  Array.iter structs ~f:(fun strt ->
+      Array.iter strt.interfaces ~f:(fun iface ->
+          structs.(iface.struct_type).implementers <-
+            { struct_type = strt.id; vtable_offset = iface.vtable_offset }
+            :: structs.(iface.struct_type).implementers));
+  structs
+
 let readMSG0 br = read_count_and_array br BR.sjis_string
 
 let readMSG1 br =
