@@ -245,6 +245,12 @@ let lvalue ctx page slot =
   | e, Void -> RefValue e
   | _, _ -> ObjRef (page, slot)
 
+let interface_value obj vofs =
+  match (obj, vofs) with
+  | Number -1l, Number 0l -> NullRef
+  | _, Void -> RefValue obj
+  | _, _ -> ObjRef (obj, vofs)
+
 let delegate_value obj func =
   match (obj, func) with
   | _, Number func_no ->
@@ -543,6 +549,12 @@ let is_null_in_this_branch ctx expr =
     | BinaryOp (EQUALE, (Option e | e), Number -1l) -> contains_expr expr e
     | _ -> false)
 
+let push_call_result ctx (return_type : Ain.type_t) e =
+  match return_type with
+  | Void -> emit_expression ctx e
+  | Ref (Int | Bool | LongInt | Float) | IFace _ -> pushl ctx [ e; Void ]
+  | _ -> push ctx e
+
 (* Analyzes a basic block. *)
 let analyze ctx =
   let terminator = ref None in
@@ -653,35 +665,25 @@ let analyze ctx =
     | NEW (struc, func) -> new_ ctx struc func
     | OBJSWAP type_ -> emit_expression ctx (objswap ctx type_)
     (* --- Control Flow --- *)
-    | CALLFUNC n -> (
+    | CALLFUNC n ->
         let func = Ain.ain.func.(n) in
         let args = pop_args ctx (Ain.Function.arg_types func) in
-        let e = Call (Function func, args) in
-        match func.return_type with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
+        push_call_result ctx func.return_type (Call (Function func, args))
     | CALLFUNC2 -> (
         match pop2 ctx with
-        | func, Number fnct -> (
+        | func, Number fnct ->
             let functype = determine_functype ctx fnct in
             let args = pop_args ctx (Ain.FuncType.arg_types functype) in
             let e = Call (FuncPtr (functype, func), args) in
-            match functype.return_type with
-            | Void -> emit_expression ctx e
-            | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-            | _ -> push ctx e)
+            push_call_result ctx functype.return_type e
         | a, b -> unexpected_stack "CALLFUNC2" (a :: b :: ctx.stack))
-    | PSEUDO_DG_CALL n -> (
+    | PSEUDO_DG_CALL n ->
         let dg_type = Ain.ain.delg.(n) in
         let args = pop_args ctx (Ain.FuncType.arg_types dg_type) in
         let delg = pop ctx in
-        let e = Call (Delegate (dg_type, delg), args) in
-        match dg_type.return_type with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
-    | CALLMETHOD n -> (
+        push_call_result ctx dg_type.return_type
+          (Call (Delegate (dg_type, delg), args))
+    | CALLMETHOD n ->
         if Ain.ain.vers >= 11 then
           let args = pop_n ctx n in
           match pop2 ctx with
@@ -702,8 +704,7 @@ let analyze ctx =
                     ctx.stack <- List.tl_exn ctx.stack;
                     push ctx (PropertySet (this, func, List.hd_exn args)))
                   else emit_expression ctx e
-              | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-              | _ -> push ctx e)
+              | _ -> push_call_result ctx func.return_type e)
           | ( obj,
               Deref
                 (ObjRef (_, BinaryOp (ADD, (Number 0l | Void), Number index))) )
@@ -744,42 +745,37 @@ let analyze ctx =
                     ctx.stack <- List.tl_exn ctx.stack;
                     push ctx (PropertySet (obj, func, List.hd_exn args)))
                   else emit_expression ctx e
-              | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-              | _ -> push ctx e)
+              | _ -> push_call_result ctx func.return_type e)
           | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)
         else
           let func = Ain.ain.func.(n) in
           let args = pop_args ctx (Ain.Function.arg_types func) in
           let this = pop ctx in
           let e = Call (Method (this, func), args) in
-          match func.return_type with
-          | Void -> emit_expression ctx e
-          | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-          | _ -> push ctx e)
-    | CALLHLL (lib_id, func_id, type_param) -> (
+          push_call_result ctx func.return_type e
+    | CALLHLL (lib_id, func_id, type_param) ->
         let lib = Ain.ain.hll0.(lib_id) in
         let func = lib.functions.(func_id) in
         let args = pop_args ctx (Ain.HLL.arg_types func) in
         let e = Call (HllFunc (lib.name, func), args) in
-        match Type.replace_hll_param func.return_type type_param with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
+        push_call_result ctx
+          (Type.replace_hll_param func.return_type type_param)
+          e
     | RETURN -> (
         match (ctx.func.return_type, take_stack ctx) with
         | Void, [] -> emit_statement ctx (Return None)
         | _, [ v ] -> emit_statement ctx (Return (Some v))
         | Ref (Int | Bool | LongInt | Float), [ slot; obj ] ->
             emit_statement ctx (Return (Some (Deref (lvalue ctx obj slot))))
+        | IFace _, [ vofs; obj ] ->
+            emit_statement ctx
+              (Return (Some (Deref (interface_value obj vofs))))
         | _, stack -> unexpected_stack "RETURN" stack)
-    | CALLSYS n -> (
+    | CALLSYS n ->
         let syscall = syscalls.(n) in
         let args = pop_args ctx syscall.arg_types in
         let e = Call (SysCall n, args) in
-        match syscall.return_type with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
+        push_call_result ctx syscall.return_type e
     | CALLONJUMP -> ()
     | SJUMP -> (
         match take_stack ctx with
@@ -1038,13 +1034,10 @@ let analyze ctx =
              ( ASSIGN,
                pageref ctx LocalPage local,
                Deref (pageref ctx StructPage memb) ))
-    | SH_STRUCTREF_CALLMETHOD_NO_PARAM (memb, func) -> (
+    | SH_STRUCTREF_CALLMETHOD_NO_PARAM (memb, func) ->
         let func = Ain.ain.func.(func) in
         let e = Call (Method (Deref (pageref ctx StructPage memb), func), []) in
-        match func.return_type with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
+        push_call_result ctx func.return_type e
     | SH_STRUCTREF2 (memb, slot) ->
         push ctx
           (Deref
@@ -1061,23 +1054,17 @@ let analyze ctx =
         let e = Deref (lvalue ctx e (Number slot1)) in
         let e = Deref (lvalue ctx e (Number slot2)) in
         push ctx e
-    | SH_STRUCTREF2_CALLMETHOD_NO_PARAM (memb, slot, func) -> (
+    | SH_STRUCTREF2_CALLMETHOD_NO_PARAM (memb, slot, func) ->
         let func = Ain.ain.func.(func) in
         let lhs =
           lvalue ctx (Deref (pageref ctx StructPage memb)) (Number slot)
         in
         let e = Call (Method (Deref lhs, func), []) in
-        match func.return_type with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
-    | THISCALLMETHOD_NOPARAM n -> (
+        push_call_result ctx func.return_type e
+    | THISCALLMETHOD_NOPARAM n ->
         let func = Ain.ain.func.(n) in
         let e = Call (Method (Page StructPage, func), []) in
-        match func.return_type with
-        | Void -> emit_expression ctx e
-        | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
-        | _ -> push ctx e)
+        push_call_result ctx func.return_type e
     | SH_GLOBAL_ASSIGN_IMM (var, value) ->
         let e = AssignOp (ASSIGN, pageref ctx GlobalPage var, Number value) in
         emit_expression ctx e
