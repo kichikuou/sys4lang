@@ -704,7 +704,7 @@ let analyze ctx =
                 (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr Any
                   obj
               with
-              | _, Ref (Struct s) -> (
+              | _, (Struct s | Ref (Struct s)) -> (
                   let fid = Ain.ain.strt.(s).vtable.(Int32.to_int_exn index) in
                   let func = Ain.ain.func.(fid) in
                   let e =
@@ -724,7 +724,10 @@ let analyze ctx =
                       else emit_expression ctx e
                   | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
                   | _ -> push ctx e)
-              | _ -> failwith "virtual call on non-struct")
+              | _, t ->
+                  failwith
+                    ("virtual call on non-struct type: " ^ Type.show_ain_type t)
+              )
           | obj, Deref (ObjRef (_, BinaryOp (ADD, Void, Number index))) -> (
               match
                 (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr Any
@@ -758,7 +761,10 @@ let analyze ctx =
                       else emit_expression ctx e
                   | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
                   | _ -> push ctx e)
-              | _ -> failwith "virtual call on non-interface")
+              | _, t ->
+                  failwith
+                    ("virtual call on non-interface type: "
+                   ^ Type.show_ain_type t))
           | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)
         else
           let func = Ain.ain.func.(n) in
