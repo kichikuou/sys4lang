@@ -118,7 +118,8 @@ let extract_array_dims_exn stmt vars =
 let extract_enum_values = function
   | Ast.Return (Some e) ->
       let rec extract = function
-        | Ast.TernaryOp (BinaryOp (EQUALE, _, Number n), String s, rest) ->
+        | Ast.TernaryOp (BinaryOp (EQUALE, _, EnumValue (_, n)), String s, rest)
+          ->
             (s, n) :: extract rest
         | String "" -> []
         | _ -> failwith "unexpected expression in enum stringifier"
@@ -247,7 +248,10 @@ let export ~print_addr decompiled ain_path write_to_file =
     if add_to_inc then sources := fname :: !sources;
     let fname_components = String.split fname ~on:'\\' in
     let unix_fname = String.concat ~sep:"/" fname_components in
-    let pr = new CodeGen.code_printer ~print_addr ~dbginfo unix_fname in
+    let pr =
+      new CodeGen.code_printer
+        ~print_addr ~dbginfo ~enums:decompiled.enums unix_fname
+    in
     f pr;
     write_to_file unix_fname pr#get_buffer
   in

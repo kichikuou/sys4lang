@@ -52,6 +52,7 @@ and expr =
   | Boolean of bool
   | Character of int32
   | Float of float
+  | EnumValue of int * int32
   | String of string
   | FuncAddr of Ain.Function.t
   | MemberPointer of int * int (* struct, slot *)
@@ -206,8 +207,8 @@ let subst expr e1 e2 =
     if Poly.(expr = e1) then e2
     else
       match expr with
-      | Page _ | Number _ | Boolean _ | Character _ | Float _ | String _
-      | FuncAddr _ | MemberPointer _ | Null | Void | New _ ->
+      | Page _ | Number _ | Boolean _ | Character _ | Float _ | EnumValue _
+      | String _ | FuncAddr _ | MemberPointer _ | Null | Void | New _ ->
           expr
       | BoundMethod (e, m) -> BoundMethod (rec_expr e, m)
       | Deref l -> Deref (rec_lvalue l)
@@ -252,6 +253,7 @@ let map_expr stmt ~f =
     | Boolean _ as expr -> f expr
     | Character _ as expr -> f expr
     | Float _ as expr -> f expr
+    | EnumValue _ as expr -> f expr
     | String _ as expr -> f expr
     | FuncAddr _ as expr -> f expr
     | MemberPointer _ as expr -> f expr
@@ -341,6 +343,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | Boolean _ -> ()
     | Character _ -> ()
     | Float _ -> ()
+    | EnumValue _ -> ()
     | String _ -> ()
     | FuncAddr _ -> ()
     | MemberPointer _ -> ()

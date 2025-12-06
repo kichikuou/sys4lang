@@ -40,7 +40,12 @@ val create_debug_info : unit -> debug_info
 type enum_t = { name : string; mutable values : (string * int32) list }
 type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
-class code_printer : ?print_addr:bool -> ?dbginfo:debug_info -> string -> object
+class code_printer :
+  ?print_addr:bool ->
+  ?dbginfo:debug_info ->
+  ?enums:enum_t array ->
+  string ->
+object
   method get_buffer : Buffer.t
   method print_newline : unit
   method print_function : ?as_lambda:bool -> function_t -> unit

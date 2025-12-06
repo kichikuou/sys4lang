@@ -119,7 +119,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           let obj', ot = self#analyze_expr Any obj
           and key', kt = self#analyze_expr Int key in
           match (auto_deref ot, auto_deref kt) with
-          | Array t, (Int | LongInt | Char) -> (ArrayRef (obj', key'), t)
+          | Array t, (Int | LongInt | Char | Enum _) ->
+              (ArrayRef (obj', key'), t)
           | Struct s, Int -> (
               match key' with
               | Number n ->
@@ -152,10 +153,12 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | (StructMember struc as t), _ ->
               (MemberPointer (struc, Int32.to_int_exn n), t)
           | IMainSystem, 0l -> (Null, IMainSystem)
+          | Enum enum, _ -> (EnumValue (enum, n), expected)
           | _ -> (e, Int))
       | Boolean _ as e -> (e, Bool)
       | Character _ as e -> (e, Char)
       | Float _ as e -> (e, Float)
+      | EnumValue (enum, _) as e -> (e, Enum enum)
       | String _ as e -> (e, String)
       | FuncAddr _ -> failwith "cannot happen"
       | MemberPointer _ -> failwith "cannot happen"
@@ -285,11 +288,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       let t =
         match (insn, auto_deref et) with
         | FTOI, Float -> Int
-        | ITOF, (Int | LongInt | Bool) -> Float
-        | ITOLI, (Int | LongInt | Bool) -> LongInt
-        | ITOB, (Int | LongInt | Bool) -> Bool
+        | ITOF, (Int | LongInt | Bool | Enum _) -> Float
+        | ITOLI, (Int | LongInt | Bool | Enum _) -> LongInt
+        | ITOB, (Int | LongInt | Bool | Enum _) -> Bool
         | STOI, String -> Int
-        | I_STRING, (Int | LongInt | Bool) -> String
+        | I_STRING, (Int | LongInt | Bool | Enum _) -> String
         | (INV | COMPL), Int -> Int
         | F_INV, Float -> Float
         | NOT, t -> t
@@ -370,7 +373,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | (Delegate dtl | Ref (Delegate dtl)), Delegate dtr, _ ->
           Type.TypeVar.unify dtl dtr;
           (AssignOp (insn, lval', rhs'), lt)
-      | (Int | Bool | LongInt | Char), (Int | Bool | LongInt | Char), _
+      | ( (Int | Bool | LongInt | Char | Enum _),
+          (Int | Bool | LongInt | Char | Enum _),
+          _ )
       | Float, Float, _
       | FuncType _, Int, _
       | _, _, Instructions.S_ASSIGN

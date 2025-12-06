@@ -240,7 +240,7 @@ let debug_info_to_json dbginfo =
 type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
 class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
-  (file : string) =
+  ?(enums : enum_t array = [||]) (file : string) =
   object (self)
     val out = Buffer.create 4096
     val mutable line = 1
@@ -296,6 +296,13 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | Boolean b -> print_string out (if b then "true" else "false")
       | Character c -> pr_char out (Int32.to_int_exn c)
       | Float x -> print_string out (format_float x)
+      | EnumValue (e, n) -> (
+          match
+            List.find enums.(e).values ~f:(fun (_, value) ->
+                Int32.equal value n)
+          with
+          | Some (name, _) -> bprintf out "%s::%s" enums.(e).name name
+          | None -> bprintf out "%ld" n)
       | String s -> bprintf out "\"%s\"" (escape_dq s)
       | FuncAddr f -> bprintf out "&%s" f.name
       | MemberPointer (struc, slot) ->
