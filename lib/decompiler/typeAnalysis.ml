@@ -152,6 +152,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | (StructMember struc as t), _ ->
               (MemberPointer (struc, Int32.to_int_exn n), t)
           | IMainSystem, 0l -> (Null, IMainSystem)
+          | Enum _, _ -> (e, expected)
           | _ -> (e, Int))
       | Boolean _ as e -> (e, Bool)
       | Character _ as e -> (e, Char)
@@ -376,6 +377,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | _, _, Instructions.S_ASSIGN
       | _, _, SR_ASSIGN ->
           let rhs' = remove_cast lt rhs' in
+          (AssignOp (insn, lval', rhs'), lt)
+      | Enum e1, Enum e2, ASSIGN when e1 = e2 ->
           (AssignOp (insn, lval', rhs'), lt)
       | Ref _, (Ref _ | Array _ | Struct _ | String), (ASSIGN | R_ASSIGN) ->
           (AssignOp (PSEUDO_REF_ASSIGN, lval', rhs'), lt)
