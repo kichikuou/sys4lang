@@ -681,7 +681,15 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       Stack.pop_exn current_function |> ignore
 
     method print_struct_decl (struc : struct_t) =
-      self#println "class %s {" struc.struc.name;
+      bprintf out "class %s" struc.struc.name;
+      if not (Array.is_empty struc.struc.interfaces) then (
+        bprintf out " implements ";
+        print_list ", "
+          (fun out (iface : Ain.Struct.interface) ->
+            print_string out Ain.ain.strt.(iface.struct_type).name)
+          out
+          (Array.to_list struc.struc.interfaces));
+      self#println " {";
       self#println "public:";
       self#with_indent (fun () ->
           List.iter struc.members ~f:(fun v ->
