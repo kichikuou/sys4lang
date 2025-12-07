@@ -586,6 +586,12 @@ let analyze ctx =
         | DerefRef (PageRef _)
         | Option _ ->
             (* Can be discarded safely *) ()
+        | AssignOp
+            ( ASSIGN,
+              PageRef (LocalPage, { type_ = Struct _ | Ref _ | IFace _; _ }),
+              Number -1l )
+          when Ain.ain.vers >= 12 ->
+            (* .LOCALDELETE, ignore *) ()
         | e when is_null_in_this_branch ctx e -> ()
         | e when List.is_empty ctx.stack -> emit_expression ctx e
         | (AssignOp _ | Call _) as e ->
