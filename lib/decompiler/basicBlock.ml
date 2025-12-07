@@ -252,13 +252,13 @@ let rec interface_value obj vofs =
       let b = interface_value b1 b2 in
       match (c1, b) with
       | ( BinaryOp (EQUALE, Option (InterfaceCast _ as cast), Number -1l),
-          Deref (RefValue o) )
+          DerefRef (RefValue o) )
         when cast == o ->
           BinaryOp (PSEUDO_NULL_COALESCE, cast, a)
       | _ -> TernaryOp (c1, a, b))
-  | Number -1l, Number 0l -> Deref NullRef
-  | _, Void -> Deref (RefValue obj)
-  | _, _ -> Deref (ObjRef (obj, vofs))
+  | Number -1l, Number 0l -> DerefRef NullRef
+  | _, Void -> DerefRef (RefValue obj)
+  | _, _ -> DerefRef (ObjRef (obj, vofs))
 
 let delegate_value obj func =
   match (obj, func) with

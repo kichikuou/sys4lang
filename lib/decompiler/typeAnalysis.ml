@@ -124,8 +124,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           match self#analyze_lvalue lval with
           | lval', Ref t when Type.is_fat (Ref t) -> (RefRef lval', t)
           | lval', FatRef t -> (RefRef lval', t)
+          | lval', (IFace _ as t) -> (RefRef lval', t)
           | _, t ->
-              Printf.failwithf "REFREF with non-reference type %s"
+              Printf.failwithf "REFREF with non-reference/interface type %s"
                 (show_ain_type t) ())
       | IncDec (fix, op, lval) ->
           let l, t = self#analyze_lvalue lval in
@@ -136,7 +137,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           match (auto_deref ot, auto_deref kt) with
           | Array t, (Int | LongInt | Char | Enum _) ->
               (ArrayRef (obj', key'), t)
-          | Struct s, Int -> (
+          | (Struct s | IFace s), Int -> (
               match key' with
               | Number n ->
                   let memb = Ain.ain.strt.(s).members.(Int32.to_int_exn n) in
@@ -150,6 +151,53 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (RefValue expr', t)
       | ArrayRef _ | MemberRef _ -> failwith "cannot happen"
 
+    method private analyze_interface_value iface =
+      function
+      | NullRef -> Null
+      | RefValue obj ->
+          let obj', _ = self#analyze_expr Any obj in
+          obj'
+      | ObjRef (obj, Number n) -> (
+          match self#analyze_expr Any obj with
+          | obj', (Struct sno | Ref (Struct sno)) ->
+              let struc = Ain.ain.strt.(sno) in
+              let n = Int32.to_int_exn n in
+              if
+                not
+                  (Array.exists struc.interfaces ~f:(fun i ->
+                       i.struct_type = iface && i.vtable_offset = n))
+              then
+                Printf.failwithf
+                  "analyze_interface_value: %s cannot be converted to %s"
+                  struc.name Ain.ain.strt.(iface).name ();
+              obj'
+          | _, t ->
+              Printf.failwithf
+                "analyze_interface_value: expected struct, got %s"
+                (show_ain_type t) ())
+      | ObjRef (InterfaceCast (iface', obj), Void) when iface = iface' ->
+          let obj', _ = self#analyze_expr Any obj in
+          obj'
+      | ObjRef
+          ( TernaryOp
+              ( (BinaryOp (EQUALE, Option obj, Number -1l) as cond),
+                Number -1l,
+                expr ),
+            TernaryOp (cond', Number 0l, Void) )
+        when contains_expr expr obj && phys_equal cond cond' ->
+          let expr, _ = self#analyze_expr Any (subst expr obj (Option obj)) in
+          BinaryOp (PSEUDO_NULL_COALESCE, expr, Null)
+      | RefRef lval -> (
+          match self#analyze_lvalue lval with
+          | lval', IFace iface' when iface = iface' -> DerefRef lval'
+          | _, t ->
+              Printf.failwithf "analyze_interface_value: expected %s, got %s"
+                (show_ain_type (IFace iface))
+                (show_ain_type t) ())
+      | PageRef (StructPage, _) -> Page StructPage
+      | lval ->
+          Printf.failwithf "analyze_interface_value: %s" (show_lvalue lval) ()
+
     method analyze_expr expected =
       function
       | Page StructPage as e -> (e, Ref (Struct (Option.value_exn struc).id))
@@ -160,6 +208,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | Bool, 1l -> (Boolean true, Bool)
           | Char, _ -> (Character n, Char)
           | Ref _, -1l -> (Null, Ref Any)
+          | IFace _, -1l -> (Null, expected)
           | (FuncType _ as f), 0l -> (Null, f)
           | (FuncType ftv as f), n ->
               let func = Ain.ain.func.(Int32.to_int_exn n) in
@@ -181,12 +230,18 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           let e', _ = self#analyze_expr Any e in
           ( BoundMethod (e', f),
             Delegate (TypeVar.create (Type (Ain.Function.to_type f))) )
-      | Deref lval ->
-          let lval', t = self#analyze_lvalue lval in
-          (Deref lval', t)
-      | DerefRef lval ->
-          let lval', t = self#analyze_lvalue lval in
-          (DerefRef lval', Ref t)
+      | Deref lval -> (
+          match expected with
+          | IFace iface -> (self#analyze_interface_value iface lval, expected)
+          | _ ->
+              let lval', t = self#analyze_lvalue lval in
+              (Deref lval', t))
+      | DerefRef lval -> (
+          match expected with
+          | IFace iface -> (self#analyze_interface_value iface lval, expected)
+          | _ ->
+              let lval', t = self#analyze_lvalue lval in
+              (DerefRef lval', Ref t))
       | Null -> (
           match expected with
           | Delegate _ -> (Null, expected)
@@ -424,6 +479,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (AssignOp (insn, lval', rhs'), lt)
       | Ref _, (Ref _ | Array _ | Struct _ | String), (ASSIGN | R_ASSIGN) ->
           (AssignOp (PSEUDO_REF_ASSIGN, lval', rhs'), lt)
+      | IFace _, Ref Void, R_ASSIGN -> (AssignOp (insn, lval', rhs'), lt)
+      | IFace i, IFace i', R_ASSIGN when i = i' ->
+          (AssignOp (insn, lval', rhs'), lt)
+      | Ref (Struct sno), IFace ino, ASSIGN when sno = ino ->
+          (AssignOp (insn, lval', rhs'), lt)
       | Array _, Array _, PSEUDO_ARRAY_ASSIGN ->
           (AssignOp (insn, lval', rhs'), lt)
       | _ ->
