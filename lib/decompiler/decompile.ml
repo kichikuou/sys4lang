@@ -22,7 +22,7 @@ let rec decompile_function (f : CodeSection.function_t) =
     BasicBlock.create f
     |> BasicBlock.generate_var_decls f.func
     |> ControlFlow.analyze
-    |> TypeAnalysis.analyze_function f.func f.struc
+    |> (new TypeAnalysis.analyzer f.func f.struc)#analyze_statement
     |> Transform.expand_else_scope |> Transform.rename_labels
     |> Transform.recover_loop_initializer
     |> Transform.remove_implicit_array_free
@@ -55,7 +55,7 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   |> (fun stmt ->
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
-  |> TypeAnalysis.analyze_function f.func f.struc
+  |> (new TypeAnalysis.analyzer f.func f.struc)#analyze_statement
   |> Transform.expand_else_scope |> Transform.rename_labels
   |> Transform.recover_loop_initializer |> Transform.remove_implicit_array_free
   |> Transform.remove_array_free_for_dead_arrays
