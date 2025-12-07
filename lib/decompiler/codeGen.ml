@@ -318,7 +318,11 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
             expr method_name
       | Deref lval -> self#pr_lvalue prec out lval
       | DerefRef lval -> self#pr_lvalue prec out lval
-      | New n -> bprintf out "new %s" Ain.ain.strt.(n).name
+      | New { struc; func = -1; args = [] } ->
+          bprintf out "new %s" Ain.ain.strt.(struc).name
+      | New { struc; args; _ } ->
+          bprintf out "new %s(%a)" Ain.ain.strt.(struc).name self#pr_arg_list
+            args
       | DerefStruct (_, expr) -> self#pr_expr prec out expr
       | Page StructPage -> print_string out "this"
       | Null -> print_string out "NULL"

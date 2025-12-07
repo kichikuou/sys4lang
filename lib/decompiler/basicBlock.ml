@@ -296,13 +296,6 @@ let sr_ref2 ctx n =
     | expr :: stack -> DerefStruct (n, expr) :: stack
     | stack -> unexpected_stack "sr_ref2" stack)
 
-let new_ ctx struc _func =
-  if Ain.ain.vers > 8 then push ctx (New struc)
-  else
-    update_stack ctx (function
-      | Number struc :: stack -> New (Int32.to_int_exn struc) :: stack
-      | stack -> unexpected_stack "NEW" stack)
-
 let unary_op ctx op =
   update_stack ctx (function
     | v :: stack -> UnaryOp (op, v) :: stack
@@ -481,6 +474,18 @@ let pop_args ctx vartypes =
         aux (arg :: acc) ts
   in
   aux [] (List.rev vartypes)
+
+let new_ ctx struc func =
+  if Ain.ain.vers < 11 then
+    update_stack ctx (function
+      | Number struc :: stack ->
+          New { struc = Int32.to_int_exn struc; func = -1; args = [] } :: stack
+      | stack -> unexpected_stack "NEW" stack)
+  else if func = -1 then push ctx (New { struc; func = -1; args = [] })
+  else
+    let f = Ain.ain.func.(func) in
+    let args = pop_args ctx (Ain.Function.arg_types f) in
+    push ctx (New { struc; func; args })
 
 let rec reshape_args ctx (vartypes : Ain.type_t list) args =
   match (vartypes, args) with

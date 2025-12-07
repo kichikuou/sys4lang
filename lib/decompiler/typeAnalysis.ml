@@ -177,7 +177,13 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | Option e ->
           let e, t = self#analyze_expr expected e in
           (Option e, t)
-      | New n as e -> (e, Ref (Struct n))
+      | New { struc; func = -1; args = [] } as e -> (e, Ref (Struct struc))
+      | New { struc; func; args } -> (
+          match
+            self#analyze_expr Void (Call (Function Ain.ain.func.(func), args))
+          with
+          | Call (_, args), _ -> (New { struc; func; args }, Ref (Struct struc))
+          | _ -> failwith "cannot happen")
       | DerefStruct (struc, expr) ->
           let expr, _ = self#analyze_expr (Struct struc) expr in
           (DerefStruct (struc, expr), Struct struc)

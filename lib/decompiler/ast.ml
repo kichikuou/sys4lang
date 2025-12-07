@@ -61,7 +61,7 @@ and expr =
   | Null
   | Void
   | Option of expr
-  | New of int
+  | New of { struc : int; func : int; args : expr list }
   | DerefStruct of int * expr
   | UnaryOp of Instructions.instruction * expr
   | BinaryOp of Instructions.instruction * expr * expr
