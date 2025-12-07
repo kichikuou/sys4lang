@@ -382,6 +382,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (AssignOp (insn, lval', rhs'), lt)
       | Ref _, (Ref _ | Array _ | Struct _ | String), (ASSIGN | R_ASSIGN) ->
           (AssignOp (PSEUDO_REF_ASSIGN, lval', rhs'), lt)
+      | IFace _, Ref Void, R_ASSIGN -> (AssignOp (insn, lval', rhs'), lt)
       | _ ->
           Stdio.eprintf "left type:  %s\nright type: %s\nop: %s\nexpr: %s"
             (show_ain_type lt) (show_ain_type rt)
