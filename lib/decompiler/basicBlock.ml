@@ -43,7 +43,14 @@ type 'a basic_block = {
 
 type t = fragment basic_block [@@deriving show { with_path = false }]
 
+let ( == ) = phys_equal
 let negate = function UnaryOp (NOT, e) -> e | e -> UnaryOp (NOT, e)
+
+let are_negations e1 e2 =
+  match (e1, e2) with
+  | UnaryOp (NOT, e1), e2 when e1 == e2 -> true
+  | e1, UnaryOp (NOT, e2) when e1 == e2 -> true
+  | _ -> false
 
 let branch_target = function
   | JUMP addr -> Some addr
@@ -129,6 +136,13 @@ let make_basic_blocks func_end_addr code =
   in
   aux [] code
 
+type predecessor = {
+  condition : expr list;
+  stack : expr list;
+  stmts : Ast.statement loc list;
+}
+[@@deriving show { with_path = false }]
+
 type analyze_context = {
   func : Ain.Function.t;
   struc : Ain.Struct.t option;
@@ -138,6 +152,8 @@ type analyze_context = {
   mutable end_address : int;
   mutable stack : expr list;
   mutable stmts : statement loc list;
+  mutable condition : expr list;
+  predecessors : (int, predecessor basic_block list) Hashtbl.t;
 }
 
 let fetch_instruction ctx =
@@ -637,7 +653,7 @@ let analyze ctx =
                   if
                     n = 1
                     && Option.exists (List.hd ctx.stack) ~f:(fun v ->
-                        Poly.(v = List.hd_exn args))
+                        v == List.hd_exn args)
                   then (
                     ctx.stack <- List.tl_exn ctx.stack;
                     push ctx (PropertySet (this, func, List.hd_exn args)))
@@ -1110,120 +1126,209 @@ let analyze ctx =
     take_stack ctx,
     take_stmts ctx )
 
-let rec analyze_basic_blocks ctx stack = function
-  | [] ->
-      List.map stack ~f:(fun bb ->
-          match bb.code with
-          | b, [], ss -> { bb with code = (b, ss) }
-          | _ ->
-              Printf.failwithf "non-empty stack in analyzed basic block: %s"
-                ([%show:
-                   (terminator loc * expr list * statement loc list) basic_block]
-                   bb)
-                ())
-      |> List.rev
-  | bb :: rest ->
-      ctx.instructions <- bb.code;
-      ctx.address <-
-        (match List.hd ctx.stmts with None -> bb.addr | Some s -> s.end_addr);
-      ctx.end_address <- bb.end_addr;
-      let fragment = analyze ctx in
-      let stack = { bb with code = fragment } :: stack in
-      reduce ctx stack rest
+let add_predecessor ctx addr predecessor =
+  assert (ctx.end_address <= addr);
+  Hashtbl.add_multi ctx.predecessors ~key:addr ~data:predecessor
 
-and reduce ctx stack rest =
-  assert (List.is_empty ctx.stmts);
-  match stack with
-  (* && operator *)
-  | { addr = label1; end_addr; code = { txt = Seq; _ }, [ Number 0l ], []; _ }
-    :: { code = { txt = Jump label2; _ }, [ Number 1l ], []; _ }
-    :: { code = { txt = Branch (label1', rhs); _ }, [], []; _ }
-    :: ({ code = { txt = Branch (label1'', lhs); _ }, estack, stmts; _ } as top)
-    :: stack'
-    when label1 = label1' && label1 = label1'' && label2 = end_addr -> (
-      match rest with
-      | bb' :: rest' ->
-          let bbs =
-            { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
-          in
-          analyze_basic_blocks
-            {
-              ctx with
-              stack = BinaryOp (PSEUDO_LOGAND, lhs, rhs) :: estack;
-              stmts;
-            }
-            stack' bbs
-      | [] -> failwith "unexpected end of function")
-  (* || operator *)
-  | { addr = label1; end_addr; code = { txt = Seq; _ }, [ Number 1l ], []; _ }
-    :: { code = { txt = Jump label2; _ }, [ Number 0l ], []; _ }
-    :: { code = { txt = Branch (label1', rhs); _ }, [], []; _ }
-    :: ({ code = { txt = Branch (label1'', lhs); _ }, estack, stmts; _ } as top)
-    :: stack'
-    when label1 = label1' && label1 = label1'' && label2 = end_addr -> (
-      match rest with
-      | bb' :: rest' ->
-          let bbs =
-            { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
-          in
-          analyze_basic_blocks
-            {
-              ctx with
-              stack = BinaryOp (PSEUDO_LOGOR, negate lhs, negate rhs) :: estack;
-              stmts;
-            }
-            stack' bbs
-      | [] -> failwith "unexpected end of function")
+let replace_top2_predecessors ctx addr predecessor =
+  Hashtbl.update ctx.predecessors addr ~f:(function
+    | Some (_ :: _ :: rest) -> predecessor :: rest
+    | Some _ -> Printf.failwithf "only one predecessor at address %d" addr ()
+    | None -> Printf.failwithf "no predecessors at address %d" addr ())
+
+let merge_predecessors (p1 : predecessor basic_block)
+    (p2 : predecessor basic_block) =
+  match (p1.code, p2.code) with
   (* ?: operator *)
-  | { addr = label1; end_addr; code = { txt = Seq; _ }, [ c ], []; _ }
-    :: { code = { txt = Jump label2; _ }, [ b ], []; _ }
-    :: ({ code = { txt = Branch (label1', a); _ }, estack, stmts; _ } as top)
-    :: stack'
-    when label1 = label1' && label2 = end_addr ->
-      let top' =
+  | ( { condition = c1 :: cs1; stack = e1 :: es1; _ },
+      { condition = c2 :: cs2; stack = e2 :: es2; _ } )
+    when are_negations c1 c2 && cs1 == cs2 && es1 == es2
+         && p1.code.stmts == p2.code.stmts ->
+      {
+        p1 with
+        code =
+          {
+            condition = cs1;
+            stack = TernaryOp (c1, e1, e2) :: es1;
+            stmts = p1.code.stmts;
+          };
+      }
+  (* && or || *)
+  | { condition = c1 :: cs1; _ }, { condition = c2 :: c1' :: cs2; _ }
+    when are_negations c1 c1' && cs1 == cs2
+         && p1.code.stack == p2.code.stack
+         && p1.code.stmts == p2.code.stmts ->
+      {
+        p1 with
+        code =
+          { p1.code with condition = BinaryOp (PSEUDO_LOGOR, c1, c2) :: cs1 };
+      }
+  (* && operator *)
+  | ( { condition = c2 :: c1 :: cs1; stack = Number 1l :: es1; _ },
+      {
+        condition = BinaryOp (PSEUDO_LOGOR, c1', c2') :: cs2;
+        stack = Number 0l :: es2;
+        _;
+      } )
+    when are_negations c1 c1' && are_negations c2 c2' && cs1 == cs2
+         && es1 == es2
+         && p1.code.stmts == p2.code.stmts ->
+      {
+        p1 with
+        code =
+          {
+            condition = cs1;
+            stack = BinaryOp (PSEUDO_LOGAND, c1, c2) :: es1;
+            stmts = p1.code.stmts;
+          };
+      }
+  (* || operator *)
+  | ( { condition = c2 :: c1 :: cs1; stack = Number 0l :: es1; _ },
+      {
+        condition = BinaryOp (PSEUDO_LOGOR, c1', c2') :: cs2;
+        stack = Number 1l :: es2;
+        _;
+      } )
+    when are_negations c1 c1' && are_negations c2 c2' && cs1 == cs2
+         && es1 == es2
+         && p1.code.stmts == p2.code.stmts ->
+      {
+        p1 with
+        code =
+          {
+            condition = cs1;
+            stack = BinaryOp (PSEUDO_LOGOR, c1', c2') :: es1;
+            stmts = p1.code.stmts;
+          };
+      }
+  | _ ->
+      Printf.failwithf "cannot merge predecessors:\npred1 = %s\npred2 = %s"
+        ([%show: predecessor basic_block] p1)
+        ([%show: predecessor basic_block] p2)
+        ()
+
+let rec analyze_basic_blocks ctx acc = function
+  | [] -> List.rev acc
+  | bb :: rest -> (
+      let pred : predecessor basic_block =
+        match Hashtbl.find_and_remove ctx.predecessors bb.addr with
+        | None ->
+            {
+              bb with
+              code = { condition = []; stack = []; stmts = [] };
+              addr =
+                (match List.hd ctx.stmts with
+                | None -> bb.addr
+                | Some s -> s.end_addr);
+            }
+        | Some preds ->
+            List.reduce_exn preds ~f:(fun p1 p2 -> merge_predecessors p2 p1)
+      in
+      let bb =
         {
-          top with
-          end_addr;
-          code = (seq_terminator, TernaryOp (a, b, c) :: estack, stmts);
+          bb with
+          addr = pred.addr;
+          labels = pred.labels;
+          nr_jump_srcs = pred.nr_jump_srcs;
         }
       in
-      reduce ctx (top' :: stack') rest
-  (* ?: operator with type coercion *)
-  | {
-      addr = label1;
-      end_addr = label2';
-      code = { txt = Jump label3; _ }, [ c ], [];
-      _;
-    }
-    :: { code = { txt = Jump label2; _ }, [ b ], []; _ }
-    :: ({ code = { txt = Branch (label1', a); _ }, estack, stmts; _ } as top)
-    :: stack'
-    when label1 = label1' && label2 = label2' && label3 = label2 + 2 -> (
-      match rest with
-      | { code = [ { txt = ITOF; _ } ]; _ } :: rest ->
-          let top' =
+      ctx.condition <- pred.code.condition;
+      ctx.stack <- pred.code.stack;
+      ctx.stmts <- pred.code.stmts;
+      ctx.instructions <- bb.code;
+      ctx.address <- bb.addr;
+      ctx.end_address <- bb.end_addr;
+      match analyze ctx with
+      | term, [], stmts ->
+          let acc = { bb with code = (term, stmts) } :: acc in
+          reduce ctx acc rest
+      | { txt = Branch (addr, cond); _ }, stack, stmts ->
+          add_predecessor ctx addr
             {
-              top with
-              end_addr = label3;
-              code =
-                ( seq_terminator,
-                  TernaryOp (a, UnaryOp (ITOF, b), c) :: estack,
-                  stmts );
-            }
-          in
-          reduce ctx (top' :: stack') rest
-      | _ -> failwith "not implemented")
-  | ({ code = { txt = Seq; _ }, (_ :: _ as estack), stmts; _ } as top) :: stack'
-    -> (
-      match rest with
-      | bb' :: rest' ->
-          let bbs =
-            { top with code = bb'.code; end_addr = bb'.end_addr } :: rest'
-          in
-          analyze_basic_blocks { ctx with stack = estack; stmts } stack' bbs
-      | [] -> failwith "unexpected end of function")
-  | stack' ->
-      analyze_basic_blocks { ctx with stack = []; stmts = [] } stack' rest
+              pred with
+              code = { condition = negate cond :: ctx.condition; stack; stmts };
+            };
+          add_predecessor ctx bb.end_addr
+            {
+              pred with
+              code = { condition = cond :: ctx.condition; stack; stmts };
+            };
+          reduce ctx acc rest
+      | { txt = Jump addr; _ }, stack, stmts ->
+          add_predecessor ctx addr
+            { pred with code = { condition = ctx.condition; stack; stmts } };
+          reduce ctx acc rest
+      | { txt = Seq; _ }, stack, stmts ->
+          add_predecessor ctx bb.end_addr
+            { pred with code = { condition = ctx.condition; stack; stmts } };
+          reduce ctx acc rest
+      | _, _ :: _, _ -> failwith "cannot reduce: unexpected non-empty stack")
+
+and reduce ctx acc rest =
+  assert (List.is_empty ctx.stmts);
+  let predecessors =
+    match rest with
+    | [] -> None
+    | bb :: _ ->
+        Option.bind (Hashtbl.find ctx.predecessors bb.addr) ~f:(function
+          | pred1 :: pred2 :: _ -> Some (pred1, pred2)
+          | _ -> None)
+  in
+  match (acc, predecessors) with
+  (* && operator *)
+  | ( { code = { txt = Branch (label1', rhs); _ }, []; _ }
+      :: ({ code = { txt = Branch (label1'', lhs); _ }, stmts; _ } as top)
+      :: stack',
+      Some
+        ( ({ code = { stack = [ Number 0l ]; stmts = []; condition; _ }; _ } as
+           pred1),
+          ({ code = { stack = [ Number 1l ]; stmts = []; _ }; _ } as pred2) ) )
+    when pred1.addr = label1' && pred1.addr = label1''
+         && condition == pred2.code.condition ->
+      replace_top2_predecessors ctx (List.hd_exn rest).addr
+        {
+          top with
+          end_addr = pred1.end_addr;
+          code =
+            { condition; stack = [ BinaryOp (PSEUDO_LOGAND, lhs, rhs) ]; stmts };
+        };
+      analyze_basic_blocks ctx stack' rest
+  (* || operator *)
+  | ( { code = { txt = Branch (label1', rhs); _ }, []; _ }
+      :: ({ code = { txt = Branch (label1'', lhs); _ }, stmts; _ } as top)
+      :: stack',
+      Some
+        ( ({ code = { stack = [ Number 1l ]; stmts = []; condition; _ }; _ } as
+           pred1),
+          ({ code = { stack = [ Number 0l ]; stmts = []; _ }; _ } as pred2) ) )
+    when pred1.addr = label1' && pred1.addr = label1''
+         && condition == pred2.code.condition ->
+      replace_top2_predecessors ctx (List.hd_exn rest).addr
+        {
+          top with
+          end_addr = pred1.end_addr;
+          code =
+            {
+              condition;
+              stack = [ BinaryOp (PSEUDO_LOGOR, negate lhs, negate rhs) ];
+              stmts;
+            };
+        };
+      analyze_basic_blocks ctx stack' rest
+  (* ?: operator *)
+  | ( ({ code = { txt = Branch (label1', a); _ }, stmts; _ } as top) :: stack',
+      Some
+        ( ({ code = { stack = [ c ]; stmts = []; condition; _ }; _ } as pred1),
+          ({ code = { stack = [ b ]; stmts = []; _ }; _ } as pred2) ) )
+    when pred1.addr = label1' && condition == pred2.code.condition ->
+      replace_top2_predecessors ctx (List.hd_exn rest).addr
+        {
+          top with
+          end_addr = pred1.end_addr;
+          code = { condition; stack = [ TernaryOp (a, b, c) ]; stmts };
+        };
+      reduce ctx stack' rest
+  | stack', _ -> analyze_basic_blocks ctx stack' rest
 
 let rec replace_delegate_calls acc = function
   | { addr = addr1; txt = DG_CALLBEGIN dg_type; _ }
@@ -1251,6 +1356,8 @@ let create (f : CodeSection.function_t) =
          end_address = -1;
          stack = [];
          stmts = [];
+         condition = [];
+         predecessors = Hashtbl.create (module Int);
        }
        []
 
