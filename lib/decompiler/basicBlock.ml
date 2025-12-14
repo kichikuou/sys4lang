@@ -254,6 +254,29 @@ let convert_stack_top_to_delegate ctx =
 
 let ref_ ctx =
   update_stack ctx (function
+    | TernaryOp (cond, l12, l22) :: TernaryOp (cond', l11, l21) :: stack
+      when cond == cond' ->
+        (match l21 with
+        | BinaryOp (PSEUDO_COMMA, assign, l21) ->
+            (* HACK for debug::detail::CDebugFileDataList@GetModeFlag in Ixseal *)
+            TernaryOp
+              ( cond,
+                Deref (lvalue ctx l11 l12),
+                BinaryOp (PSEUDO_COMMA, assign, Deref (lvalue ctx l21 l22)) )
+        | _ ->
+            TernaryOp
+              (cond, Deref (lvalue ctx l11 l12), Deref (lvalue ctx l21 l22)))
+        :: stack
+    (* soundfiltereditor::detail::CMultiCombFilter@WriteEX in Ixseal *)
+    | BinaryOp (PSEUDO_NULL_COALESCE, l12, l22)
+      :: BinaryOp
+           (PSEUDO_NULL_COALESCE, l11, BinaryOp (PSEUDO_COMMA, assign, l21))
+      :: stack ->
+        BinaryOp
+          ( PSEUDO_NULL_COALESCE,
+            Deref (lvalue ctx l11 l12),
+            BinaryOp (PSEUDO_COMMA, assign, Deref (lvalue ctx l21 l22)) )
+        :: stack
     | slot :: page :: stack -> Deref (lvalue ctx page slot) :: stack
     | stack -> unexpected_stack "ref" stack)
 
@@ -505,6 +528,11 @@ let sh_sref_ne_str0 ctx page slot strno =
     (BinaryOp
        (S_NOTE, Deref (pageref ctx page slot), String Ain.ain.str0.(strno)))
 
+let is_null_in_this_branch ctx expr =
+  List.exists ctx.condition ~f:(function
+    | BinaryOp (EQUALE, (Option e | e), Number -1l) -> contains_expr expr e
+    | _ -> false)
+
 (* Analyzes a basic block. *)
 let analyze ctx =
   let terminator = ref None in
@@ -519,8 +547,12 @@ let analyze ctx =
     | PUSH n -> push ctx (Number n)
     | POP | DG_POP -> (
         match pop ctx with
-        | Void | Number _ | Page _ | Deref (PageRef _) ->
+        | Void | Number _ | Page _
+        | Deref (PageRef _)
+        | DerefRef (PageRef _)
+        | Option _ ->
             (* Can be discarded safely *) ()
+        | e when is_null_in_this_branch ctx e -> ()
         | e when List.is_empty ctx.stack -> emit_expression ctx e
         | (AssignOp _ | Call _) as e ->
             (* Occurs during assignment to a reference *)
@@ -531,6 +563,7 @@ let analyze ctx =
         | Deref (PageRef _ | ObjRef _ | RefRef _)
         | DerefRef (PageRef _ | ObjRef _ | RefRef _) ->
             ()
+        | e when is_null_in_this_branch ctx e -> ()
         | e when List.is_empty ctx.stack -> emit_expression ctx e
         | e -> unexpected_stack "DELETE" (e :: ctx.stack))
     | SP_INC -> (
@@ -780,7 +813,8 @@ let analyze ctx =
       | OR | XOR | LSHIFT | RSHIFT | F_ADD | F_SUB | F_MUL | F_DIV | F_LT | F_GT
       | F_LTE | F_GTE | F_EQUALE | F_NOTE | LI_ADD | LI_SUB | LI_MUL | LI_DIV
       | LI_MOD | S_PLUSA | S_PLUSA2 | S_ADD | S_LT | S_GT | S_LTE | S_GTE
-      | S_NOTE | S_EQUALE | DG_PLUSA | DG_MINUSA ) as op ->
+      | S_NOTE | S_EQUALE | DG_PLUSA | DG_MINUSA | PSEUDO_NULL_COALESCE ) as op
+      ->
         binary_op ctx op
     | ( ASSIGN | F_ASSIGN | LI_ASSIGN | PLUSA | MINUSA | MULA | DIVA | MODA
       | ANDA | ORA | XORA | LSHIFTA | RSHIFTA | F_PLUSA | F_MINUSA | F_MULA
@@ -1137,76 +1171,217 @@ let replace_top2_predecessors ctx addr predecessor =
     | Some _ -> Printf.failwithf "only one predecessor at address %d" addr ()
     | None -> Printf.failwithf "no predecessors at address %d" addr ())
 
-let merge_predecessors (p1 : predecessor basic_block)
-    (p2 : predecessor basic_block) =
-  match (p1.code, p2.code) with
-  (* ?: operator *)
-  | ( { condition = c1 :: cs1; stack = e1 :: es1; _ },
-      { condition = c2 :: cs2; stack = e2 :: es2; _ } )
-    when are_negations c1 c2 && cs1 == cs2 && es1 == es2
-         && p1.code.stmts == p2.code.stmts ->
+let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
+  match (p1, p2) with
+  (* e1 ?? e2 *)
+  | ( { stack = e1 :: es1; _ },
       {
-        p1 with
-        code =
-          {
-            condition = cs1;
-            stack = TernaryOp (c1, e1, e2) :: es1;
-            stmts = p1.code.stmts;
-          };
-      }
-  (* && or || *)
-  | { condition = c1 :: cs1; _ }, { condition = c2 :: c1' :: cs2; _ }
-    when are_negations c1 c1' && cs1 == cs2
-         && p1.code.stack == p2.code.stack
-         && p1.code.stmts == p2.code.stmts ->
-      {
-        p1 with
-        code =
-          { p1.code with condition = BinaryOp (PSEUDO_LOGOR, c1, c2) :: cs1 };
-      }
-  (* && operator *)
-  | ( { condition = c2 :: c1 :: cs1; stack = Number 1l :: es1; _ },
-      {
-        condition = BinaryOp (PSEUDO_LOGOR, c1', c2') :: cs2;
-        stack = Number 0l :: es2;
+        condition = BinaryOp (EQUALE, e1', Number -1l) :: condition;
+        stack = e2 :: es2;
         _;
       } )
-    when are_negations c1 c1' && are_negations c2 c2' && cs1 == cs2
-         && es1 == es2
-         && p1.code.stmts == p2.code.stmts ->
+    when e1 == e1' && es1 == es2 && p1.stmts == p2.stmts ->
+      Some
+        {
+          condition;
+          stack = BinaryOp (PSEUDO_NULL_COALESCE, e1, e2) :: es1;
+          stmts = p1.stmts;
+        }
+  (* obj?.non_void_expr *)
+  | ( { stack = Number 0l :: e :: es1; stmts; _ },
       {
-        p1 with
-        code =
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when es1 == es2 ->
+      Some { condition; stack = Option obj :: e :: es1; stmts }
+  | ( { stack = Number 0l :: Number 0l :: e :: es1; stmts; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when es1 == es2 ->
+      Some { condition; stack = Option obj :: Option obj :: e :: es1; stmts }
+  (* obj?.void_method() *)
+  | ( {
+        stack = Number 0l :: es1;
+        stmts = ({ txt = Expression expr; _ } as stmt) :: stmts1;
+        _;
+      },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: es2;
+        _;
+      } )
+    when es1 == es2 ->
+      Some
+        {
+          condition;
+          stack = Option obj :: es1;
+          stmts =
+            { stmt with txt = Expression (subst expr obj (Option obj)) }
+            :: stmts1;
+        }
+  (* obj?.e1 ?? e2 *)
+  | ( { stack = e1 :: es1; _ },
+      {
+        condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
+        stack = e2 :: es2;
+        _;
+      } )
+    when es1 == es2 && p1.stmts == p2.stmts ->
+      Some
+        {
+          condition;
+          stack =
+            BinaryOp (PSEUDO_NULL_COALESCE, subst e1 obj (Option obj), e2)
+            :: es1;
+          stmts = p1.stmts;
+        }
+  (* obj?.e1 ?? obj?.e2 *)
+  | ( { stack = Number 0l :: e1 :: es2; _ },
+      {
+        condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
+        stack = Option obj2 :: e2 :: es1;
+        _;
+      } )
+    when es1 == es2 && p1.stmts == p2.stmts ->
+      Some
+        {
+          condition;
+          stack =
+            Option obj2
+            :: BinaryOp (PSEUDO_NULL_COALESCE, subst e1 obj (Option obj), e2)
+            :: es1;
+          stmts = p1.stmts;
+        }
+  (* obj?.ref_expr ?? e *)
+  | ( { stack = Option e :: e' :: es1; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when e == e' && es1 == es2 && contains_expr e obj ->
+      Some { condition; stack = Option obj :: e' :: es1; stmts = p1.stmts }
+  (* obj.e1 ?? (dummy_var = val)
+     soundfiltereditor::detail::CMultiCombFilter@WriteEX in Ixseal *)
+  | ( { stack = Void :: e1 :: es1; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number slot :: Page LocalPage :: es2;
+        stmts =
+          {
+            txt =
+              Expression
+                (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as assign);
+            _;
+          }
+          :: stmts;
+      } )
+    when e1 == obj && es1 == es2 && p1.stmts == stmts
+         && ctx.func.vars.(Int32.to_int_exn slot) == v ->
+      Some
+        {
+          condition;
+          stack =
+            BinaryOp (PSEUDO_NULL_COALESCE, Void, Number slot)
+            :: BinaryOp
+                 ( PSEUDO_NULL_COALESCE,
+                   obj,
+                   BinaryOp (PSEUDO_COMMA, assign, Page LocalPage) )
+            :: es1;
+          stmts = p1.stmts;
+        }
+  | _ -> None
+
+let merge_predecessors ctx (p1 : predecessor basic_block)
+    (p2 : predecessor basic_block) =
+  Option.value_or_thunk
+    (match (p1.code, p2.code) with
+    | ( {
+          condition = UnaryOp (NOT, BinaryOp (EQUALE, obj, Number -1l)) :: cs1;
+          _;
+        },
+        { condition = BinaryOp (EQUALE, obj', Number -1l) :: cs2; _ } )
+      when obj == obj' && cs1 == cs2 ->
+        merge_option_predecessors ctx p1.code p2.code
+    | ( { condition = BinaryOp (EQUALE, obj', Number -1l) :: cs2; _ },
+        {
+          condition = UnaryOp (NOT, BinaryOp (EQUALE, obj, Number -1l)) :: cs1;
+          _;
+        } )
+      when obj == obj' && cs1 == cs2 ->
+        merge_option_predecessors ctx p2.code p1.code
+    | _ -> None)
+    ~default:(fun () ->
+      match (p1.code, p2.code) with
+      (* ?: operator *)
+      | ( { condition = c1 :: cs1; stack = e1 :: es1; _ },
+          { condition = c2 :: cs2; stack = e2 :: es2; _ } )
+        when are_negations c1 c2 && cs1 == cs2 && es1 == es2
+             && p1.code.stmts == p2.code.stmts ->
+          let e =
+            match c1 with
+            | UnaryOp (NOT, _) when Ain.ain.vers >= 11 -> TernaryOp (c2, e2, e1)
+            | _ -> TernaryOp (c1, e1, e2)
+          in
+          { condition = cs1; stack = e :: es1; stmts = p1.code.stmts }
+      | ( { condition = c1 :: cs1; stack = e12 :: e11 :: es1; _ },
+          { condition = c2 :: cs2; stack = e22 :: e21 :: es2; _ } )
+        when are_negations c1 c2 && cs1 == cs2 && es1 == es2
+             && p1.code.stmts == p2.code.stmts ->
+          let stack =
+            match c1 with
+            | UnaryOp (NOT, _) ->
+                TernaryOp (c2, e22, e12) :: TernaryOp (c2, e21, e11) :: es1
+            | _ -> TernaryOp (c1, e12, e22) :: TernaryOp (c1, e11, e21) :: es1
+          in
+          { condition = cs1; stack; stmts = p1.code.stmts }
+      (* && or || *)
+      | { condition = c1 :: cs1; _ }, { condition = c2 :: c1' :: cs2; _ }
+        when are_negations c1 c1' && cs1 == cs2
+             && p1.code.stack == p2.code.stack
+             && p1.code.stmts == p2.code.stmts ->
+          { p1.code with condition = BinaryOp (PSEUDO_LOGOR, c1, c2) :: cs1 }
+      (* && operator *)
+      | ( { condition = c2 :: c1 :: cs1; stack = Number 1l :: es1; _ },
+          {
+            condition = BinaryOp (PSEUDO_LOGOR, c1', c2') :: cs2;
+            stack = Number 0l :: es2;
+            _;
+          } )
+        when are_negations c1 c1' && are_negations c2 c2' && cs1 == cs2
+             && es1 == es2
+             && p1.code.stmts == p2.code.stmts ->
           {
             condition = cs1;
             stack = BinaryOp (PSEUDO_LOGAND, c1, c2) :: es1;
             stmts = p1.code.stmts;
-          };
-      }
-  (* || operator *)
-  | ( { condition = c2 :: c1 :: cs1; stack = Number 0l :: es1; _ },
-      {
-        condition = BinaryOp (PSEUDO_LOGOR, c1', c2') :: cs2;
-        stack = Number 1l :: es2;
-        _;
-      } )
-    when are_negations c1 c1' && are_negations c2 c2' && cs1 == cs2
-         && es1 == es2
-         && p1.code.stmts == p2.code.stmts ->
-      {
-        p1 with
-        code =
+          }
+      (* || operator *)
+      | ( { condition = c2 :: c1 :: cs1; stack = Number 0l :: es1; _ },
+          {
+            condition = BinaryOp (PSEUDO_LOGOR, c1', c2') :: cs2;
+            stack = Number 1l :: es2;
+            _;
+          } )
+        when are_negations c1 c1' && are_negations c2 c2' && cs1 == cs2
+             && es1 == es2
+             && p1.code.stmts == p2.code.stmts ->
           {
             condition = cs1;
             stack = BinaryOp (PSEUDO_LOGOR, c1', c2') :: es1;
             stmts = p1.code.stmts;
-          };
-      }
-  | _ ->
-      Printf.failwithf "cannot merge predecessors:\npred1 = %s\npred2 = %s"
-        ([%show: predecessor basic_block] p1)
-        ([%show: predecessor basic_block] p2)
-        ()
+          }
+      | _ ->
+          Printf.failwithf "cannot merge predecessors:\npred1 = %s\npred2 = %s"
+            ([%show: predecessor basic_block] p1)
+            ([%show: predecessor basic_block] p2)
+            ())
+  |> fun code -> { p1 with code }
 
 let rec analyze_basic_blocks ctx acc = function
   | [] -> List.rev acc
@@ -1223,7 +1398,7 @@ let rec analyze_basic_blocks ctx acc = function
                 | Some s -> s.end_addr);
             }
         | Some preds ->
-            List.reduce_exn preds ~f:(fun p1 p2 -> merge_predecessors p2 p1)
+            List.reduce_exn preds ~f:(fun p1 p2 -> merge_predecessors ctx p2 p1)
       in
       let bb =
         {
@@ -1320,14 +1495,65 @@ and reduce ctx acc rest =
   (* ?: operator *)
   | ( ({ code = { txt = Branch (label1', a); _ }, stmts; _ } as top) :: stack',
       Some
-        ( ({ code = { stack = [ c ]; stmts = []; condition; _ }; _ } as pred1),
-          ({ code = { stack = [ b ]; stmts = []; _ }; _ } as pred2) ) )
-    when pred1.addr = label1' && condition == pred2.code.condition ->
+        ( ({ code = { stack = ([ _ ] | [ _; _ ]) as stack1; stmts = []; _ }; _ }
+           as pred1),
+          ({ code = { stack = stack2; stmts = []; _ }; _ } as pred2) ) )
+    when (pred1.addr = label1' || pred2.addr = label1')
+         && List.length stack1 = List.length stack2
+         && pred1.code.condition == pred2.code.condition ->
+      let stack =
+        match (stack1, stack2) with
+        | [ c ], [ b ] when pred1.addr = label1' -> [ TernaryOp (a, b, c) ]
+        | [ b ], [ c ] when pred2.addr = label1' -> [ TernaryOp (a, b, c) ]
+        | [ c2; c1 ], [ b2; b1 ] when pred1.addr = label1' ->
+            [ TernaryOp (a, b2, c2); TernaryOp (a, b1, c1) ]
+        | [ b2; b1 ], [ c2; c1 ] when pred2.addr = label1' ->
+            [ TernaryOp (a, b2, c2); TernaryOp (a, b1, c1) ]
+        | _ -> failwith "cannot happen"
+      in
       replace_top2_predecessors ctx (List.hd_exn rest).addr
         {
           top with
           end_addr = pred1.end_addr;
-          code = { condition; stack = [ TernaryOp (a, b, c) ]; stmts };
+          code = { condition = pred1.code.condition; stack; stmts };
+        };
+      reduce ctx stack' rest
+  (* HACK for debug::detail::CDebugFileDataList@GetModeFlag in Ixseal *)
+  | ( ({ code = { txt = Branch (label1', a); _ }, stmts; _ } as top) :: stack',
+      Some
+        ( ({
+             code =
+               {
+                 stack = [ Number slot; Page LocalPage ];
+                 stmts =
+                   [
+                     {
+                       txt =
+                         Expression
+                           (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as
+                            assign);
+                       _;
+                     };
+                   ];
+                 _;
+               };
+             _;
+           } as pred1),
+          ({ code = { stack = [ b2; b1 ]; stmts = []; _ }; _ } as pred2) ) )
+    when pred2.addr = label1'
+         && ctx.func.vars.(Int32.to_int_exn slot) == v
+         && pred1.code.condition == pred2.code.condition ->
+      let stack =
+        [
+          TernaryOp (a, b2, Number slot);
+          TernaryOp (a, b1, BinaryOp (PSEUDO_COMMA, assign, Page LocalPage));
+        ]
+      in
+      replace_top2_predecessors ctx (List.hd_exn rest).addr
+        {
+          top with
+          end_addr = pred1.end_addr;
+          code = { condition = pred1.code.condition; stack; stmts };
         };
       reduce ctx stack' rest
   | stack', _ -> analyze_basic_blocks ctx stack' rest

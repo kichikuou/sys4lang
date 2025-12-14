@@ -60,6 +60,7 @@ and expr =
   | DerefRef of lvalue
   | Null
   | Void
+  | Option of expr
   | New of int
   | DerefStruct of int * expr
   | UnaryOp of Instructions.instruction * expr
@@ -190,6 +191,50 @@ let rec map_block stmt ~f =
   in
   { stmt with txt }
 
+let subst expr e1 e2 =
+  let rec rec_expr expr =
+    if Poly.(expr = e1) then e2
+    else
+      match expr with
+      | Page _ | Number _ | Boolean _ | Character _ | Float _ | String _
+      | FuncAddr _ | MemberPointer _ | Null | Void | New _ ->
+          expr
+      | BoundMethod (e, m) -> BoundMethod (rec_expr e, m)
+      | Deref l -> Deref (rec_lvalue l)
+      | DerefRef l -> DerefRef (rec_lvalue l)
+      | Option e -> Option (rec_expr e)
+      | DerefStruct (n, e) -> DerefStruct (n, rec_expr e)
+      | UnaryOp (inst, e) -> UnaryOp (inst, rec_expr e)
+      | BinaryOp (inst, lhs, rhs) -> BinaryOp (inst, rec_expr lhs, rec_expr rhs)
+      | AssignOp (inst, l, e) -> AssignOp (inst, rec_lvalue l, rec_expr e)
+      | Call (c, args) -> Call (rec_callable c, List.map args ~f:rec_expr)
+      | TernaryOp (e1, e2, e3) ->
+          TernaryOp (rec_expr e1, rec_expr e2, rec_expr e3)
+      | DelegateCast (e, id) -> DelegateCast (rec_expr e, id)
+      | C_Ref (e1, e2) -> C_Ref (rec_expr e1, rec_expr e2)
+      | C_Assign (e1, e2, e3) -> C_Assign (rec_expr e1, rec_expr e2, rec_expr e3)
+      | PropertySet (obj, m, rhs) -> PropertySet (rec_expr obj, m, rec_expr rhs)
+  and rec_lvalue = function
+    | NullRef -> NullRef
+    | PageRef _ as lval -> lval
+    | RefRef l -> RefRef (rec_lvalue l)
+    | IncDec (fix, op, l) -> IncDec (fix, op, rec_lvalue l)
+    | ObjRef (e1, e2) -> ObjRef (rec_expr e1, rec_expr e2)
+    | ArrayRef (e1, e2) -> ArrayRef (rec_expr e1, rec_expr e2)
+    | MemberRef (e, v) -> MemberRef (rec_expr e, v)
+    | RefValue e -> RefValue (rec_expr e)
+  and rec_callable = function
+    | Function _ as f -> f
+    | FuncPtr (t, e) -> FuncPtr (t, rec_expr e)
+    | Delegate (t, e) -> Delegate (t, rec_expr e)
+    | Method (e, f) -> Method (rec_expr e, f)
+    | HllFunc _ as f -> f
+    | SysCall _ as f -> f
+    | Builtin (inst, l) -> Builtin (inst, rec_lvalue l)
+    | Builtin2 (inst, e) -> Builtin2 (inst, rec_expr e)
+  in
+  rec_expr expr
+
 let map_expr stmt ~f =
   let rec rec_expr = function
     | Page _ as expr -> f expr
@@ -205,6 +250,7 @@ let map_expr stmt ~f =
     | DerefRef lval -> DerefRef (rec_lvalue lval) |> f
     | Null -> f Null
     | Void -> f Void
+    | Option expr -> Option (rec_expr expr) |> f
     | New _ as expr -> f expr
     | DerefStruct (n, expr) -> DerefStruct (n, rec_expr expr) |> f
     | UnaryOp (inst, expr) -> UnaryOp (inst, rec_expr expr) |> f
@@ -291,6 +337,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | DerefRef lval -> rec_lvalue lval
     | Null -> ()
     | Void -> ()
+    | Option expr -> rec_expr expr
     | New _ -> ()
     | DerefStruct (_, expr) -> rec_expr expr
     | UnaryOp (_, expr) -> rec_expr expr
@@ -383,3 +430,11 @@ let walk ?(stmt_cb = fun _ -> ()) ?(expr_cb = fun _ -> ())
         rec_stmt stmt
   in
   rec_stmt stmt
+
+let contains_expr expr sub_expr =
+  let exception Found in
+  let expr_cb e = if Poly.equal e sub_expr then raise Found in
+  try
+    walk_expr ~expr_cb expr;
+    false
+  with Found -> true

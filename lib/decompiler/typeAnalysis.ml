@@ -174,6 +174,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | Delegate _ -> (Null, expected)
           | _ -> (Null, Ref Any))
       | Void -> (Void, Void)
+      | Option e ->
+          let e, t = self#analyze_expr expected e in
+          (Option e, t)
       | New n as e -> (e, Ref (Struct n))
       | DerefStruct (struc, expr) ->
           let expr, _ = self#analyze_expr (Struct struc) expr in
@@ -296,7 +299,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
         match insn with
         | ADD | F_ADD | LI_ADD | S_ADD | SUB | F_SUB | LI_SUB | MUL | F_MUL
         | LI_MUL | DIV | F_DIV | LI_DIV | MOD | LI_MOD | S_MOD _ | LSHIFT
-        | RSHIFT | AND | OR | XOR | PSEUDO_LOGAND | PSEUDO_LOGOR | OBJSWAP _ ->
+        | RSHIFT | AND | OR | XOR | PSEUDO_LOGAND | PSEUDO_LOGOR | OBJSWAP _
+        | PSEUDO_NULL_COALESCE ->
             lt
         | S_PLUSA | S_PLUSA2 | PSEUDO_COMMA | DG_PLUSA | DG_MINUSA -> rt
         | EQUALE | S_EQUALE | F_EQUALE | R_EQUALE | NOTE | S_NOTE | F_NOTE

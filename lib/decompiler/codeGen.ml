@@ -184,6 +184,7 @@ let operator insn =
   | INV | F_INV -> make_op "-" PREC_UNARY Right
   | NOT -> make_op "!" PREC_UNARY Right
   | COMPL -> make_op "~" PREC_UNARY Right
+  | PSEUDO_NULL_COALESCE -> make_op "??" PREC_QUESTION Right
   | op ->
       Printf.failwithf "cannot print operator for %s" (show_instruction op) ()
 
@@ -322,6 +323,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | Page StructPage -> print_string out "this"
       | Null -> print_string out "NULL"
       | Void -> print_string out "<void>" (* FIXME *)
+      | Option e -> bprintf out "%a?" (self#pr_expr (prec_value PREC_DOT)) e
       | UnaryOp (FTOI, expr) -> bprintf out "int(%a)" (self#pr_expr 0) expr
       | UnaryOp (ITOF, expr) -> bprintf out "float(%a)" (self#pr_expr 0) expr
       | UnaryOp (ITOLI, expr) -> bprintf out "lint(%a)" (self#pr_expr 0) expr
