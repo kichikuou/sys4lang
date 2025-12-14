@@ -168,7 +168,10 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | DerefRef lval ->
           let lval', t = self#analyze_lvalue lval in
           (DerefRef lval', Ref t)
-      | Null -> (Null, Ref Any)
+      | Null -> (
+          match expected with
+          | Delegate _ -> (Null, expected)
+          | _ -> (Null, Ref Any))
       | Void -> (Void, Void)
       | New n as e -> (e, Ref (Struct n))
       | DerefStruct (struc, expr) ->
