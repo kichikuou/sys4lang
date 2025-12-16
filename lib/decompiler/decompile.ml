@@ -235,11 +235,12 @@ let inspect funcname =
 
 let export ~print_addr decompiled ain_path write_to_file =
   let sources = ref [] in
+  let dbginfo = CodeGen.create_debug_info () in
   let generate ?(add_to_inc = true) fname f =
     if add_to_inc then sources := fname :: !sources;
     let fname_components = String.split fname ~on:'\\' in
     let unix_fname = String.concat ~sep:"/" fname_components in
-    let pr = new CodeGen.code_printer ~print_addr unix_fname in
+    let pr = new CodeGen.code_printer ~print_addr ~dbginfo unix_fname in
     f pr;
     write_to_file unix_fname pr#get_buffer
   in

@@ -236,12 +236,12 @@ let debug_info_to_json dbginfo =
 
 type project_t = { name : string; output_dir : string; ain_minor_version : int }
 
-class code_printer ?(print_addr = false) (file : string) =
+class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
+  (file : string) =
   object (self)
     val out = Buffer.create 4096
     val mutable line = 1
     val mutable indent = 0
-    val dbginfo = create_debug_info ()
     val current_function = Stack.create ()
     method get_buffer = out
 
