@@ -1236,7 +1236,8 @@ let rec analyze_basic_blocks ctx acc = function
       ctx.stack <- pred.code.stack;
       ctx.stmts <- pred.code.stmts;
       ctx.instructions <- bb.code;
-      ctx.address <- bb.addr;
+      ctx.address <-
+        (match ctx.stmts with [] -> bb.addr | stmt :: _ -> stmt.end_addr);
       ctx.end_address <- bb.end_addr;
       match analyze ctx with
       | term, [], stmts ->

@@ -160,6 +160,33 @@ let%expect_test "return (2 && 3) || (4 && 5);" =
       ]
     |}]
 
+let%expect_test "return 2; return 3 || 4;" =
+  decompile_test
+    [
+      (0x00000006, PUSH 2l);
+      (0x0000000C, RETURN);
+      (0x0000000E, PUSH 3l);
+      (0x00000014, IFNZ 0x32);
+      (0x0000001A, PUSH 4l);
+      (0x00000020, IFNZ 0x32);
+      (0x00000026, PUSH 0l);
+      (0x0000002C, JUMP 0x38);
+      (0x00000032, PUSH 1l);
+      (0x00000038, RETURN);
+    ];
+  [%expect
+    {|
+    [{ addr = 6; end_addr = 58; labels = [];
+       code =
+       ({ txt = Seq; addr = -1; end_addr = -1 },
+        [{ txt =
+           (Return (Some (BinaryOp (PSEUDO_LOGOR, (Number 3l), (Number 4l)))));
+           addr = 14; end_addr = 58 };
+          { txt = (Return (Some (Number 2l))); addr = 6; end_addr = 14 }]);
+       nr_jump_srcs = 0 }
+      ]
+    |}]
+
 let%expect_test "return 1 + (2 && 3);" =
   decompile_test
     [
