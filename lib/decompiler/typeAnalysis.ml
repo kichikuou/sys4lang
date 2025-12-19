@@ -339,7 +339,15 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (BinaryOp (result_insn lt rt, lhs, rhs), result_type lt rt)
 
     method private analyze_assign_op insn lval rhs =
-      let lval', lt = self#analyze_lvalue lval in
+      let lval', lt =
+        match self#analyze_lvalue lval with
+        | ( (RefValue (AssignOp (PSEUDO_REF_ASSIGN, PageRef (LocalPage, v), _))
+             as lval'),
+            Ref lt )
+          when String.is_prefix v.name ~prefix:"<dummy" ->
+            (lval', lt) (* allow `(<dummy> <- ref_expr) = value` *)
+        | lval', lt -> (lval', lt)
+      in
       let rhs', rt = self#analyze_expr lt rhs in
       match (lt, rt, insn) with
       | FuncType ftl, FuncType ftr, _ ->
