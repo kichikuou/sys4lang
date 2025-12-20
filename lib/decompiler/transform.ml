@@ -20,6 +20,8 @@ open Loc
 
 type ast_transform = statement loc -> statement loc
 
+let is_dummy_var v = String.is_prefix v.Ain.Variable.name ~prefix:"<dummy"
+
 (* Rewrites
       if (cond) { /*empty*/ } else {
         <else-body>
@@ -272,7 +274,6 @@ let remove_array_initializer_call = function
   | stmt -> stmt
 
 let remove_dummy_variable_assignment stmt =
-  let is_dummy_var v = String.is_prefix v.Ain.Variable.name ~prefix:"<dummy " in
   let strip_dummy_assignment = function
     | AssignOp (PSEUDO_REF_ASSIGN, PageRef (LocalPage, v), expr)
       when is_dummy_var v ->
