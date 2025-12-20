@@ -188,6 +188,7 @@ let generate_break_continue record cfg =
     | While _ -> stmt
     | DoWhile _ -> stmt
     | For _ -> stmt
+    | ForEach _ -> stmt
     | Break -> stmt
     | Continue -> failwith "cannot happen"
     | Goto (addr, _) ->
@@ -253,6 +254,7 @@ let rec has_break_continue cfg begin_node end_node =
     | While (_, _) -> false
     | DoWhile (_, _) -> false
     | For (_, _, _, _) -> false
+    | ForEach _ -> false
     | Break -> true
     | Continue -> true
     | Goto _ -> false

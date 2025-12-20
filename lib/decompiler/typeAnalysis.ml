@@ -432,6 +432,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
                   self#analyze_expr_opt Bool cond,
                   self#analyze_expr_opt Any inc,
                   self#analyze_statement body )
+          | ForEach _ ->
+              failwith "unexpected foreach statement in type analysis"
           | Break -> Break
           | Continue -> Continue
           | Goto _ as stmt -> stmt

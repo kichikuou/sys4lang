@@ -604,6 +604,18 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
                   | _ -> [ body ]));
             self#addr_and_indent body.end_addr;
             self#println "}"
+        | ForEach { rev; var; ivar; array; body } ->
+            self#addr_and_indent stmt.addr;
+            bprintf out "foreach%s (%s" (if rev then "_r" else "") var.name;
+            Option.iter ivar ~f:(fun v -> bprintf out ", %s" v.name);
+            self#println " : %a) {" (self#pr_expr 0) array;
+            self#with_indent (fun () ->
+                print_stmt_list
+                  (match body.txt with
+                  | Block stmts -> List.rev stmts
+                  | _ -> [ body ]));
+            self#addr_and_indent body.end_addr;
+            self#println "}"
         | Label label ->
             self#with_indent ~delta:(-1) (fun () ->
                 self#addr_and_indent stmt.addr;

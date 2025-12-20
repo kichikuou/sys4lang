@@ -24,7 +24,7 @@ let rec decompile_function (f : CodeSection.function_t) =
     |> ControlFlow.analyze
     |> (new TypeAnalysis.analyzer f.func f.struc)#analyze_statement
     |> Transform.expand_else_scope |> Transform.rename_labels
-    |> Transform.recover_loop_initializer
+    |> Transform.recover_loop_initializer |> Transform.recognize_foreach
     |> Transform.remove_implicit_array_free
     |> Transform.remove_array_free_for_dead_arrays
     |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
@@ -57,7 +57,8 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   stmt)
   |> (new TypeAnalysis.analyzer f.func f.struc)#analyze_statement
   |> Transform.expand_else_scope |> Transform.rename_labels
-  |> Transform.recover_loop_initializer |> Transform.remove_implicit_array_free
+  |> Transform.recover_loop_initializer |> Transform.recognize_foreach
+  |> Transform.remove_implicit_array_free
   |> Transform.remove_array_free_for_dead_arrays
   |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
   |> Transform.remove_dummy_variable_assignment

@@ -27,6 +27,7 @@ val rename_labels : ast_transform
 (* Moves an assignment statement followed by a for statement into the init
    clause of the for statement. *)
 val recover_loop_initializer : ast_transform
+val recognize_foreach : ast_transform
 
 (* Removes a return at the end of a void function, or a return added by the
    compiler after a return statement in the source program. *)

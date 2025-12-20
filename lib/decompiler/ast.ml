@@ -96,6 +96,13 @@ type statement =
       * expr option
       * expr option
       * statement loc (* init, cond, inc, body *)
+  | ForEach of {
+      rev : bool;
+      var : Ain.Variable.t;
+      ivar : Ain.Variable.t option;
+      array : expr;
+      body : statement loc;
+    }
   | Break
   | Continue
   | Goto of int * int (* target, address_after_JUMP *)
@@ -129,6 +136,7 @@ let rec map_stmt stmt ~f =
     | DoWhile (body, cond) -> DoWhile (map_stmt body ~f, cond) |> f
     | For (init, cond, inc, body) ->
         For (init, cond, inc, map_stmt body ~f) |> f
+    | ForEach r -> ForEach { r with body = map_stmt r.body ~f } |> f
     | Break -> f stmt.txt
     | Continue -> f stmt.txt
     | Goto _ -> f stmt.txt
@@ -156,6 +164,7 @@ let walk_statement stmt ~f =
     | DoWhile (s, _) -> walk s
     | Switch (_, _, s) -> walk s
     | For (_, _, _, s) -> walk s
+    | ForEach { body; _ } -> walk body
     | Break -> ()
     | Continue -> ()
     | Goto _ -> ()
@@ -179,6 +188,7 @@ let rec map_block stmt ~f =
     | While (cond, body) -> While (cond, map_block body ~f)
     | DoWhile (body, cond) -> DoWhile (map_block body ~f, cond)
     | For (init, cond, inc, body) -> For (init, cond, inc, map_block body ~f)
+    | ForEach r -> ForEach { r with body = map_block r.body ~f }
     | Break -> stmt.txt
     | Continue -> stmt.txt
     | Goto _ -> stmt.txt
@@ -304,6 +314,8 @@ let map_expr stmt ~f =
               Option.map ~f:rec_expr cond,
               Option.map ~f:rec_expr inc,
               rec_stmt body )
+      | ForEach r ->
+          ForEach { r with array = rec_expr r.array; body = rec_stmt r.body }
       | Break -> stmt.txt
       | Continue -> stmt.txt
       | Goto _ -> stmt.txt
@@ -416,6 +428,9 @@ let walk ?(stmt_cb = fun _ -> ()) ?(expr_cb = fun _ -> ())
         Option.iter ~f:rec_expr init;
         Option.iter ~f:rec_expr cond;
         Option.iter ~f:rec_expr inc;
+        rec_stmt body
+    | ForEach { array; body; _ } ->
+        rec_expr array;
         rec_stmt body
     | Break -> ()
     | Continue -> ()

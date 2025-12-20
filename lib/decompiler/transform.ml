@@ -94,6 +94,10 @@ let expand_else_scope stmt =
         process_expr_opt cond;
         process_expr_opt inc;
         return @@ For (init, cond, inc, body)
+    | ForEach r ->
+        let body = rec_stmt r.body in
+        process_expr r.array;
+        return @@ ForEach { r with body }
     | Break -> [ stmt ]
     | Continue -> [ stmt ]
     | Goto _ -> [ stmt ]
@@ -338,6 +342,111 @@ let remove_optional_arguments =
         Call (f, [ a; b; c ])
     | Call ((Builtin2 (FTOS, _) as f), [ Number -1l ]) -> Call (f, [])
     | expr -> expr)
+
+(** Rewrites
+    {[
+      ref array@T dummy2 = array_expr;
+      int dummy1 = -1;
+      while (++dummy1 < Array.Numof(dummy2)) {
+        ref T var = dummy2[dummy1];
+        body;
+      }
+    ]}
+    to
+    {[
+      foreach (var : array_expr) { body }
+    ]}
+
+    and
+    {[
+      ref array@T dummy2 = array_expr;
+      int dummy1 = Array.Numof(dummy2);
+      while (--dummy1 >= 0) {
+        ref T var = dummy2[dummy1];
+        body;
+      }
+    ]}
+    to
+    {[
+      foreach_r (var : array_expr) { body }
+    ]} *)
+let recognize_foreach stmt =
+  let maybe_match_foreach i_assign arr_assign while_stmt =
+    match (i_assign, arr_assign, while_stmt) with
+    | ( { txt = VarDecl (arr_dummy, Some (ASSIGN, array_expr)); _ },
+        { txt = VarDecl (i_var, Some (ASSIGN, i_init)); _ },
+        { txt = While (while_cond, while_body); addr; end_addr } ) -> (
+        match (i_init, while_cond) with
+        | ( Number -1l,
+            BinaryOp
+              ( LT,
+                Deref (IncDec (Prefix, Increment, PageRef (LocalPage, i_var'))),
+                Call
+                  ( HllFunc ("Array", { name = "Numof"; _ }),
+                    [ Deref (PageRef (LocalPage, arr_var)) ] ) ) )
+        | ( Call
+              ( HllFunc ("Array", { name = "Numof"; _ }),
+                [ Deref (PageRef (LocalPage, arr_var)) ] ),
+            BinaryOp
+              ( GTE,
+                Deref (IncDec (Prefix, Decrement, PageRef (LocalPage, i_var'))),
+                Number 0l ) )
+          when phys_equal i_var i_var'
+               && phys_equal arr_dummy arr_var
+               && is_dummy_var arr_dummy -> (
+            let body_stmts =
+              match while_body.txt with
+              | Block stmts -> stmts
+              | s -> [ { while_body with txt = s } ]
+            in
+            match List.rev body_stmts with
+            | {
+                txt =
+                  VarDecl
+                    ( loop_var,
+                      Some
+                        ( R_ASSIGN,
+                          DerefRef
+                            (ArrayRef
+                               ( Deref (PageRef (LocalPage, arr_var'')),
+                                 Deref (PageRef (LocalPage, i_var'')) )) ) );
+                _;
+              }
+              :: body_rest ->
+                if phys_equal arr_var arr_var'' && phys_equal i_var i_var'' then
+                  let new_body = make_block (List.rev body_rest) in
+                  let foreach_stmt =
+                    {
+                      txt =
+                        ForEach
+                          {
+                            rev = not Poly.(i_init = Number (-1l));
+                            var = loop_var;
+                            ivar =
+                              (if is_dummy_var i_var then None else Some i_var);
+                            array = array_expr;
+                            body = new_body;
+                          };
+                      addr;
+                      end_addr;
+                    }
+                  in
+                  Some foreach_stmt
+                else None
+            | _ -> None)
+        | _ -> None)
+    | _ -> None
+  in
+  let rec reduce acc stmts =
+    match stmts with
+    | s3 :: s2 :: s1 :: tail -> (
+        match maybe_match_foreach s1 s2 s3 with
+        | Some new_stmt -> reduce (new_stmt :: acc) tail
+        | None -> reduce (s3 :: acc) (s2 :: s1 :: tail))
+    | s :: tail -> reduce (s :: acc) tail
+    | [] -> List.rev acc
+  in
+  map_block stmt ~f:(fun stmts -> reduce [] stmts)
 
 let simplify_boolean_expr stmt =
   if Ain.ain.vers < 6 then stmt
