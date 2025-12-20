@@ -632,20 +632,34 @@ let reduce_forward_branch cfg node0 branch_target =
       else if bb0.addr < label1 && label1 < branch_target_addr then
         let node1 = CFG.next node0 in
         let node2 = CFG.next node1 in
+        let is_forloop_body_addr addr =
+          let node2_endaddr = (CFG.value_exn node2).end_addr in
+          addr = node2_endaddr
+          || addr = node2_endaddr + 6
+             &&
+             let node3 = CFG.next node2 in
+             match CFG.value node3 with
+             | Some { code = { txt = Jump l; _ }, []; _ } when l = bb0.addr ->
+                 (* Remove extra `Jump bb0` blcok *)
+                 CFG.remove cfg node3;
+                 true
+             | _ -> false
+        in
         match (CFG.value_exn node1, CFG.value_exn node2) with
         | ( { code = { txt = Jump label3; _ }, []; _ },
             {
               addr = label1';
               code = { txt = Jump label0; _ }, inc;
-              end_addr = label3';
               nr_jump_srcs = nr_jump_to_inc;
               _;
             } )
-          when label0 = bb0.addr && label1 = label1' && label3 = label3' ->
+          when label0 = bb0.addr && label1 = label1'
+               && is_forloop_body_addr label3 ->
             (* for-loop.
                 bb0: loop_expr, Branch bbk
                 bb1: Jump bb3
                 bb2: inc_expr, Jump bb0
+                (ain11+ compiler generates an extra `Jump bb0` here)
                 bb3: ...
                 ...
                 bbk-1: ..., JUMP bb2
