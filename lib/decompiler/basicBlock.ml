@@ -1263,14 +1263,14 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
       } )
     when es1 == es2 ->
       Some { condition; stack = Option obj :: e :: es1; stmts }
-  | ( { stack = Number 0l :: Number 0l :: e :: es1; stmts; _ },
+  | ( { stack = Number 0l :: (Number _ as n) :: e :: es1; stmts; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
         stack = Number -1l :: Number -1l :: Number -1l :: es2;
         _;
       } )
     when es1 == es2 ->
-      Some { condition; stack = Option obj :: Option obj :: e :: es1; stmts }
+      Some { condition; stack = Option obj :: n :: e :: es1; stmts }
   (* obj?.void_method() *)
   | ( {
         stack = Number 0l :: es1;
@@ -1287,6 +1287,22 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         {
           condition;
           stack = Option obj :: es1;
+          stmts =
+            { stmt with txt = Expression (subst expr obj (Option obj)) }
+            :: stmts1;
+        }
+  (* obj?.expr assign_op expr; *)
+  | ( { stack = []; stmts = ({ txt = Expression expr; _ } as stmt) :: stmts1; _ },
+      {
+        condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
+        stack = [];
+        stmts = stmts2;
+      } )
+    when stmts1 == stmts2 ->
+      Some
+        {
+          condition;
+          stack = [];
           stmts =
             { stmt with txt = Expression (subst expr obj (Option obj)) }
             :: stmts1;
@@ -1483,7 +1499,7 @@ let rec analyze_basic_blocks ctx acc = function
         (match ctx.stmts with [] -> bb.addr | stmt :: _ -> stmt.end_addr);
       ctx.end_address <- bb.end_addr;
       match analyze ctx with
-      | term, [], stmts ->
+      | term, [], stmts when List.is_empty ctx.condition ->
           let acc = { bb with code = (term, stmts) } :: acc in
           reduce ctx acc rest
       | { txt = Branch (addr, cond); _ }, stack, stmts ->
@@ -1506,7 +1522,7 @@ let rec analyze_basic_blocks ctx acc = function
           add_predecessor ctx bb.end_addr
             { pred with code = { condition = ctx.condition; stack; stmts } };
           reduce ctx acc rest
-      | _, _ :: _, _ -> failwith "cannot reduce: unexpected non-empty stack")
+      | _ -> failwith "cannot reduce")
 
 and reduce ctx acc rest =
   assert (List.is_empty ctx.stmts);
