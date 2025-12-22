@@ -470,7 +470,7 @@ let pop_args ctx vartypes =
     match vartypes with
     | [] -> acc
     | Void :: ts -> aux acc ts
-    | Ref (Int | LongInt | Bool | Float) :: ts ->
+    | t :: ts when Type.is_fat_reference t ->
         let page, slot = pop2 ctx in
         aux (Deref (lvalue ctx page slot) :: acc) ts
     | HllFunc2 :: ts -> (
@@ -552,7 +552,7 @@ let is_null_in_this_branch ctx expr =
 let push_call_result ctx (return_type : Ain.type_t) e =
   match return_type with
   | Void -> emit_expression ctx e
-  | Ref (Int | Bool | LongInt | Float) | IFace _ -> pushl ctx [ e; Void ]
+  | t when Type.is_fat t -> pushl ctx [ e; Void ]
   | _ -> push ctx e
 
 let array_literal expr =
@@ -792,7 +792,7 @@ let analyze ctx =
         match (ctx.func.return_type, take_stack ctx) with
         | Void, [] -> emit_statement ctx (Return None)
         | _, [ v ] -> emit_statement ctx (Return (Some v))
-        | Ref (Int | Bool | LongInt | Float), [ slot; obj ] ->
+        | t, [ slot; obj ] when Type.is_fat_reference t ->
             emit_statement ctx (Return (Some (Deref (lvalue ctx obj slot))))
         | IFace _, [ vofs; obj ] ->
             emit_statement ctx

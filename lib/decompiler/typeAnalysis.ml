@@ -110,8 +110,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | PageRef (_, var) as l -> (l, var.type_)
       | RefRef lval -> (
           match self#analyze_lvalue lval with
-          | lval', Ref t -> (RefRef lval', t)
-          | _ -> failwith "REFREF with non-reference value")
+          | lval', Ref t when Type.is_fat (Ref t) -> (RefRef lval', t)
+          | lval', FatRef t -> (RefRef lval', t)
+          | _, t ->
+              Printf.failwithf "REFREF with non-reference type %s"
+                (show_ain_type t) ())
       | IncDec (fix, op, lval) ->
           let l, t = self#analyze_lvalue lval in
           (IncDec (fix, op, l), t)

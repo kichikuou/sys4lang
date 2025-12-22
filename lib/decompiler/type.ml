@@ -99,6 +99,7 @@ type ain_type =
   | Struct of int
   | Array of ain_type
   | Ref of ain_type
+  | FatRef of ain_type
   | FuncType of func_type TypeVar.t
   | StructMember of int
   | Delegate of func_type TypeVar.t
@@ -113,9 +114,11 @@ type ain_type =
 
 and func_type = { return_type : ain_type; arg_types : ain_type list }
 
-let size_in_stack = function
-  | Ref (Int | LongInt | Bool | Float) | HllFunc2 -> 2
-  | _ -> 1
+let is_fat_reference = function
+  | FatRef _ | Ref (Int | LongInt | Bool | Float | Enum _ | IFace _) -> true
+  | _ -> false
+
+let is_fat = function IFace _ | HllFunc2 -> true | t -> is_fat_reference t
 
 let rec make_array base = function
   | 0 -> base
@@ -184,7 +187,7 @@ let create_ain11 enum ~struc ~subtype =
   | 67 -> Ref (Delegate (TypeVar.create Var))
   | 79 -> Array (Option.value_exn subtype)
   | 80 -> Ref (Array (Option.value_exn subtype))
-  | 82 -> Ref (Option.value_exn subtype)
+  | 82 -> FatRef (Option.value_exn subtype)
   | 86 -> Option (Option.value_exn subtype)
   | 89 -> IFace struc
   | 91 -> Enum2 struc
