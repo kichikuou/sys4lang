@@ -230,7 +230,7 @@ module HLL = struct
     let arguments = read_count_and_array br read_hll_argument in
     let nr_args_in_stack =
       Array.fold arguments ~init:0 ~f:(fun acc arg ->
-          acc + Type.size_in_stack arg.type_)
+          acc + if Type.is_fat arg.type_ then 2 else 1)
     in
     { name; return_type; arguments; nr_args_in_stack }
 

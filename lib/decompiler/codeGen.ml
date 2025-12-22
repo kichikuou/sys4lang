@@ -475,7 +475,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           let base, rank = Type.array_base_and_rank t in
           self#pr_type out base;
           pr_array_rank out rank
-      | Ref t ->
+      | Ref t | FatRef t ->
           print_string out "ref ";
           self#pr_type out t
       | IMainSystem -> print_string out "IMainSystem"
