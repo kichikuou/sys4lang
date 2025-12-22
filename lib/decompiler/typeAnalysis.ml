@@ -184,7 +184,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
                 Number -1l,
                 expr ),
             TernaryOp (cond', Number 0l, Void) )
-        when contains_expr expr obj && phys_equal cond cond' ->
+        when contains_interface_expr expr obj && phys_equal cond cond' ->
           let expr, _ = self#analyze_expr Any (subst expr obj (Option obj)) in
           BinaryOp (PSEUDO_NULL_COALESCE, expr, Null)
       | RefRef lval -> (

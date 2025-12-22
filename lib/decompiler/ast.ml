@@ -470,3 +470,18 @@ let contains_expr expr sub_expr =
     walk_expr ~expr_cb expr;
     false
   with Found -> true
+
+let contains_interface_expr expr iface =
+  contains_expr expr iface
+  ||
+  (* Interfaces are NULL-checked with REF, but their values are referenced
+     with REFREF. *)
+  match iface with
+  | Deref obj' -> contains_expr expr (DerefRef obj')
+  | _ -> false
+
+let insert_option expr obj =
+  let expr = subst expr obj (Option obj) in
+  match obj with
+  | Deref lval -> subst expr (DerefRef lval) (Option (DerefRef lval))
+  | _ -> expr

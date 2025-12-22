@@ -315,7 +315,7 @@ let ref_ ctx =
             TernaryOp
               (cond, Deref (lvalue ctx l11 l12), Deref (lvalue ctx l21 l22)))
         :: stack
-    (* soundfiltereditor::detail::CMultiCombFilter@WriteEX in Ixseal *)
+    (* [l11 ?? (var=val, l21), l12 ?? l22] => [l11.l12, (var=val, l21.l22)] *)
     | BinaryOp (PSEUDO_NULL_COALESCE, l12, l22)
       :: BinaryOp
            (PSEUDO_NULL_COALESCE, l11, BinaryOp (PSEUDO_COMMA, assign, l21))
@@ -593,7 +593,12 @@ let sh_sref_ne_str0 ctx page slot strno =
 
 let is_null_in_this_branch ctx expr =
   List.exists ctx.condition ~f:(function
-    | BinaryOp (EQUALE, (Option e | e), Number -1l) -> contains_expr expr e
+    | BinaryOp (EQUALE, (Option e | e), Number -1l) -> (
+        contains_expr expr e
+        ||
+        match e with
+        | Deref l -> contains_expr expr (DerefRef l)
+        | _ -> false)
     | _ -> false)
 
 let push_call_result ctx (return_type : Ain.type_t) e =
@@ -1279,9 +1284,14 @@ let replace_top2_predecessors ctx addr predecessor =
     | Some _ -> Printf.failwithf "only one predecessor at address %d" addr ()
     | None -> Printf.failwithf "no predecessors at address %d" addr ())
 
-let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
+let make_option = function Option _ as obj -> obj | obj -> Option obj
+let strip_option = function Option obj -> obj | obj -> obj
+
+let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
   match (p1, p2) with
-  (* e1 ?? e2 *)
+  (* {e1 != -1} [e1]
+     {e1 == -1} [e2]
+     => [e1 ?? e2] *)
   | ( { stack = e1 :: es1; _ },
       {
         condition = BinaryOp (EQUALE, e1', Number -1l) :: condition;
@@ -1295,7 +1305,9 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
           stack = BinaryOp (PSEUDO_NULL_COALESCE, e1, e2) :: es1;
           stmts = p1.stmts;
         }
-  (* obj?.non_void_expr *)
+  (* {obj != -1} [e, 0]
+     {obj == -1} [-1, -1]
+     => [e, Option(obj)] *)
   | ( { stack = Number 0l :: e :: es1; stmts; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
@@ -1303,36 +1315,80 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         _;
       } )
     when es1 == es2 ->
-      Some { condition; stack = Option obj :: e :: es1; stmts }
-  | ( { stack = Number 0l :: Number 0l :: e :: es1; stmts; _ },
+      Some { condition; stack = make_option obj :: e :: es1; stmts }
+  (* {obj != -1} [e, num, 0]
+     {obj == -1} [-1, -1, -1]
+     => [e, num, Option(obj)] *)
+  | ( { stack = Number 0l :: (Number _ as n) :: e :: es1; stmts; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
         stack = Number -1l :: Number -1l :: Number -1l :: es2;
         _;
       } )
     when es1 == es2 ->
-      Some { condition; stack = Option obj :: Option obj :: e :: es1; stmts }
+      Some { condition; stack = make_option obj :: n :: e :: es1; stmts }
+  (* expr?.iface_expr *)
+  (* {Deref obj != -1} [e, Void, 0]
+     {Deref obj == -1} [-1, -1, -1]
+     => [e, Void, Option(DerefRef obj)] *)
+  | ( { stack = Number 0l :: Void :: e :: es1; stmts; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when es1 == es2 ->
+      let obj = match obj with Deref o -> DerefRef o | _ -> obj in
+      Some { condition; stack = make_option obj :: Void :: e :: es1; stmts }
   (* obj?.void_method() *)
+  (* {obj != -1} [e1] stmts=[stmt]
+     {obj == -1} [-1] stmts=[]
+     when e1 == 0 || (e1 == Option _ && e1 contains obj)
+     => [Option(obj)] stmts=[stmt{obj/Option(obj)}] *)
   | ( {
-        stack = Number 0l :: es1;
+        stack = e1 :: es1;
         stmts = ({ txt = Expression expr; _ } as stmt) :: stmts1;
         _;
       },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
         stack = Number -1l :: es2;
-        _;
+        stmts = stmts2;
       } )
-    when es1 == es2 ->
+    when es1 == es2 && stmts1 == stmts2
+         &&
+         match e1 with
+         | Number 0l -> true
+         | Option e -> contains_interface_expr e obj
+         | _ -> false ->
       Some
         {
           condition;
           stack = Option obj :: es1;
           stmts =
-            { stmt with txt = Expression (subst expr obj (Option obj)) }
-            :: stmts1;
+            { stmt with txt = Expression (insert_option expr obj) } :: stmts1;
         }
-  (* obj?.e1 ?? e2 *)
+  (* obj?.expr assign_op expr; *)
+  (* {obj != -1} [] stmts=[stmt]
+     {obj == -1} [] stmts=[]
+     => [] stmts=[stmt{obj/Option(obj)}] *)
+  | ( { stack = []; stmts = ({ txt = Expression expr; _ } as stmt) :: stmts1; _ },
+      {
+        condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
+        stack = [];
+        stmts = stmts2;
+      } )
+    when stmts1 == stmts2 ->
+      Some
+        {
+          condition;
+          stack = [];
+          stmts =
+            { stmt with txt = Expression (insert_option expr obj) } :: stmts1;
+        }
+  (* {obj != -1} [e1]
+     {obj == -1} [e2]
+     => [e1{obj/Option(obj)} ?? e2] *)
   | ( { stack = e1 :: es1; _ },
       {
         condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
@@ -1344,11 +1400,13 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         {
           condition;
           stack =
-            BinaryOp (PSEUDO_NULL_COALESCE, subst e1 obj (Option obj), e2)
-            :: es1;
+            BinaryOp (PSEUDO_NULL_COALESCE, insert_option e1 obj, e2) :: es1;
           stmts = p1.stmts;
         }
   (* obj?.e1 ?? obj?.e2 *)
+  (* {Option(obj) != -1} [e1, 0]
+     {Option(obj) == -1} [e2, Option(obj2)]
+     => [e1{obj/Option(obj)} ?? e2, Option(obj2)] *)
   | ( { stack = Number 0l :: e1 :: es2; _ },
       {
         condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
@@ -1361,22 +1419,71 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
           condition;
           stack =
             Option obj2
-            :: BinaryOp (PSEUDO_NULL_COALESCE, subst e1 obj (Option obj), e2)
+            :: BinaryOp (PSEUDO_NULL_COALESCE, insert_option e1 obj, e2)
             :: es1;
           stmts = p1.stmts;
         }
   (* obj?.ref_expr ?? e *)
-  | ( { stack = Option e :: e' :: es1; _ },
+  (* {obj != -1} [e, Option(e')]
+     {obj == -1} [-1, -1]
+     when e contains e' and e' contains obj
+     => [e, Option(obj)] *)
+  | ( { stack = Option e' :: e :: es1; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
         stack = Number -1l :: Number -1l :: es2;
         _;
       } )
-    when e == e' && es1 == es2 && contains_expr e obj ->
-      Some { condition; stack = Option obj :: e' :: es1; stmts = p1.stmts }
-  (* obj.e1 ?? (dummy_var = val)
-     soundfiltereditor::detail::CMultiCombFilter@WriteEX in Ixseal *)
-  | ( { stack = Void :: e1 :: es1; _ },
+    when es1 == es2 && contains_expr e e' && contains_interface_expr e' obj ->
+      let e = if Poly.equal e e' then e else insert_option e e' in
+      Some { condition; stack = make_option obj :: e :: es1; stmts = p1.stmts }
+  (* obj?.fat_value ?? e *)
+  (* {obj != -1} [e, e2, Option(e)]
+     {obj == -1} [-1, -1, -1]
+     when e contains obj
+     => [e, e2, Option(obj)] *)
+  | ( { stack = Option e :: e2 :: e' :: es1; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when Poly.equal e e' && es1 == es2
+         && contains_interface_expr e (strip_option obj) ->
+      Some
+        {
+          condition;
+          stack = make_option obj :: e2 :: e' :: es1;
+          stmts = p1.stmts;
+        }
+  (* {Option(obj) != -1} [LocalPage, slot] stmts=[local.slot = obj;]
+     {Option(obj) == -1} [-1, 0] stmts=[]
+     => [obj, Void]
+     XXX: This removes assignment to <dummy : 右辺値参照化用> var *)
+  | ( {
+        stack = Number slot :: Page LocalPage :: es1;
+        stmts =
+          {
+            txt = Expression (AssignOp (ASSIGN, PageRef (LocalPage, v), obj));
+            _;
+          }
+          :: stmts;
+        _;
+      },
+      {
+        condition = BinaryOp (EQUALE, Option obj', Number -1l) :: condition;
+        stack = Number 0l :: Number -1l :: es2;
+        _;
+      } )
+    when obj == obj' && es1 == es2 && stmts == p2.stmts
+         && ctx.func.vars.(Int32.to_int_exn slot) == v ->
+      Some { condition; stack = Void :: obj :: es1; stmts }
+  (* e1.e2 ?? (dummy_var = val) *)
+  (* {obj != NULL} [e1, e2] stmts=[]
+     {obj == NULL} [LocalPage, slot] stmts=[localvar(slot) = ...]
+     when e1 contains obj
+     => [e1{obj/Option(obj)} ?? (localvar(slot) = ..., LocalPage), e2 ?? slot] *)
+  | ( { stack = e2 :: e1 :: es1; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
         stack = Number slot :: Page LocalPage :: es2;
@@ -1384,28 +1491,35 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
           {
             txt =
               Expression
-                (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as assign);
+                (AssignOp ((ASSIGN | F_ASSIGN), PageRef (LocalPage, v), _) as
+                 assign);
             _;
           }
           :: stmts;
       } )
-    when e1 == obj && es1 == es2 && p1.stmts == stmts
+    when contains_expr e1 (strip_option obj)
+         && es1 == es2 && p1.stmts == stmts
          && ctx.func.vars.(Int32.to_int_exn slot) == v ->
+      let e1 =
+        match obj with
+        | Option o -> insert_option e1 o
+        | o -> insert_option e1 o
+      in
       Some
         {
           condition;
           stack =
-            BinaryOp (PSEUDO_NULL_COALESCE, Void, Number slot)
+            BinaryOp (PSEUDO_NULL_COALESCE, e2, Number slot)
             :: BinaryOp
                  ( PSEUDO_NULL_COALESCE,
-                   obj,
+                   e1,
                    BinaryOp (PSEUDO_COMMA, assign, Page LocalPage) )
             :: es1;
           stmts = p1.stmts;
         }
   | _ -> None
 
-let merge_predecessors ctx (p1 : predecessor basic_block)
+let merge_predecessors ctx address (p1 : predecessor basic_block)
     (p2 : predecessor basic_block) =
   Option.value_or_thunk
     (match (p1.code, p2.code) with
@@ -1415,14 +1529,14 @@ let merge_predecessors ctx (p1 : predecessor basic_block)
         },
         { condition = BinaryOp (EQUALE, obj', Number -1l) :: cs2; _ } )
       when obj == obj' && cs1 == cs2 ->
-        merge_option_predecessors ctx p1.code p2.code
+        merge_complemental_predecessors ctx p1.code p2.code
     | ( { condition = BinaryOp (EQUALE, obj', Number -1l) :: cs2; _ },
         {
           condition = UnaryOp (NOT, BinaryOp (EQUALE, obj, Number -1l)) :: cs1;
           _;
         } )
       when obj == obj' && cs1 == cs2 ->
-        merge_option_predecessors ctx p2.code p1.code
+        merge_complemental_predecessors ctx p2.code p1.code
     | _ -> None)
     ~default:(fun () ->
       match (p1.code, p2.code) with
@@ -1485,7 +1599,8 @@ let merge_predecessors ctx (p1 : predecessor basic_block)
             stmts = p1.code.stmts;
           }
       | _ ->
-          Printf.failwithf "cannot merge predecessors:\npred1 = %s\npred2 = %s"
+          Printf.failwithf
+            "cannot merge predecessors at 0x%x:\npred1 = %s\npred2 = %s" address
             ([%show: predecessor basic_block] p1)
             ([%show: predecessor basic_block] p2)
             ())
@@ -1506,7 +1621,8 @@ let rec analyze_basic_blocks ctx acc = function
                 | Some s -> s.end_addr);
             }
         | Some preds ->
-            List.reduce_exn preds ~f:(fun p1 p2 -> merge_predecessors ctx p2 p1)
+            List.reduce_exn preds ~f:(fun p1 p2 ->
+                merge_predecessors ctx bb.addr p2 p1)
       in
       let bb =
         {
@@ -1524,7 +1640,7 @@ let rec analyze_basic_blocks ctx acc = function
         (match ctx.stmts with [] -> bb.addr | stmt :: _ -> stmt.end_addr);
       ctx.end_address <- bb.end_addr;
       match analyze ctx with
-      | term, [], stmts ->
+      | term, [], stmts when List.is_empty ctx.condition ->
           let acc = { bb with code = (term, stmts) } :: acc in
           reduce ctx acc rest
       | { txt = Branch (addr, cond); _ }, stack, stmts ->
@@ -1547,7 +1663,7 @@ let rec analyze_basic_blocks ctx acc = function
           add_predecessor ctx bb.end_addr
             { pred with code = { condition = ctx.condition; stack; stmts } };
           reduce ctx acc rest
-      | _, _ :: _, _ -> failwith "cannot reduce: unexpected non-empty stack")
+      | _ -> failwith "cannot reduce")
 
 and reduce ctx acc rest =
   assert (List.is_empty ctx.stmts);
