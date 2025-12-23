@@ -491,13 +491,9 @@ let pop_args ctx vartypes =
     | IFace _ :: ts ->
         let obj, vofs = pop2 ctx in
         aux (interface_value obj vofs :: acc) ts
-    | HllFunc2 :: ts -> (
-        match pop2 ctx with
-        | obj, Number fno ->
-            aux
-              (BoundMethod (obj, Ain.ain.func.(Int32.to_int_exn fno)) :: acc)
-              ts
-        | a, b -> unexpected_stack "pop_args" (a :: b :: ctx.stack))
+    | (HllFunc | HllFunc2) :: ts ->
+        let obj, func = pop2 ctx in
+        aux (delegate_value obj func :: acc) ts
     | _ :: ts ->
         let arg = pop ctx in
         aux (arg :: acc) ts
