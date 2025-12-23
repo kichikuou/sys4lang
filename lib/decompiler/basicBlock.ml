@@ -584,7 +584,7 @@ let analyze ctx =
             (* Can be discarded safely *) ()
         | AssignOp
             ( ASSIGN,
-              PageRef (LocalPage, { type_ = Struct _ | Ref _; _ }),
+              PageRef (LocalPage, { type_ = Struct _ | Ref _ | IFace _; _ }),
               Number -1l )
           when Ain.ain.vers >= 12 ->
             (* .LOCALDELETE, ignore *) ()
