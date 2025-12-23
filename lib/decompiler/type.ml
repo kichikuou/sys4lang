@@ -143,7 +143,9 @@ let is_fat_reference = function
   | FatRef _ | Ref (Int | LongInt | Bool | Float | Enum _ | IFace _) -> true
   | _ -> false
 
-let is_fat = function IFace _ | HllFunc2 -> true | t -> is_fat_reference t
+let is_fat = function
+  | IFace _ | HllFunc | HllFunc2 -> true
+  | t -> is_fat_reference t
 
 let rec make_array base = function
   | 0 -> base
