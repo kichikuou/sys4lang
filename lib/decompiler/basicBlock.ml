@@ -1376,7 +1376,7 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         }
   | _ -> None
 
-let merge_predecessors ctx (p1 : predecessor basic_block)
+let merge_predecessors ctx address (p1 : predecessor basic_block)
     (p2 : predecessor basic_block) =
   Option.value_or_thunk
     (match (p1.code, p2.code) with
@@ -1456,7 +1456,8 @@ let merge_predecessors ctx (p1 : predecessor basic_block)
             stmts = p1.code.stmts;
           }
       | _ ->
-          Printf.failwithf "cannot merge predecessors:\npred1 = %s\npred2 = %s"
+          Printf.failwithf
+            "cannot merge predecessors at 0x%x:\npred1 = %s\npred2 = %s" address
             ([%show: predecessor basic_block] p1)
             ([%show: predecessor basic_block] p2)
             ())
@@ -1477,7 +1478,8 @@ let rec analyze_basic_blocks ctx acc = function
                 | Some s -> s.end_addr);
             }
         | Some preds ->
-            List.reduce_exn preds ~f:(fun p1 p2 -> merge_predecessors ctx p2 p1)
+            List.reduce_exn preds ~f:(fun p1 p2 ->
+                merge_predecessors ctx bb.addr p2 p1)
       in
       let bb =
         {
