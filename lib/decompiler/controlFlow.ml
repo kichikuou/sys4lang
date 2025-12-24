@@ -531,10 +531,37 @@ let insert_label_for_inc nr_jump_to_inc bc_record addr body =
         }
     | _ -> failwith "insert_label_for_inc: not implemented"
 
-let reduce_forward_branch cfg node0 branch_target =
+let rec reduce_forward_branch cfg node0 branch_target =
   let bb0 = CFG.value_exn node0 in
   let node_before_branch_target = CFG.prev branch_target in
   match (bb0, CFG.value node_before_branch_target) with
+  | ( {
+        code = ({ txt = Branch (branch_target_addr, expr); _ } as term), stmts0;
+        _;
+      },
+      Some ({ code = { txt = Jump label1; _ }, []; _ } as bb1) )
+    when bb0.end_addr = bb1.addr
+         && label1 > branch_target_addr
+         && Ain.ain.vers >= 12 ->
+      (* Ain v12+ if-statement pattern: Rewrite
+            bb0:
+              ...
+              IFZ branch_target_addr
+              JUMP label1
+            branch_target_addr:
+         to
+            bb0:
+              ...
+              IFNZ label1
+      *)
+      CFG.remove cfg node_before_branch_target;
+      CFG.set node0
+        {
+          bb0 with
+          code = ({ term with txt = Branch (label1, negate expr) }, stmts0);
+        };
+      let target = CFG.(find_forward ~f:(by_address label1) cfg (next node0)) in
+      reduce_forward_branch cfg node0 target
   | ( {
         code =
           ( { txt = Branch (branch_target_addr, expr); addr = expr_addr; _ },
@@ -544,6 +571,13 @@ let reduce_forward_branch cfg node0 branch_target =
       Some
         ({ code = { txt = Jump label1; _ }, _; _ } as bb_before_branch_target) )
     ->
+      (* bb0:
+            ...
+            IFZ branch_target_addr
+            ...
+            JUMP label1
+         branch_target_addr:
+      *)
       if label1 = branch_target_addr then (
         (* if (expr) stmt; (unoptimized) *)
         CFG.set node_before_branch_target (remove_jump bb_before_branch_target);
