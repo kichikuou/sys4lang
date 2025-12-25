@@ -542,7 +542,12 @@ let sh_sref_ne_str0 ctx page slot strno =
 
 let is_null_in_this_branch ctx expr =
   List.exists ctx.condition ~f:(function
-    | BinaryOp (EQUALE, (Option e | e), Number -1l) -> contains_expr expr e
+    | BinaryOp (EQUALE, (Option e | e), Number -1l) -> (
+        contains_expr expr e
+        ||
+        match e with
+        | Deref l -> contains_expr expr (DerefRef l)
+        | _ -> false)
     | _ -> false)
 
 let push_call_result ctx (return_type : Ain.type_t) e =
@@ -1267,6 +1272,16 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
       } )
     when es1 == es2 ->
       Some { condition; stack = Option obj :: n :: e :: es1; stmts }
+  (* expr?.iface_expr *)
+  | ( { stack = Number 0l :: Void :: e :: es1; stmts; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when es1 == es2 ->
+      let obj = match obj with Deref o -> DerefRef o | _ -> obj in
+      Some { condition; stack = Option obj :: Void :: e :: es1; stmts }
   (* obj?.void_method() *)
   | ( {
         stack = Number 0l :: es1;
