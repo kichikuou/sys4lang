@@ -248,6 +248,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           unify_if_functype arg_type t;
           let rhs = remove_cast arg_type rhs in
           (PropertySet (obj, m, rhs), t)
+      | InterfaceCast (struc, e) ->
+          let e', _ = self#analyze_expr Any e in
+          (InterfaceCast (struc, e'), IFace struc)
 
     method private analyze_call callable args =
       let analyze_args arg_types =

@@ -411,6 +411,8 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           self#pr_binary_op parent_op prec (operator ASSIGN)
             (BoundMethod (obj, m))
             rhs
+      | InterfaceCast (sno, expr) ->
+          bprintf out "%s(%a)" Ain.ain.strt.(sno).name (self#pr_expr 0) expr
       | e ->
           eprintf "%s\n" (show_expr e);
           failwith "pr_expr: not implemented"

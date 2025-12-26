@@ -74,6 +74,7 @@ and expr =
   | C_Ref of expr * expr (* str, i *)
   | C_Assign of expr * expr * expr (* str, i, char *)
   | PropertySet of expr * Ain.Function.t * expr (* obj, method, rhs *)
+  | InterfaceCast of int * expr
 [@@deriving show { with_path = false }]
 
 type label =
@@ -227,6 +228,7 @@ let subst expr e1 e2 =
       | C_Ref (e1, e2) -> C_Ref (rec_expr e1, rec_expr e2)
       | C_Assign (e1, e2, e3) -> C_Assign (rec_expr e1, rec_expr e2, rec_expr e3)
       | PropertySet (obj, m, rhs) -> PropertySet (rec_expr obj, m, rec_expr rhs)
+      | InterfaceCast (struc, e) -> InterfaceCast (struc, rec_expr e)
   and rec_lvalue = function
     | NullRef -> NullRef
     | PageRef _ as lval -> lval
@@ -282,6 +284,7 @@ let map_expr stmt ~f =
         C_Assign (rec_expr e1, rec_expr e2, rec_expr e3) |> f
     | PropertySet (obj, m, rhs) ->
         PropertySet (rec_expr obj, m, rec_expr rhs) |> f
+    | InterfaceCast (struc, e) -> InterfaceCast (struc, rec_expr e) |> f
   and rec_lvalue = function
     | NullRef -> NullRef
     | PageRef _ as lval -> lval
@@ -384,6 +387,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | PropertySet (obj, _, rhs) ->
         rec_expr obj;
         rec_expr rhs
+    | InterfaceCast (_, e) -> rec_expr e
   and rec_lvalue lval =
     lvalue_cb lval;
     match lval with

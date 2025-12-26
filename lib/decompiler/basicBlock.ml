@@ -555,6 +555,11 @@ let push_call_result ctx (return_type : Ain.type_t) e =
   | t when Type.is_fat t -> pushl ctx [ e; Void ]
   | _ -> push ctx e
 
+let x_icast ctx struc =
+  let obj = pop ctx in
+  let e = InterfaceCast (struc, obj) in
+  pushl ctx [ e; Void; Option e ]
+
 let array_literal expr =
   let rec unfold args = function
     | Call (HllFunc ("Array", { name = "PushBack"; _ }), [ e; arg ]) ->
@@ -1221,6 +1226,7 @@ let analyze ctx =
              ( PSEUDO_LOGOR,
                BinaryOp (LT, v, Number imm1),
                BinaryOp (GTE, v, Number imm2) ))
+    | X_ICAST sno -> x_icast ctx sno
     | insn ->
         Printf.failwithf "Unknown instruction %s" (show_instruction insn) ()
   done;
