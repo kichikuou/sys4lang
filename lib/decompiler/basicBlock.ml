@@ -245,11 +245,20 @@ let lvalue ctx page slot =
   | e, Void -> RefValue e
   | _, _ -> ObjRef (page, slot)
 
-let interface_value obj vofs =
+let rec interface_value obj vofs =
   match (obj, vofs) with
-  | Number -1l, Number 0l -> NullRef
-  | _, Void -> RefValue obj
-  | _, _ -> ObjRef (obj, vofs)
+  | TernaryOp (c1, a1, b1), TernaryOp (c2, a2, b2) when c1 == c2 -> (
+      let a = interface_value a1 a2 in
+      let b = interface_value b1 b2 in
+      match (c1, b) with
+      | ( BinaryOp (EQUALE, Option (InterfaceCast _ as cast), Number -1l),
+          Deref (RefValue o) )
+        when cast == o ->
+          BinaryOp (PSEUDO_NULL_COALESCE, cast, a)
+      | _ -> TernaryOp (c1, a, b))
+  | Number -1l, Number 0l -> Deref NullRef
+  | _, Void -> Deref (RefValue obj)
+  | _, _ -> Deref (ObjRef (obj, vofs))
 
 let delegate_value obj func =
   match (obj, func) with
@@ -317,13 +326,19 @@ let binary_op ctx op =
     | rhs :: lhs :: stack -> BinaryOp (op, lhs, rhs) :: stack
     | stack -> unexpected_stack (show_instruction op) stack)
 
+let lift_ternary_fatref ctx page slot =
+  match (page, slot) with
+  | TernaryOp (c, p1, p2), TernaryOp (c', s1, s2) when c == c' ->
+      TernaryOp (c, DerefRef (lvalue ctx p1 s1), DerefRef (lvalue ctx p2 s2))
+  | _ -> DerefRef (lvalue ctx page slot)
+
 let ref_binary_op ctx op =
   update_stack ctx (function
     | rslot :: rpage :: lslot :: lpage :: stack ->
         BinaryOp
           ( op,
-            DerefRef (lvalue ctx lpage lslot),
-            DerefRef (lvalue ctx rpage rslot) )
+            lift_ternary_fatref ctx lpage lslot,
+            lift_ternary_fatref ctx rpage rslot )
         :: stack
     | stack -> unexpected_stack (show_instruction op) stack)
 
@@ -798,10 +813,10 @@ let analyze ctx =
         | Void, [] -> emit_statement ctx (Return None)
         | _, [ v ] -> emit_statement ctx (Return (Some v))
         | t, [ slot; obj ] when Type.is_fat_reference t ->
-            emit_statement ctx (Return (Some (Deref (lvalue ctx obj slot))))
-        | IFace _, [ vofs; obj ] ->
             emit_statement ctx
-              (Return (Some (Deref (interface_value obj vofs))))
+              (Return (Some (lift_ternary_fatref ctx obj slot)))
+        | IFace _, [ vofs; obj ] ->
+            emit_statement ctx (Return (Some (interface_value obj vofs)))
         | _, stack -> unexpected_stack "RETURN" stack)
     | CALLSYS n ->
         let syscall = syscalls.(n) in
