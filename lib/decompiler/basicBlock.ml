@@ -245,11 +245,20 @@ let lvalue ctx page slot =
   | e, Void -> RefValue e
   | _, _ -> ObjRef (page, slot)
 
-let interface_value obj vofs =
+let rec interface_value obj vofs =
   match (obj, vofs) with
-  | Number -1l, Number 0l -> NullRef
-  | _, Void -> RefValue obj
-  | _, _ -> ObjRef (obj, vofs)
+  | TernaryOp (c1, a1, b1), TernaryOp (c2, a2, b2) when c1 == c2 -> (
+      let a = interface_value a1 a2 in
+      let b = interface_value b1 b2 in
+      match (c1, b) with
+      | ( BinaryOp (EQUALE, Option (InterfaceCast _ as cast), Number -1l),
+          Deref (RefValue o) )
+        when cast == o ->
+          BinaryOp (PSEUDO_NULL_COALESCE, cast, a)
+      | _ -> TernaryOp (c1, a, b))
+  | Number -1l, Number 0l -> Deref NullRef
+  | _, Void -> Deref (RefValue obj)
+  | _, _ -> Deref (ObjRef (obj, vofs))
 
 let delegate_value obj func =
   match (obj, func) with
@@ -801,8 +810,7 @@ let analyze ctx =
         | t, [ slot; obj ] when Type.is_fat_reference t ->
             emit_statement ctx (Return (Some (Deref (lvalue ctx obj slot))))
         | IFace _, [ vofs; obj ] ->
-            emit_statement ctx
-              (Return (Some (Deref (interface_value obj vofs))))
+            emit_statement ctx (Return (Some (interface_value obj vofs)))
         | _, stack -> unexpected_stack "RETURN" stack)
     | CALLSYS n ->
         let syscall = syscalls.(n) in
