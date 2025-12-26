@@ -160,6 +160,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | Bool, 1l -> (Boolean true, Bool)
           | Char, _ -> (Character n, Char)
           | Ref _, -1l -> (Null, Ref Any)
+          | IFace _, -1l -> (Null, expected)
           | (FuncType _ as f), 0l -> (Null, f)
           | (FuncType ftv as f), n ->
               let func = Ain.ain.func.(Int32.to_int_exn n) in
