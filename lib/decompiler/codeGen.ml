@@ -165,7 +165,7 @@ let operator insn =
   | PSEUDO_COMMA -> make_op "," PREC_COMMA Left
   | OBJSWAP _ -> make_op "<=>" PREC_ASSIGN Left
   | ASSIGN | F_ASSIGN | LI_ASSIGN | S_ASSIGN | R_ASSIGN | SR_ASSIGN | DG_ASSIGN
-  | DG_SET | PSEUDO_FT_ASSIGNS _ ->
+  | DG_SET | PSEUDO_FT_ASSIGNS _ | PSEUDO_ARRAY_ASSIGN ->
       make_op "=" PREC_ASSIGN Right
   | PSEUDO_REF_ASSIGN -> make_op "<-" PREC_ASSIGN Right
   | PLUSA | F_PLUSA | LI_PLUSA | S_PLUSA | S_PLUSA2 | DG_PLUSA | DG_ADD ->
@@ -348,6 +348,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | New { struc; args; _ } ->
           bprintf out "new %s(%a)" Ain.ain.strt.(struc).name self#pr_arg_list
             args
+      | ArrayLiteral es -> bprintf out "[%a]" self#pr_arg_list es
       | DerefStruct (_, expr) -> self#pr_expr prec out expr
       | Page StructPage -> print_string out "this"
       | Null -> print_string out "NULL"

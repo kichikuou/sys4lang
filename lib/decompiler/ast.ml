@@ -63,6 +63,7 @@ and expr =
   | Void
   | Option of expr
   | New of { struc : int; func : int; args : expr list }
+  | ArrayLiteral of expr list
   | DerefStruct of int * expr
   | UnaryOp of Instructions.instruction * expr
   | BinaryOp of Instructions.instruction * expr * expr
@@ -214,6 +215,7 @@ let subst expr e1 e2 =
       | Deref l -> Deref (rec_lvalue l)
       | DerefRef l -> DerefRef (rec_lvalue l)
       | Option e -> Option (rec_expr e)
+      | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es)
       | DerefStruct (n, e) -> DerefStruct (n, rec_expr e)
       | UnaryOp (inst, e) -> UnaryOp (inst, rec_expr e)
       | BinaryOp (inst, lhs, rhs) -> BinaryOp (inst, rec_expr lhs, rec_expr rhs)
@@ -264,6 +266,7 @@ let map_expr stmt ~f =
     | Void -> f Void
     | Option expr -> Option (rec_expr expr) |> f
     | New _ as expr -> f expr
+    | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es) |> f
     | DerefStruct (n, expr) -> DerefStruct (n, rec_expr expr) |> f
     | UnaryOp (inst, expr) -> UnaryOp (inst, rec_expr expr) |> f
     | BinaryOp (inst, lhs, rhs) ->
@@ -354,6 +357,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | Void -> ()
     | Option expr -> rec_expr expr
     | New r -> List.iter ~f:rec_expr r.args
+    | ArrayLiteral es -> List.iter ~f:rec_expr es
     | DerefStruct (_, expr) -> rec_expr expr
     | UnaryOp (_, expr) -> rec_expr expr
     | BinaryOp (_, lhs, rhs) ->

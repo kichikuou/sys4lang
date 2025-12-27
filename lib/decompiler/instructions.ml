@@ -303,6 +303,7 @@ type instruction =
   | PSEUDO_DG_CALL of int (* dg_type *)
   | PSEUDO_A_NUMOF1
   | PSEUDO_NULL_COALESCE
+  | PSEUDO_ARRAY_ASSIGN
 [@@deriving show { with_path = false }]
 
 let width = function

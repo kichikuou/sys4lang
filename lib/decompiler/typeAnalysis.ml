@@ -187,6 +187,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           with
           | Call (_, args), _ -> (New { struc; func; args }, Ref (Struct struc))
           | _ -> failwith "cannot happen")
+      | ArrayLiteral [] -> (ArrayLiteral [], Array Any)
+      | ArrayLiteral (e :: es) ->
+          let e, et = self#analyze_expr Any e in
+          let es = List.map ~f:(fun e -> fst (self#analyze_expr et e)) es in
+          (ArrayLiteral (e :: es), Array et)
       | DerefStruct (struc, expr) ->
           let expr, _ = self#analyze_expr (Struct struc) expr in
           (DerefStruct (struc, expr), Struct struc)
@@ -399,6 +404,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (AssignOp (insn, lval', rhs'), lt)
       | Ref _, (Ref _ | Array _ | Struct _ | String), (ASSIGN | R_ASSIGN) ->
           (AssignOp (PSEUDO_REF_ASSIGN, lval', rhs'), lt)
+      | Array _, Array _, PSEUDO_ARRAY_ASSIGN ->
+          (AssignOp (insn, lval', rhs'), lt)
       | _ ->
           Stdio.eprintf "left type:  %s\nright type: %s\nop: %s\nexpr: %s"
             (show_ain_type lt) (show_ain_type rt)

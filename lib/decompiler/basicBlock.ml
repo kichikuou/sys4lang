@@ -555,6 +555,18 @@ let push_call_result ctx (return_type : Ain.type_t) e =
   | Ref (Int | Bool | LongInt | Float) | IFace _ -> pushl ctx [ e; Void ]
   | _ -> push ctx e
 
+let array_literal expr =
+  let rec unfold args = function
+    | Call (HllFunc ("Array", { name = "PushBack"; _ }), [ e; arg ]) ->
+        unfold (arg :: args) e
+    | Call (HllFunc ("Array", { name = "Free"; _ }), [ Deref lval ]) ->
+        AssignOp (PSEUDO_ARRAY_ASSIGN, lval, ArrayLiteral args)
+    | e ->
+        Printf.failwithf "array_literal: unexpected expression %s" (show_expr e)
+          ()
+  in
+  unfold [] expr
+
 (* Analyzes a basic block. *)
 let analyze ctx =
   let terminator = ref None in
@@ -753,14 +765,23 @@ let analyze ctx =
           let this = pop ctx in
           let e = Call (Method (this, func), args) in
           push_call_result ctx func.return_type e
-    | CALLHLL (lib_id, func_id, type_param) ->
+    | CALLHLL (lib_id, func_id, type_param) -> (
         let lib = Ain.ain.hll0.(lib_id) in
         let func = lib.functions.(func_id) in
         let args = pop_args ctx (Ain.HLL.arg_types func) in
         let e = Call (HllFunc (lib.name, func), args) in
-        push_call_result ctx
-          (Type.replace_hll_param func.return_type type_param)
-          e
+        match (lib.name, func.name, ctx.stack) with
+        | "Array", ("Free" | "PushBack"), array :: stack
+          when List.hd_exn args == array -> (
+            match ctx.instructions with
+            | { txt = DUP; _ } :: { txt = SP_INC; _ } :: _ ->
+                ctx.stack <- array_literal e :: stack
+            | { txt = DUP; _ } :: _ -> ctx.stack <- e :: stack
+            | _ -> ctx.stack <- array_literal e :: stack)
+        | _ ->
+            push_call_result ctx
+              (Type.replace_hll_param func.return_type type_param)
+              e)
     | RETURN -> (
         match (ctx.func.return_type, take_stack ctx) with
         | Void, [] -> emit_statement ctx (Return None)
