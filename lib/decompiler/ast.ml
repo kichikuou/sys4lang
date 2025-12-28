@@ -353,7 +353,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | Null -> ()
     | Void -> ()
     | Option expr -> rec_expr expr
-    | New _ -> ()
+    | New r -> List.iter ~f:rec_expr r.args
     | DerefStruct (_, expr) -> rec_expr expr
     | UnaryOp (_, expr) -> rec_expr expr
     | BinaryOp (_, lhs, rhs) ->

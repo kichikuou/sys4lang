@@ -30,7 +30,6 @@ type function_t = {
   name : string;
   body : Ast.statement loc;
   lambdas : function_t list;
-  parent : Ain.Function.t option;
 }
 
 type struct_t = {

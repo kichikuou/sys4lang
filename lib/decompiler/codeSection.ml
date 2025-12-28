@@ -27,8 +27,12 @@ type function_t = {
   owner : function_owner option;
   end_addr : int;
   code : instruction loc list;
-  lambdas : function_t list;
-  parent : Ain.Function.t option;
+  mutable parent : function_t option;
+}
+
+type t = {
+  files : (string * function_t list) list;
+  lambdas : (int, function_t) Hashtbl.t;
 }
 
 let func_addr f =
@@ -104,9 +108,8 @@ let parse_method_name s =
           | Some enum -> (Some (Enum enum), name)
           | None -> (None, name)))
 
-let rec parse_function func_id parent code =
-  let lambdas = ref [] in
-  let rec aux ?carry_lambda acc = function
+let rec parse_function func_id code lambdas =
+  let rec aux acc = function
     | { addr = end_addr; txt = ENDFUNC n; _ } :: tl ->
         if n <> func_id then
           Printf.failwithf "Unexpected ENDFUNC %d at 0x%x (ENDFUNC %d expected)"
@@ -114,77 +117,37 @@ let rec parse_function func_id parent code =
         else
           let func = Ain.ain.func.(func_id) in
           let owner, name = parse_method_name func.name in
-          ( {
-              func;
-              name;
-              owner;
-              end_addr;
-              code = List.rev acc;
-              lambdas = List.rev !lambdas;
-              parent;
-            },
+          ( { func; name; owner; end_addr; code = List.rev acc; parent = None },
             tl )
     | { txt = FUNC n; _ } :: tl when Ain.ain.func.(n).is_lambda -> (
-        let lambda, code = parse_function n (Some Ain.ain.func.(func_id)) tl in
-        let lambda =
-          match carry_lambda with
-          | Some l -> { lambda with lambdas = l :: lambda.lambdas }
-          | _ -> lambda
-        in
-        (* A lambda definition is expected to be preceded by a JUMP that skips it.
-           We consume this JUMP. *)
+        let lambda, code = parse_function n tl lambdas in
+        Hashtbl.add_exn lambdas ~key:n ~data:lambda;
+        (* Remove JUMP over the lambda *)
         match (acc, code) with
-        (* Special case: A JUMP can be followed by another JUMP that defines a
-           nested lambda. The sequence looks like:
-             JUMP outer_lambda_end_addr
-             JUMP nested_lambda_def_addr
-             FUNC nested_lambda
-                 ... (body of nested_lambda)
-             ENDFUNC nested_lambda
-             nested_lambda_def_addr:
-             FUNC outer_lambda
-                 ... (body of outer_lambda, using nested_lambda)
-             ENDFUNC outer_lambda
-             outer_lambda_end_addr:
-           In this situation, `nested_lambda` needs to be a child of `outer_lambda`. *)
-        | ( { txt = JUMP addr2; _ } :: acc_tl,
-            { addr = addr2'; txt = FUNC outer_lambda_id; _ } :: _ )
-          when addr2 = addr2' && Ain.ain.func.(outer_lambda_id).is_lambda ->
-            aux acc_tl
-              ~carry_lambda:
-                { lambda with parent = Some Ain.ain.func.(outer_lambda_id) }
-              code
-        (* Standard case: A JUMP skips directly over the lambda definition to the next instruction. *)
         | ( { addr = addr1; txt = JUMP addr2; _ } :: acc_tl,
             { addr = addr2'; end_addr; txt = insn } :: code_tl )
           when addr2 = addr2' ->
-            lambdas := lambda :: !lambdas;
             aux acc_tl ({ addr = addr1; end_addr; txt = insn } :: code_tl)
         | _, _ -> Printf.failwithf "No JUMP that skips %s" lambda.func.name ())
     | { addr = end_addr; txt = FUNC _ | EOF _; _ } :: _ as code ->
         (* constructors are missing ENDFUNCs. *)
         let func = Ain.ain.func.(func_id) in
         let owner, name = parse_method_name func.name in
-        ( {
-            func;
-            name;
-            owner;
-            end_addr;
-            code = List.rev acc;
-            lambdas = List.rev !lambdas;
-            parent;
-          },
+        ( { func; name; owner; end_addr; code = List.rev acc; parent = None },
           code )
     | hd :: tl -> aux (hd :: acc) tl
     | [] -> failwith "unexpected end of code section"
   in
   aux [] code
 
-let parse_functions code =
+let parse_functions code lambdas =
   let rec aux acc = function
     | { txt = FUNC func_id; _ } :: tl ->
-        let parsed, code = parse_function func_id None tl in
-        aux (parsed :: acc) code
+        let parsed, code = parse_function func_id tl lambdas in
+        if parsed.func.is_lambda then (
+          Hashtbl.add_exn lambdas ~key:func_id ~data:parsed;
+          aux acc code)
+        else aux (parsed :: acc) code
     | [ { txt = EOF _; _ } ] -> List.rev acc
     | _ :: tl -> aux acc tl (* Junk code after EOF, ignore *)
     | [] -> failwith "unexpected end of code section"
@@ -192,28 +155,36 @@ let parse_functions code =
   aux [] code
 
 let parse code =
-  group_by_source_file code
-  |> List.map ~f:(fun (fname, code_in_file) ->
-      (fname, parse_functions code_in_file))
+  let lambdas = Hashtbl.create (module Int) in
+  let files =
+    group_by_source_file code
+    |> List.map ~f:(fun (fname, code_in_file) ->
+        (fname, parse_functions code_in_file lambdas))
+  in
+  { files; lambdas }
 
-let remove_overridden_functions ~move_to_original_file files =
-  if move_to_original_file then (
-    let addr_to_func = Hashtbl.create (module Int) in
-    List.iter files ~f:(fun (_, funcs) ->
-        List.iter funcs ~f:(fun f ->
-            Hashtbl.set addr_to_func ~key:f.func.address ~data:f));
-    List.filter_map files ~f:(fun (fname, funcs) ->
-        let funcs =
-          List.filter_map funcs ~f:(fun f ->
-              Hashtbl.find_and_remove addr_to_func f.func.address)
-        in
-        if List.is_empty funcs then None else Some (fname, funcs)))
-  else
-    List.filter_map files ~f:(fun (fname, funcs) ->
-        let funcs =
-          List.filter funcs ~f:(fun f -> f.func.address = func_addr f)
-        in
-        if List.is_empty funcs then None else Some (fname, funcs))
+let remove_overridden_functions ~move_to_original_file parsed =
+  {
+    parsed with
+    files =
+      (if move_to_original_file then (
+         let addr_to_func = Hashtbl.create (module Int) in
+         List.iter parsed.files ~f:(fun (_, funcs) ->
+             List.iter funcs ~f:(fun f ->
+                 Hashtbl.set addr_to_func ~key:f.func.address ~data:f));
+         List.filter_map parsed.files ~f:(fun (fname, funcs) ->
+             let funcs =
+               List.filter_map funcs ~f:(fun f ->
+                   Hashtbl.find_and_remove addr_to_func f.func.address)
+             in
+             if List.is_empty funcs then None else Some (fname, funcs)))
+       else
+         List.filter_map parsed.files ~f:(fun (fname, funcs) ->
+             let funcs =
+               List.filter funcs ~f:(fun f -> f.func.address = func_addr f)
+             in
+             if List.is_empty funcs then None else Some (fname, funcs)));
+  }
 
 (* Fix out-of-function jumps in MangaGamer Rance 6 SP_CREATE_REAL() *)
 let fix_mg_rance6_sp_create_real f =
@@ -262,7 +233,7 @@ let fix_mg_rance6_sp_set_cg_real f =
     Stdio.eprintf "Warning: Fixed jump addresses in SP_SET_CG_REAL()\n";
   { f with code }
 
-let fix_or_remove_known_broken_functions =
+let fix_or_remove_known_broken_functions parsed =
   let is_broken_function = function
     (* Rance 03: Calling GlobalGameTimer::setSkipFunction(string) with (int, string) *)
     | "DJCPP\\tester\\_TestLibrary.jaf", "test_Timer"
@@ -278,11 +249,15 @@ let fix_or_remove_known_broken_functions =
     | "remaining.jaf", "SP_SET_CG_REAL" -> fix_mg_rance6_sp_set_cg_real f
     | _ -> f
   in
-  List.map ~f:(fun (fname, funcs) ->
-      ( fname,
-        List.filter_map funcs ~f:(fun f ->
-            if is_broken_function (fname, f.func.name) then (
-              Stdio.eprintf "Warning: Removing known broken function %s\n"
-                f.func.name;
-              None)
-            else Some (fix_function fname f)) ))
+  {
+    parsed with
+    files =
+      List.map parsed.files ~f:(fun (fname, funcs) ->
+          ( fname,
+            List.filter_map funcs ~f:(fun f ->
+                if is_broken_function (fname, f.func.name) then (
+                  Stdio.eprintf "Warning: Removing known broken function %s\n"
+                    f.func.name;
+                  None)
+                else Some (fix_function fname f)) ));
+  }

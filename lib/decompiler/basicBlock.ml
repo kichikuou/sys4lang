@@ -1583,7 +1583,7 @@ let from_instructions (f : CodeSection.function_t) code =
        {
          func = f.func;
          struc = (match f.owner with Some (Struct s) -> Some s | _ -> None);
-         parent = f.parent;
+         parent = Option.map f.parent ~f:(fun f -> f.func);
          instructions = [];
          address = -1;
          end_address = -1;

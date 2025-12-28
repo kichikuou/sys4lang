@@ -93,6 +93,7 @@ end
 
 module Function = struct
   type t = {
+    id : int;
     address : int;
     mutable name : string;
     is_label : bool;
@@ -119,7 +120,7 @@ module Function = struct
   let to_type func =
     { Type.return_type = func.return_type; arg_types = arg_types func }
 
-  let read br =
+  let read id br =
     let address = BR.int br in
     let name = BR.sjis_string br in
     let is_label =
@@ -133,6 +134,7 @@ module Function = struct
     let crc = if br.context.version > 1 then BR.i32 br else 0l in
     let vars = read_array br nr_vars Variable.read in
     {
+      id;
       address;
       name;
       is_label;
@@ -313,7 +315,7 @@ let readCODE br =
   let length = BR.int br in
   BR.bytes br length
 
-let readFUNC br = read_count_and_array br Function.read
+let readFUNC br = read_count_and_array_with_index br Function.read
 let readGLOB br = read_count_and_array br Variable.read_global
 let readGSET br = read_count_and_array br InitVal.read
 

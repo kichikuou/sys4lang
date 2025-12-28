@@ -20,6 +20,7 @@ open Decompiler
 let make_function ?(vars = [||]) ?(return_type = Type.Void) name =
   Ain.Function.
     {
+      id = 0;
       address = 0;
       name;
       is_label = false;
@@ -58,7 +59,6 @@ let decompile_test ?(func = [||]) var_types insns =
       owner = None;
       end_addr;
       code;
-      lambdas = [];
       parent = None;
     }
   in
@@ -420,7 +420,7 @@ let%expect_test "var?.void_method();" =
                                 type_ = (Type.Ref (Type.Struct 0));
                                 init_val = None; group_index = 0 }
                               )))),
-                     { Ain.Function.address = 0; name = "void_method";
+                     { Ain.Function.id = 0; address = 0; name = "void_method";
                        is_label = false; is_lambda = false; capture = false;
                        return_type = Type.Void; vars = [||]; nr_args = 0;
                        crc = 0l }
@@ -473,10 +473,11 @@ let%expect_test "return var?.int_method() ?? 42;" =
                                         type_ = (Type.Ref (Type.Struct 0));
                                         init_val = None; group_index = 0 }
                                       )))),
-                             { Ain.Function.address = 0; name = "int_method";
-                               is_label = false; is_lambda = false;
-                               capture = false; return_type = Type.Int;
-                               vars = [||]; nr_args = 0; crc = 0l }
+                             { Ain.Function.id = 0; address = 0;
+                               name = "int_method"; is_label = false;
+                               is_lambda = false; capture = false;
+                               return_type = Type.Int; vars = [||]; nr_args = 0;
+                               crc = 0l }
                              )),
                           [])),
                        (Number 42l)))));

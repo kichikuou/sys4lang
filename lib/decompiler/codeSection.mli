@@ -22,8 +22,12 @@ type function_t = {
   owner : function_owner option;
   end_addr : int;
   code : Instructions.instruction Loc.loc list;
-  lambdas : function_t list;
-  parent : Ain.Function.t option;
+  mutable parent : function_t option;
+}
+
+type t = {
+  files : (string * function_t list) list;
+  lambdas : (int, function_t) Base.Hashtbl.t;
 }
 
 (* Transforms the code section of Ain v0 into a format accepted by group_by_source_file. *)
@@ -32,17 +36,11 @@ val preprocess_ain_v0 :
 
 (* Splits the code section by source file, and then splits each source file
    into functions. *)
-val parse :
-  Instructions.instruction Loc.loc list -> (string * function_t list) list
+val parse : Instructions.instruction Loc.loc list -> t
 
 (* A code section may contain multiple functions with the same ID, and the last
    one is the effective one. This function removes ineffective functions.
    When [move_to_original_file] is true, the effective definition is moved to
    the location where the function was first defined. *)
-val remove_overridden_functions :
-  move_to_original_file:bool ->
-  (string * function_t list) list ->
-  (string * function_t list) list
-
-val fix_or_remove_known_broken_functions :
-  (string * function_t list) list -> (string * function_t list) list
+val remove_overridden_functions : move_to_original_file:bool -> t -> t
+val fix_or_remove_known_broken_functions : t -> t

@@ -17,7 +17,17 @@
 open Base
 open Loc
 
-let rec decompile_function (f : CodeSection.function_t) =
+let collect_lambdas lambdas parent body =
+  let acc = ref [] in
+  Ast.walk body ~expr_cb:(function
+    | BoundMethod (_, f) when f.is_lambda ->
+        let f = Hashtbl.find_exn lambdas f.id in
+        f.CodeSection.parent <- Some parent;
+        acc := f :: !acc
+    | _ -> ());
+  List.rev !acc
+
+let rec decompile_function ~lambdas (f : CodeSection.function_t) =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   let body =
     BasicBlock.create f
@@ -34,11 +44,12 @@ let rec decompile_function (f : CodeSection.function_t) =
     |> Transform.fold_newline_func_to_msg |> Transform.remove_optional_arguments
     |> Transform.simplify_boolean_expr
   in
-  let lambdas = List.map ~f:decompile_function f.lambdas in
-  CodeGen.
-    { func = f.func; struc; name = f.name; body; lambdas; parent = f.parent }
+  let lambdas =
+    collect_lambdas lambdas f body |> List.map ~f:(decompile_function ~lambdas)
+  in
+  CodeGen.{ func = f.func; struc; name = f.name; body; lambdas }
 
-let inspect_function (f : CodeSection.function_t) ~print_addr =
+let inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   BasicBlock.create f
   |> (fun bbs ->
@@ -61,9 +72,10 @@ let inspect_function (f : CodeSection.function_t) ~print_addr =
   |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
   |> fun body ->
   let printer = new CodeGen.code_printer ~print_addr "" in
-  let lambdas = List.map ~f:decompile_function f.lambdas in
-  printer#print_function
-    { func = f.func; struc; name = f.name; body; lambdas; parent = f.parent };
+  let lambdas =
+    collect_lambdas lambdas f body |> List.map ~f:(decompile_function ~lambdas)
+  in
+  printer#print_function { func = f.func; struc; name = f.name; body; lambdas };
   Stdio.printf "\nDecompiled code:\n%s\n" (Buffer.contents printer#get_buffer)
 
 let to_variable_list vars =
@@ -200,29 +212,37 @@ let is_rance7_bad_function (f : CodeGen.function_t) =
   | _ -> false
 [@@ocamlformat "disable"]
 
-let process_generated_constructors (structs : CodeGen.struct_t array) =
-  List.map ~f:(fun (fname, funcs) ->
-      let funcs =
-        List.filter funcs ~f:(fun func ->
-            match func with
-            | { CodeSection.owner = Some (Struct struc); name = "0" | "2"; _ }
-              -> (
-                try
-                  let f = decompile_function func in
-                  let inits =
-                    analyze_initializer_function f.body struc.members
-                  in
-                  if String.equal f.name "2" || not inits.is_empty then (
-                    let s = structs.(struc.id) in
-                    s.members <- inits.vars;
-                    Option.iter inits.vtable ~f:(fun vt ->
-                        Ain.ain.strt.(struc.id).vtable <- vt);
-                    false)
-                  else true
-                with _ -> true)
-            | _ -> true)
-      in
-      (fname, funcs))
+let process_generated_constructors (structs : CodeGen.struct_t array)
+    (parsed : CodeSection.t) =
+  {
+    parsed with
+    files =
+      List.map parsed.files ~f:(fun (fname, funcs) ->
+          let funcs =
+            List.filter funcs ~f:(fun func ->
+                match func with
+                | {
+                 CodeSection.owner = Some (Struct struc);
+                 name = "0" | "2";
+                 _;
+                } -> (
+                    try
+                      let f = decompile_function ~lambdas:parsed.lambdas func in
+                      let inits =
+                        analyze_initializer_function f.body struc.members
+                      in
+                      if String.equal f.name "2" || not inits.is_empty then (
+                        let s = structs.(struc.id) in
+                        s.members <- inits.vars;
+                        Option.iter inits.vtable ~f:(fun vt ->
+                            Ain.ain.strt.(struc.id).vtable <- vt);
+                        false)
+                      else true
+                    with _ -> true)
+                | _ -> true)
+          in
+          (fname, funcs));
+  }
 
 let decompile ~move_to_original_file ~continue_on_error =
   let code = Instructions.decode Ain.ain.code in
@@ -233,10 +253,11 @@ let decompile ~move_to_original_file ~continue_on_error =
         CodeGen.
           { struc; members = to_variable_list struc.members; methods = [] })
   in
-  let files =
+  let CodeSection.{ files; lambdas } =
+    let open CodeSection in
     CodeSection.parse code
-    |> CodeSection.remove_overridden_functions ~move_to_original_file
-    |> CodeSection.fix_or_remove_known_broken_functions
+    |> remove_overridden_functions ~move_to_original_file
+    |> fix_or_remove_known_broken_functions
     (* For vtable analysis, generated constructors need to be processed first. *)
     |> process_generated_constructors structs
   in
@@ -249,7 +270,7 @@ let decompile ~move_to_original_file ~continue_on_error =
         let decompiled_funcs = ref [] in
         let process_func func =
           try
-            let f = decompile_function func in
+            let f = decompile_function ~lambdas func in
             match func with
             | { owner = Some (Enum id); name = "String"; _ } ->
                 enums.(id).values <- extract_enum_values f.body.txt
@@ -296,7 +317,7 @@ let inspect funcname =
         CodeGen.
           { struc; members = to_variable_list struc.members; methods = [] })
   in
-  let files =
+  let CodeSection.{ files; lambdas } =
     CodeSection.parse code
     |> CodeSection.remove_overridden_functions ~move_to_original_file:false
     |> process_generated_constructors structs
@@ -307,7 +328,7 @@ let inspect funcname =
             String.equal f.CodeSection.func.name funcname))
   with
   | None -> failwith ("cannot find function " ^ funcname)
-  | Some f -> inspect_function f
+  | Some f -> inspect_function f ~lambdas
 
 let export ~print_addr decompiled ain_path write_to_file =
   let sources = ref [] in

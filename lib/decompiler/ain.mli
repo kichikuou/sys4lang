@@ -34,6 +34,7 @@ end
 
 module Function : sig
   type t = {
+    id : int;
     address : int;
     mutable name : string;
     is_label : bool;
