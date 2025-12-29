@@ -482,6 +482,9 @@ let pop_args ctx vartypes =
     | t :: ts when Type.is_fat_reference t ->
         let page, slot = pop2 ctx in
         aux (Deref (lvalue ctx page slot) :: acc) ts
+    | IFace _ :: ts ->
+        let obj, vofs = pop2 ctx in
+        aux (interface_value obj vofs :: acc) ts
     | (HllFunc | HllFunc2) :: ts ->
         let obj, func = pop2 ctx in
         aux (delegate_value obj func :: acc) ts
@@ -789,7 +792,11 @@ let analyze ctx =
     | CALLHLL (lib_id, func_id, type_param) -> (
         let lib = Ain.ain.hll0.(lib_id) in
         let func = lib.functions.(func_id) in
-        let args = pop_args ctx (Ain.HLL.arg_types func) in
+        let args =
+          pop_args ctx
+            (Ain.HLL.arg_types func
+            |> List.map ~f:(Type.replace_hll_param type_param))
+        in
         let e = Call (HllFunc (lib.name, func), args) in
         match (lib.name, func.name, ctx.stack) with
         | "Array", ("Free" | "PushBack"), array :: stack
@@ -801,7 +808,7 @@ let analyze ctx =
             | _ -> ctx.stack <- array_literal e :: stack)
         | _ ->
             push_call_result ctx
-              (Type.replace_hll_param func.return_type type_param)
+              (Type.replace_hll_param type_param func.return_type)
               e)
     | RETURN -> (
         match (ctx.func.return_type, take_stack ctx) with
