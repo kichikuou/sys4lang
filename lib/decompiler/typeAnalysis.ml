@@ -293,15 +293,13 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
              the type parameter of CALLHLL instruction is incomplete. *)
           match self#analyze_expr (Array Any) (List.hd_exn args) with
           | _, (Array elem_ty | Ref (Array elem_ty)) ->
-              let arg_types =
-                Ain.HLL.arg_types func
-                |> List.map ~f:(fun t -> Type.replace_hll_param t elem_ty)
+              let args =
+                analyze_args
+                  (Ain.HLL.arg_types func
+                  |> List.map ~f:(Type.replace_hll_param elem_ty))
               in
-              let return_type =
-                Type.replace_hll_param func.return_type elem_ty
-              in
-              let args = analyze_args arg_types in
-              (Call (expr, args), return_type)
+              ( Call (expr, args),
+                Type.replace_hll_param elem_ty func.return_type )
           | _, t ->
               Printf.failwithf "Array expected, got %s" (show_ain_type t) ())
       | HllFunc (_, func) as expr ->

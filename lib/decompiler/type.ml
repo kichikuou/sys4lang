@@ -230,7 +230,7 @@ let rec array_base_and_rank = function
       (base, 1 + rank)
   | t -> (t, 0)
 
-let replace_hll_param t param_type =
+let replace_hll_param param_type t =
   let rec aux = function
     | HllParam -> param_type
     | Array t -> Array (aux t)
