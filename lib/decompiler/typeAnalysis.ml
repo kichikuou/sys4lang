@@ -98,9 +98,21 @@ let remove_binop_cast (insn : Instructions.instruction) lhs rhs =
 
 let unify_if_functype t t' =
   match (t, t') with
-  | FuncType ftv, FuncType ftv' -> Type.TypeVar.unify ftv ftv'
-  | Delegate dtv, Delegate dtv' -> Type.TypeVar.unify dtv dtv'
+  | FuncType ftv, FuncType ftv' -> Type.TypeVar.unify func_type_unify ftv ftv'
+  | Delegate dtv, Delegate dtv' -> Type.TypeVar.unify func_type_unify dtv dtv'
   | _ -> ()
+
+let functype_conflict (t, t') =
+  Printf.failwithf "type var conflict: %s <> %s" (show_func_type t)
+    (show_func_type t') ()
+
+let tvar_set_id node n ft =
+  TypeVar.set_id func_type_unify node n ft
+  |> Result.iter_error ~f:functype_conflict
+
+let tvar_set_type node ft =
+  TypeVar.set_type func_type_unify node ft
+  |> Result.iter_error ~f:functype_conflict
 
 class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
   object (self)
@@ -151,7 +163,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | (FuncType _ as f), 0l -> (Null, f)
           | (FuncType ftv as f), n ->
               let func = Ain.ain.func.(Int32.to_int_exn n) in
-              TypeVar.set_type ftv (Ain.Function.to_type func);
+              tvar_set_type ftv (Ain.Function.to_type func);
               (FuncAddr func, f)
           | (StructMember struc as t), _ ->
               (MemberPointer (struc, Int32.to_int_exn n), t)
@@ -201,20 +213,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | UnaryOp (insn, e) -> self#analyze_unary_op insn e
       | BinaryOp (insn, lhs, rhs) -> self#analyze_binary_op insn lhs rhs
       | AssignOp (insn, lval, rhs) -> self#analyze_assign_op insn lval rhs
-      | Call (f, args) ->
-          let f', return_type, arg_types = self#analyze_callable args f in
-          let arg_types' =
-            List.filter arg_types ~f:(function
-              | (Void : ain_type) -> false
-              | _ -> true)
-          in
-          let args' =
-            List.map2_exn args arg_types' ~f:(fun arg t ->
-                let arg', t' = self#analyze_expr t arg in
-                unify_if_functype t t';
-                remove_cast t arg')
-          in
-          (Call (f', args'), return_type)
+      | Call (f, args) -> self#analyze_call f args
       | TernaryOp (e1, e2, e3) ->
           let e1', _t1 = self#analyze_expr Bool e1
           and e2', t2 = self#analyze_expr expected e2
@@ -250,29 +249,42 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           let rhs = remove_cast arg_type rhs in
           (PropertySet (obj, m, rhs), t)
 
-    method private analyze_callable args =
-      function
+    method private analyze_call callable args =
+      let analyze_args arg_types =
+        let arg_types =
+          List.filter arg_types ~f:(function
+            | (Void : ain_type) -> false
+            | _ -> true)
+        in
+        List.map2_exn args arg_types ~f:(fun arg t ->
+            let arg', t' = self#analyze_expr t arg in
+            unify_if_functype t t';
+            remove_cast t arg')
+      in
+      match callable with
       | Function func as expr ->
-          (expr, func.return_type, Ain.Function.arg_types func)
+          let args = analyze_args (Ain.Function.arg_types func) in
+          (Call (expr, args), func.return_type)
       | FuncPtr (ft, expr) -> (
           match self#analyze_expr Any expr with
           | expr', FuncType ftv ->
-              Type.TypeVar.set_id ftv ft.id
-                (Ain.FuncType.to_type Ain.ain.fnct.(ft.id));
-              (FuncPtr (ft, expr'), ft.return_type, Ain.FuncType.arg_types ft)
+              tvar_set_id ftv ft.id (Ain.FuncType.to_type Ain.ain.fnct.(ft.id));
+              let args = analyze_args (Ain.FuncType.arg_types ft) in
+              (Call (FuncPtr (ft, expr'), args), ft.return_type)
           | _, t ->
               Printf.failwithf "Functype expected, got %s" (show_ain_type t) ())
       | Delegate (dt, expr) -> (
           match self#analyze_expr Any expr with
           | expr', Delegate dtv ->
-              Type.TypeVar.set_id dtv dt.id
-                (Ain.FuncType.to_type Ain.ain.delg.(dt.id));
-              (Delegate (dt, expr'), dt.return_type, Ain.FuncType.arg_types dt)
+              tvar_set_id dtv dt.id (Ain.FuncType.to_type Ain.ain.delg.(dt.id));
+              let args = analyze_args (Ain.FuncType.arg_types dt) in
+              (Call (Delegate (dt, expr'), args), dt.return_type)
           | _, t ->
               Printf.failwithf "Delegate expected, got %s" (show_ain_type t) ())
       | Method (this, func) ->
           let expr', _ = self#analyze_expr Any this in
-          (Method (expr', func), func.return_type, Ain.Function.arg_types func)
+          let args = analyze_args (Ain.Function.arg_types func) in
+          (Call (Method (expr', func), args), func.return_type)
       | HllFunc ("Array", func) as expr -> (
           (* Resolve hll_param using the type of the first argument, because
              the type parameter of CALLHLL instruction is incomplete. *)
@@ -285,26 +297,31 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               let return_type =
                 Type.replace_hll_param func.return_type elem_ty
               in
-              (expr, return_type, arg_types)
+              let args = analyze_args arg_types in
+              (Call (expr, args), return_type)
           | _, t ->
               Printf.failwithf "Array expected, got %s" (show_ain_type t) ())
       | HllFunc (_, func) as expr ->
-          (expr, func.return_type, Ain.HLL.arg_types func)
+          let args = analyze_args (Ain.HLL.arg_types func) in
+          (Call (expr, args), func.return_type)
       | SysCall n as expr ->
           let syscall = Instructions.syscalls.(n) in
-          (expr, syscall.return_type, syscall.arg_types)
+          let args = analyze_args syscall.arg_types in
+          (Call (expr, args), syscall.return_type)
       | Builtin (insn, lval) ->
           let lval', t = self#analyze_lvalue lval in
           let insn', return_type, arg_types =
             builtin_type (auto_deref t) insn args
           in
-          (Builtin (insn', lval'), return_type, arg_types)
+          let args = analyze_args arg_types in
+          (Call (Builtin (insn', lval'), args), return_type)
       | Builtin2 (insn, this) ->
           let this', t = self#analyze_expr Any this in
           let insn', return_type, arg_types =
             builtin_type (auto_deref t) insn args
           in
-          (Builtin2 (insn', this'), return_type, arg_types)
+          let args = analyze_args arg_types in
+          (Call (Builtin2 (insn', this'), args), return_type)
 
     method private analyze_unary_op insn e =
       let e', et = self#analyze_expr Any e in
@@ -387,14 +404,13 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       let rhs', rt = self#analyze_expr lt rhs in
       match (lt, rt, insn) with
       | FuncType ftl, FuncType ftr, _ ->
-          Type.TypeVar.unify ftl ftr;
+          Type.TypeVar.unify func_type_unify ftl ftr;
           (AssignOp (insn, lval', rhs'), lt)
       | FuncType ftv, String, PSEUDO_FT_ASSIGNS ft_id ->
-          Type.TypeVar.set_id ftv ft_id
-            (Ain.FuncType.to_type Ain.ain.fnct.(ft_id));
+          tvar_set_id ftv ft_id (Ain.FuncType.to_type Ain.ain.fnct.(ft_id));
           (AssignOp (insn, lval', rhs'), String)
       | (Delegate dtl | Ref (Delegate dtl)), Delegate dtr, _ ->
-          Type.TypeVar.unify dtl dtr;
+          Type.TypeVar.unify func_type_unify dtl dtr;
           (AssignOp (insn, lval', rhs'), lt)
       | ( (Int | Bool | LongInt | Char | Enum _),
           (Int | Bool | LongInt | Char | Enum _),
@@ -432,7 +448,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               let expr' = remove_cast var.type_ expr' in
               (match (var.type_, insn) with
               | FuncType ftv, PSEUDO_FT_ASSIGNS ft_id ->
-                  Type.TypeVar.set_id ftv ft_id
+                  tvar_set_id ftv ft_id
                     (Ain.FuncType.to_type Ain.ain.fnct.(ft_id))
               | _ -> ());
               VarDecl (var, Some (insn, expr'))

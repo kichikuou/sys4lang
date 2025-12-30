@@ -20,9 +20,9 @@ module TypeVar : sig
 
   val create : 'a value -> 'a t
   val get_value : 'a t -> 'a value
-  val set_id : 'a t -> int -> 'a -> unit
-  val set_type : 'a t -> 'a -> unit
-  val unify : 'a t -> 'a t -> unit
+  val set_id : ('a -> 'a -> bool) -> 'a t -> int -> 'a -> (unit, 'a * 'a) result
+  val set_type : ('a -> 'a -> bool) -> 'a t -> 'a -> (unit, 'a * 'a) result
+  val unify : ('a -> 'a -> bool) -> 'a t -> 'a t -> unit
 end
 
 type ain_type =
@@ -53,6 +53,7 @@ type ain_type =
 
 and func_type = { return_type : ain_type; arg_types : ain_type list }
 
+val func_type_unify : func_type -> func_type -> bool
 val create : int -> struc:int -> rank:int -> ain_type
 val create_ain11 : int -> struc:int -> subtype:ain_type option -> ain_type
 val is_fat : ain_type -> bool
