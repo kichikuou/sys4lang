@@ -40,44 +40,49 @@ module TypeVar = struct
   let get_value node =
     match !(root node) with Root (_, v) -> !v | _ -> failwith "cannot happen"
 
-  let set_id node n ft =
+  let set_id unify node n t =
     match !(root node) with
     | Root (_, id) -> (
         match !id with
-        | Var -> id := Id (n, ft)
-        | Type ft' ->
-            if Poly.(ft = ft') then id := Id (n, ft)
-            else failwith "type var conflict"
-        | Id (_, ft') -> if Poly.(ft <> ft') then failwith "type var conflict")
+        | Var ->
+            id := Id (n, t);
+            Ok ()
+        | Type t' ->
+            if unify t t' then (
+              id := Id (n, t);
+              Ok ())
+            else Error (t, t')
+        | Id (_, t') -> if unify t t' then Ok () else Error (t, t'))
     | _ -> failwith "cannot happen"
 
-  let set_type node ft =
+  let set_type unify node t =
     match !(root node) with
     | Root (_, id) -> (
         match !id with
-        | Var -> id := Type ft
-        | Type ft' -> if Poly.(ft <> ft') then failwith "type var conflict"
-        | Id (_, ft') -> if Poly.(ft <> ft') then failwith "type var conflict")
+        | Var ->
+            id := Type t;
+            Ok ()
+        | Type t' | Id (_, t') -> if unify t t' then Ok () else Error (t, t'))
     | _ -> failwith "cannot happen"
 
-  let unify_value fr fr' =
+  let unify_value u fr fr' =
     match (!fr, !fr') with
     | Var, Var -> ()
     | Var, x -> fr := x
     | x, Var -> fr' := x
-    | Type t, Type t' -> if Poly.(t <> t') then failwith "type mismatch"
+    | Type t, Type t' -> if not (u t t') then failwith "type mismatch"
     | Type t, Id (_, t') ->
-        if Poly.(t = t') then fr := !fr' else failwith "type mismatch"
+        if u t t' then fr := !fr' else failwith "type mismatch"
     | Id (_, t), Type t' ->
-        if Poly.(t = t') then fr' := !fr else failwith "type mismatch"
+        if u t t' then fr' := !fr else failwith "type mismatch"
     | Id (n, _), Id (n', _) -> if n <> n' then failwith "oops"
 
-  let unify node node' =
+  let unify u node node' =
     let r = root node in
     let r' = root node' in
     match (!r, !r') with
     | Root (hr, fr), Root (hr', fr') ->
-        unify_value fr fr';
+        unify_value u fr fr';
         if not (phys_equal r r') then
           if hr < hr' then r := Link r'
           else (
@@ -113,6 +118,26 @@ type ain_type =
 [@@deriving show]
 
 and func_type = { return_type : ain_type; arg_types : ain_type list }
+[@@deriving show]
+
+let rec ain_type_unify t t' =
+  match (t, t') with
+  | Array t, Array t'
+  | Ref t, Ref t'
+  | FatRef t, FatRef t'
+  | Option t, Option t' ->
+      ain_type_unify t t'
+  | FuncType tv, FuncType tv' | Delegate tv, Delegate tv' ->
+      TypeVar.unify func_type_unify tv tv';
+      true
+  | _ -> Poly.(t = t')
+
+and func_type_unify ft ft' =
+  ain_type_unify ft.return_type ft'.return_type
+  &&
+  match List.for_all2 ft.arg_types ft'.arg_types ~f:ain_type_unify with
+  | Ok b -> b
+  | Unequal_lengths -> false
 
 let is_fat_reference = function
   | FatRef _ | Ref (Int | LongInt | Bool | Float | Enum _ | IFace _) -> true
