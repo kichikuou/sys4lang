@@ -39,7 +39,7 @@ and lvalue =
   | PageRef of page_value * Ain.Variable.t
   | RefRef of lvalue
   | IncDec of incdec_fix * incdec_op * lvalue
-  (* ObjRefs will be converted to ArrayRef or MemoryRef in type analysis phase *)
+  (* ObjRefs will be converted to ArrayRef or MemberRef in type analysis phase *)
   | ObjRef of expr * expr
   | ArrayRef of expr * expr
   | MemberRef of expr * Ain.Variable.t
