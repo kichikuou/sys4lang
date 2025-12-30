@@ -515,7 +515,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               VarDecl (var, Some (insn, expr'))
           | Expression expr -> (
               match self#analyze_expr Any expr with
-              | _, Array _ ->
+              | Deref (MemberRef _), Array _ ->
+                  (* For T_BatProg_Prog@SubHelpEffectExec in Evenicle *)
                   Stdio.eprintf
                     "Warning: %s: Removing array expression at statement \
                      position:\n"
