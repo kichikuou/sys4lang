@@ -180,6 +180,7 @@ let extract_enum_values = function
 type decompiled_ain = {
   structs : CodeGen.struct_t array;
   globals : CodeGen.variable list;
+  global_lambdas : CodeGen.function_t list;
   enums : CodeGen.enum_t array;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
@@ -236,6 +237,7 @@ let process_generated_constructors (structs : CodeGen.struct_t array)
                         s.members <- inits.vars;
                         Option.iter inits.vtable ~f:(fun vt ->
                             Ain.ain.strt.(struc.id).vtable <- vt);
+                        s.initval_lambdas <- f.lambdas;
                         false)
                       else true
                     with _ -> true)
@@ -251,8 +253,14 @@ let decompile ~move_to_original_file ~continue_on_error =
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->
         CodeGen.
-          { struc; members = to_variable_list struc.members; methods = [] })
+          {
+            struc;
+            members = to_variable_list struc.members;
+            methods = [];
+            initval_lambdas = [];
+          })
   in
+  let global_lambdas = ref [] in
   let CodeSection.{ files; lambdas } =
     let open CodeSection in
     CodeSection.parse code
@@ -293,7 +301,8 @@ let decompile ~move_to_original_file ~continue_on_error =
                   decompiled_funcs := f :: !decompiled_funcs)
             | { owner = None; name = "0"; _ } ->
                 globals :=
-                  (analyze_initializer_function f.body Ain.ain.glob).vars
+                  (analyze_initializer_function f.body Ain.ain.glob).vars;
+                global_lambdas := f.lambdas
             | { owner = None; name = "NULL"; _ } -> ()
             | _ -> decompiled_funcs := f :: !decompiled_funcs
           with e ->
@@ -306,7 +315,14 @@ let decompile ~move_to_original_file ~continue_on_error =
   in
   Array.iter structs ~f:(fun s -> s.methods <- List.rev s.methods);
   let ain_minor_version = determine_ain_minor_version code in
-  { srcs; structs; globals = !globals; enums; ain_minor_version }
+  {
+    srcs;
+    structs;
+    globals = !globals;
+    global_lambdas = !global_lambdas;
+    enums;
+    ain_minor_version;
+  }
 
 let inspect funcname =
   let code = Instructions.decode Ain.ain.code in
@@ -315,7 +331,12 @@ let inspect funcname =
   let structs =
     Array.map Ain.ain.strt ~f:(fun struc ->
         CodeGen.
-          { struc; members = to_variable_list struc.members; methods = [] })
+          {
+            struc;
+            members = to_variable_list struc.members;
+            methods = [];
+            initval_lambdas = [];
+          })
   in
   let CodeSection.{ files; lambdas } =
     CodeSection.parse code
@@ -356,7 +377,8 @@ let export ~print_addr decompiled ain_path write_to_file =
           pr#print_functype_decl "functype" ft);
       Array.iter Ain.ain.delg ~f:(fun ft ->
           pr#print_functype_decl "delegate" ft));
-  generate "globals.jaf" (fun pr -> pr#print_globals decompiled.globals);
+  generate "globals.jaf" (fun pr ->
+      pr#print_globals decompiled.globals decompiled.global_lambdas);
   Array.iter Ain.ain.hll0 ~f:(fun hll ->
       generate ~add_to_inc:false
         ("HLL/" ^ hll.name ^ ".hll")

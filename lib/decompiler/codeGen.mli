@@ -36,6 +36,7 @@ type struct_t = {
   struc : Ain.Struct.t;
   mutable members : variable list;
   mutable methods : function_t list;
+  mutable initval_lambdas : function_t list;
 }
 
 type debug_info
@@ -57,7 +58,7 @@ object
   method print_struct_decl : struct_t -> unit
   method print_enum_decl : enum_t -> unit
   method print_functype_decl : string -> Ain.FuncType.t -> unit
-  method print_globals : variable list -> unit
+  method print_globals : variable list -> function_t list -> unit
   method print_constants : unit
   method print_hll : Ain.HLL.function_t array -> unit
   method print_hll_inc : unit

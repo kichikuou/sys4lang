@@ -49,10 +49,20 @@ type function_t = {
   lambdas : function_t list;
 }
 
+let lambda_context lambdas =
+  {
+    func = Ain.ain.func.(0);
+    struc = None;
+    name = "";
+    body = { txt = Block []; addr = -1; end_addr = -1 };
+    lambdas;
+  }
+
 type struct_t = {
   struc : Ain.Struct.t;
   mutable members : variable list;
   mutable methods : function_t list;
+  mutable initval_lambdas : function_t list;
 }
 
 type enum_t = { name : string; mutable values : (string * int32) list }
@@ -746,6 +756,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       self#println " {";
       self#println "public:";
       self#with_indent (fun () ->
+          Stack.push current_function (lambda_context struc.initval_lambdas);
           List.iter struc.members ~f:(fun v ->
               match v.v.type_ with
               | Void -> ()
@@ -756,6 +767,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
                   Option.iter v.initval ~f:(fun e ->
                       bprintf out " = %a" (self#pr_expr 0) e);
                   self#println ";");
+          Stack.pop_exn current_function |> ignore;
           if
             (not (Array.is_empty struc.struc.members))
             && not (List.is_empty struc.methods)
@@ -789,7 +801,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
         | [] -> self#println "(void);"
         | args -> self#println "(%a);" (pr_param_list self#pr_vartype) args)
 
-    method print_globals (globals : variable list) =
+    method print_globals (globals : variable list) (lambdas : function_t list) =
       let groups =
         List.group globals ~break:(fun a b ->
             a.v.group_index <> b.v.group_index)
@@ -803,13 +815,15 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
                 bprintf out " = %a" (self#pr_expr 0) e);
             self#println ";")
       in
+      Stack.push current_function (lambda_context lambdas);
       List.iter groups ~f:(fun group ->
           match (List.hd_exn group).v.group_index with
           | -1 -> print_group group
           | gindex ->
               self#println "globalgroup %s {" Ain.ain.objg.(gindex);
               self#with_indent (fun () -> print_group group);
-              self#println "}")
+              self#println "}");
+      Stack.pop_exn current_function |> ignore
 
     method print_constants =
       self#println "const int true = 1;";
