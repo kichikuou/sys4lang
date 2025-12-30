@@ -124,8 +124,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           match self#analyze_lvalue lval with
           | lval', Ref t when Type.is_fat (Ref t) -> (RefRef lval', t)
           | lval', FatRef t -> (RefRef lval', t)
+          | lval', (IFace _ as t) -> (RefRef lval', t)
           | _, t ->
-              Printf.failwithf "REFREF with non-reference type %s"
+              Printf.failwithf "REFREF with non-reference/interface type %s"
                 (show_ain_type t) ())
       | IncDec (fix, op, lval) ->
           let l, t = self#analyze_lvalue lval in
