@@ -1422,6 +1422,35 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
             :: es1;
           stmts = p1.stmts;
         }
+  (* obj?.e1 ?? (dummy_var = val)
+     有利属性１取得 in Rance10 *)
+  | ( { stack = Void :: e1 :: es1; _ },
+      {
+        condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
+        stack = Number slot :: Page LocalPage :: es2;
+        stmts =
+          {
+            txt =
+              Expression
+                (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as assign);
+            _;
+          }
+          :: stmts;
+      } )
+    when contains_expr e1 obj && es1 == es2 && p1.stmts == stmts
+         && ctx.func.vars.(Int32.to_int_exn slot) == v ->
+      Some
+        {
+          condition;
+          stack =
+            BinaryOp (PSEUDO_NULL_COALESCE, Void, Number slot)
+            :: BinaryOp
+                 ( PSEUDO_NULL_COALESCE,
+                   subst e1 obj (Option obj),
+                   BinaryOp (PSEUDO_COMMA, assign, Page LocalPage) )
+            :: es1;
+          stmts = p1.stmts;
+        }
   | _ -> None
 
 let merge_predecessors ctx address (p1 : predecessor basic_block)
