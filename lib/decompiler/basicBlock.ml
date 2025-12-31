@@ -255,6 +255,8 @@ let rec interface_value obj vofs =
           Deref (RefValue o) )
         when cast == o ->
           BinaryOp (PSEUDO_NULL_COALESCE, cast, a)
+      | BinaryOp (EQUALE, Option obj, Number -1l), Deref (RefValue o) ->
+          BinaryOp (PSEUDO_NULL_COALESCE, subst o obj (Option obj), a)
       | _ -> TernaryOp (c1, a, b))
   | Number -1l, Number 0l -> Deref NullRef
   | _, Void -> Deref (RefValue obj)
@@ -1381,6 +1383,16 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
       } )
     when e == e' && es1 == es2 && contains_expr e obj ->
       Some { condition; stack = Option obj :: e' :: es1; stmts = p1.stmts }
+  (* obj?.fat_value ?? e *)
+  | ( { stack = Option e :: Void :: e' :: es1; _ },
+      {
+        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
+        stack = Number -1l :: Number -1l :: Number -1l :: es2;
+        _;
+      } )
+    when e == e' && es1 == es2 && contains_expr e obj ->
+      Some
+        { condition; stack = Option obj :: Void :: e' :: es1; stmts = p1.stmts }
   (* obj.e1 ?? (dummy_var = val)
      soundfiltereditor::detail::CMultiCombFilter@WriteEX in Ixseal *)
   | ( { stack = Void :: e1 :: es1; _ },
