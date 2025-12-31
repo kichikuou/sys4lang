@@ -146,7 +146,7 @@ type predecessor = {
 type analyze_context = {
   func : Ain.Function.t;
   struc : Ain.Struct.t option;
-  parent : Ain.Function.t option;
+  parent : CodeSection.function_t option;
   mutable instructions : instruction loc list;
   mutable address : int;
   mutable end_address : int;
@@ -227,7 +227,12 @@ let varref ctx page n =
   | GlobalPage -> Ain.ain.glob.(n)
   | LocalPage -> ctx.func.vars.(n)
   | StructPage -> (Option.value_exn ctx.struc).members.(n)
-  | ParentPage -> (Option.value_exn ctx.parent).vars.(n)
+  | ParentPage level ->
+      let rec loop (f : CodeSection.function_t) = function
+        | 0 -> f.func.vars.(n)
+        | n -> loop (Option.value_exn f.parent) (n - 1)
+      in
+      loop (Option.value_exn ctx.parent) level
 
 let pageref ctx page n = PageRef (page, varref ctx page n)
 
@@ -619,7 +624,8 @@ let analyze ctx =
     | PUSHSTRUCTPAGE -> push ctx (Page StructPage)
     | X_GETENV -> (
         match pop ctx with
-        | Page LocalPage -> push ctx (Page ParentPage)
+        | Page (ParentPage level) -> push ctx (Page (ParentPage (level + 1)))
+        | Page LocalPage -> push ctx (Page (ParentPage 0))
         | e -> unexpected_stack "X_GETENV" (e :: ctx.stack))
     | (S_ASSIGN | DG_ASSIGN) as op -> assign_op2 ctx op
     | SH_GLOBALREF n -> push ctx (Deref (pageref ctx GlobalPage n))
@@ -1583,7 +1589,7 @@ let from_instructions (f : CodeSection.function_t) code =
        {
          func = f.func;
          struc = (match f.owner with Some (Struct s) -> Some s | _ -> None);
-         parent = Option.map f.parent ~f:(fun f -> f.func);
+         parent = f.parent;
          instructions = [];
          address = -1;
          end_address = -1;

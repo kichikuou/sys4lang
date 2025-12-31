@@ -17,7 +17,7 @@
 open Base
 open Loc
 
-type page_value = GlobalPage | LocalPage | StructPage | ParentPage
+type page_value = GlobalPage | LocalPage | StructPage | ParentPage of int
 [@@deriving show { with_path = false }]
 
 type incdec_fix = Prefix | Postfix [@@deriving show { with_path = false }]
