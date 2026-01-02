@@ -704,6 +704,48 @@ let analyze ctx =
                   else emit_expression ctx e
               | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
               | _ -> push ctx e)
+          | ( obj,
+              Deref
+                (ObjRef (_, BinaryOp (ADD, (Number 0l | Void), Number index))) )
+            -> (
+              let fid =
+                match
+                  (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr
+                    Any obj
+                with
+                | _, (Struct s | Ref (Struct s)) ->
+                    Ain.ain.strt.(s).vtable.(Int32.to_int_exn index)
+                | _, (IFace iface | Ref (IFace iface)) ->
+                    let implementer =
+                      List.hd_exn Ain.ain.strt.(iface).implementers
+                    in
+                    let index =
+                      implementer.vtable_offset + Int32.to_int_exn index
+                    in
+                    Ain.ain.strt.(implementer.struct_type).vtable.(index)
+                | _, t ->
+                    failwith
+                      ("virtual call on non-struct/interface type: "
+                     ^ Type.show_ain_type t)
+              in
+              let func = Ain.ain.func.(fid) in
+              let e =
+                Call
+                  ( Method (obj, func),
+                    reshape_args ctx (Ain.Function.arg_types func) args )
+              in
+              match func.return_type with
+              | Void ->
+                  if
+                    n = 1
+                    && Option.exists (List.hd ctx.stack) ~f:(fun v ->
+                        Poly.(v = List.hd_exn args))
+                  then (
+                    ctx.stack <- List.tl_exn ctx.stack;
+                    push ctx (PropertySet (obj, func, List.hd_exn args)))
+                  else emit_expression ctx e
+              | Ref (Int | Bool | LongInt | Float) -> pushl ctx [ e; Void ]
+              | _ -> push ctx e)
           | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)
         else
           let func = Ain.ain.func.(n) in
