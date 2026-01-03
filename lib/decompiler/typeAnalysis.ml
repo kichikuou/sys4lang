@@ -485,6 +485,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | IFace _, Ref Void, R_ASSIGN -> (AssignOp (insn, lval', rhs'), lt)
       | IFace i, IFace i', R_ASSIGN when i = i' ->
           (AssignOp (insn, lval', rhs'), lt)
+      | Ref (Struct sno), IFace ino, ASSIGN when sno = ino ->
+          (AssignOp (insn, lval', rhs'), lt)
       | Array _, Array _, PSEUDO_ARRAY_ASSIGN ->
           (AssignOp (insn, lval', rhs'), lt)
       | _ ->
