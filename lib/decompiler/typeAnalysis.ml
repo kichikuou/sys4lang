@@ -335,7 +335,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               Printf.failwithf "Functype expected, got %s" (show_ain_type t) ())
       | Delegate (dt, expr) -> (
           match self#analyze_expr Any expr with
-          | expr', Delegate dtv ->
+          | expr', (Delegate dtv | Ref (Delegate dtv)) ->
               tvar_set_id dtv dt.id (Ain.FuncType.to_type Ain.ain.delg.(dt.id));
               let args = analyze_args (Ain.FuncType.arg_types dt) in
               (Call (Delegate (dt, expr'), args), dt.return_type)
@@ -467,7 +467,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | FuncType ftv, String, PSEUDO_FT_ASSIGNS ft_id ->
           tvar_set_id ftv ft_id (Ain.FuncType.to_type Ain.ain.fnct.(ft_id));
           (AssignOp (insn, lval', rhs'), String)
-      | (Delegate dtl | Ref (Delegate dtl)), Delegate dtr, _ ->
+      | (Delegate dtl | Ref (Delegate dtl)), Delegate dtr, _
+      | Delegate dtl, Ref (Delegate dtr), DG_ASSIGN ->
           Type.TypeVar.unify func_type_unify dtl dtr;
           (AssignOp (insn, lval', rhs'), lt)
       | ( (Int | Bool | LongInt | Char | Enum _),
