@@ -566,6 +566,7 @@ let is_null_in_this_branch ctx expr =
 let push_call_result ctx (return_type : Ain.type_t) e =
   match return_type with
   | Void -> emit_expression ctx e
+  | Option _ -> pushl ctx [ e; Option e ]
   | t when Type.is_fat t -> pushl ctx [ e; Void ]
   | _ -> push ctx e
 
