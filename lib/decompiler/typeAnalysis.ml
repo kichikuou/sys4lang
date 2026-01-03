@@ -137,7 +137,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           match (auto_deref ot, auto_deref kt) with
           | Array t, (Int | LongInt | Char | Enum _) ->
               (ArrayRef (obj', key'), t)
-          | Struct s, Int -> (
+          | (Struct s | IFace s), Int -> (
               match key' with
               | Number n ->
                   let memb = Ain.ain.strt.(s).members.(Int32.to_int_exn n) in
