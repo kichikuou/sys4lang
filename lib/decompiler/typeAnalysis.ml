@@ -200,7 +200,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
 
     method analyze_expr expected =
       function
-      | Page StructPage as e -> (e, Ref (Struct (Option.value_exn struc).id))
+      | Page StructPage as e ->
+          let sno = match struc with None -> -1 | Some s -> s.id in
+          (e, Ref (Struct sno))
       | Page _ as e -> failwith (show_expr e)
       | Number n as e -> (
           match (expected, n) with
