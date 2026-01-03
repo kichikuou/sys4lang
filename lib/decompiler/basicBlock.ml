@@ -1263,6 +1263,8 @@ let replace_top2_predecessors ctx addr predecessor =
     | Some _ -> Printf.failwithf "only one predecessor at address %d" addr ()
     | None -> Printf.failwithf "no predecessors at address %d" addr ())
 
+let make_option = function Option _ as obj -> obj | obj -> Option obj
+
 let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
   match (p1, p2) with
   (* e1 ?? e2 *)
@@ -1287,7 +1289,7 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         _;
       } )
     when es1 == es2 ->
-      Some { condition; stack = Option obj :: e :: es1; stmts }
+      Some { condition; stack = make_option obj :: e :: es1; stmts }
   | ( { stack = Number 0l :: (Number _ as n) :: e :: es1; stmts; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
@@ -1295,7 +1297,7 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         _;
       } )
     when es1 == es2 ->
-      Some { condition; stack = Option obj :: n :: e :: es1; stmts }
+      Some { condition; stack = make_option obj :: n :: e :: es1; stmts }
   (* expr?.iface_expr *)
   | ( { stack = Number 0l :: Void :: e :: es1; stmts; _ },
       {
@@ -1305,7 +1307,7 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
       } )
     when es1 == es2 ->
       let obj = match obj with Deref o -> DerefRef o | _ -> obj in
-      Some { condition; stack = Option obj :: Void :: e :: es1; stmts }
+      Some { condition; stack = make_option obj :: Void :: e :: es1; stmts }
   (* obj?.void_method() *)
   | ( {
         stack = Number 0l :: es1;
@@ -1383,7 +1385,7 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         _;
       } )
     when e == e' && es1 == es2 && contains_expr e obj ->
-      Some { condition; stack = Option obj :: e' :: es1; stmts = p1.stmts }
+      Some { condition; stack = make_option obj :: e' :: es1; stmts = p1.stmts }
   (* obj?.fat_value ?? e *)
   | ( { stack = Option e :: Void :: e' :: es1; _ },
       {
@@ -1393,7 +1395,11 @@ let merge_option_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
       } )
     when e == e' && es1 == es2 && contains_expr e obj ->
       Some
-        { condition; stack = Option obj :: Void :: e' :: es1; stmts = p1.stmts }
+        {
+          condition;
+          stack = make_option obj :: Void :: e' :: es1;
+          stmts = p1.stmts;
+        }
   (* obj.e1 ?? (dummy_var = val)
      soundfiltereditor::detail::CMultiCombFilter@WriteEX in Ixseal *)
   | ( { stack = Void :: e1 :: es1; _ },
