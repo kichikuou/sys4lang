@@ -260,16 +260,43 @@ let rec interface_value obj vofs =
   | _, Void -> DerefRef (RefValue obj)
   | _, _ -> DerefRef (ObjRef (obj, vofs))
 
-let delegate_value obj func =
+let resolve_method ctx obj index =
+  let fid =
+    match
+      (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr Any obj
+    with
+    | _, (Struct s | Ref (Struct s)) -> Ain.ain.strt.(s).vtable.(index)
+    | _, (IFace iface | Ref (IFace iface)) -> (
+        match Ain.ain.strt.(iface).implementers with
+        | [] -> Ain.ain.strt.(iface).vtable.(index)
+        | implementer :: _ ->
+            let index = implementer.vtable_offset + index in
+            Ain.ain.strt.(implementer.struct_type).vtable.(index))
+    | _, t ->
+        failwith
+          ("resolve_method: non-struct/interface type " ^ Type.show_ain_type t)
+  in
+  Ain.ain.func.(fid)
+
+let delegate_value ctx obj func =
   match (obj, func) with
   | _, Number func_no ->
       BoundMethod (obj, Ain.ain.func.(Int32.to_int_exn func_no))
   | Number -1l, DelegateCast _ -> func
-  | _, _ -> failwith "oops"
+  | ( _,
+      Deref
+        (ObjRef
+           (Deref (ObjRef (obj', Number 0l)), BinaryOp (ADD, Void, Number index)))
+    )
+    when obj == obj' ->
+      BoundMethod (obj, resolve_method ctx obj (Int32.to_int_exn index))
+  | _, _ ->
+      Printf.failwithf "cannot create delegate value:\nobj = %s\nfunc=%s"
+        (show_expr obj) (show_expr func) ()
 
 let convert_stack_top_to_delegate ctx =
   update_stack ctx (function
-    | func :: obj :: stack -> delegate_value obj func :: stack
+    | func :: obj :: stack -> delegate_value ctx obj func :: stack
     | stack -> unexpected_stack "convert_stack_top_to_delegate" stack)
 
 let ref_ ctx =
@@ -493,7 +520,7 @@ let pop_args ctx vartypes =
         aux (interface_value obj vofs :: acc) ts
     | (HllFunc | HllFunc2) :: ts ->
         let obj, func = pop2 ctx in
-        aux (delegate_value obj func :: acc) ts
+        aux (delegate_value ctx obj func :: acc) ts
     | _ :: ts ->
         let arg = pop ctx in
         aux (arg :: acc) ts
@@ -747,27 +774,7 @@ let analyze ctx =
               Deref
                 (ObjRef (_, BinaryOp (ADD, (Number 0l | Void), Number index))) )
             -> (
-              let fid =
-                match
-                  (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr
-                    Any obj
-                with
-                | _, (Struct s | Ref (Struct s)) ->
-                    Ain.ain.strt.(s).vtable.(Int32.to_int_exn index)
-                | _, (IFace iface | Ref (IFace iface)) ->
-                    let implementer =
-                      List.hd_exn Ain.ain.strt.(iface).implementers
-                    in
-                    let index =
-                      implementer.vtable_offset + Int32.to_int_exn index
-                    in
-                    Ain.ain.strt.(implementer.struct_type).vtable.(index)
-                | _, t ->
-                    failwith
-                      ("virtual call on non-struct/interface type: "
-                     ^ Type.show_ain_type t)
-              in
-              let func = Ain.ain.func.(fid) in
+              let func = resolve_method ctx obj (Int32.to_int_exn index) in
               let e =
                 Call
                   ( Method (obj, func),
@@ -1026,13 +1033,14 @@ let analyze ctx =
     | (DG_SET | DG_ADD) as op -> (
         match take_stack ctx with
         | [ func; obj; Deref lvalue ] ->
-            emit_expression ctx (AssignOp (op, lvalue, delegate_value obj func))
+            emit_expression ctx
+              (AssignOp (op, lvalue, delegate_value ctx obj func))
         | stack -> unexpected_stack (show_instruction op) stack)
     | DG_ERASE -> (
         match take_stack ctx with
         | [ func; obj; Deref lvalue ] ->
             emit_expression ctx
-              (Call (Builtin (DG_ERASE, lvalue), [ delegate_value obj func ]))
+              (Call (Builtin (DG_ERASE, lvalue), [ delegate_value ctx obj func ]))
         | stack -> unexpected_stack "DG_ERASE" stack)
     | DG_EXIST ->
         update_stack ctx (function
