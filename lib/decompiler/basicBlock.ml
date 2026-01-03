@@ -602,6 +602,7 @@ let analyze ctx =
     | POP | DG_POP -> (
         match pop ctx with
         | Void | Number _ | Page _
+        | BinaryOp (MUL, _, Number 2l) (* index to interface array *)
         | Deref (PageRef _)
         | DerefRef (PageRef _)
         | Option _ ->
