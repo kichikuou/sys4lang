@@ -145,6 +145,11 @@ module Function = struct
       nr_args;
       crc;
     }
+
+  let is_property_setter = function
+    | { nr_args = 1; return_type = Void; name; _ } ->
+        String.is_suffix name ~suffix:"::set"
+    | _ -> false
 end
 
 module InitVal = struct

@@ -15,6 +15,7 @@
  *)
 
 open Base
+open Common.Util
 open Loc
 open Ast
 open Instructions
@@ -614,6 +615,50 @@ let array_literal expr =
   in
   unfold [] expr
 
+let ain11_callmethod ctx nr_args =
+  let args = pop_n ctx nr_args in
+  let obj, func_expr = pop2 ctx in
+  let func =
+    match func_expr with
+    | Number fid -> Ain.ain.func.(Int32.to_int_exn fid)
+    | Deref (ObjRef (_, BinaryOp (ADD, (Number 0l | Void), Number index))) ->
+        resolve_method ctx obj (Int32.to_int_exn index)
+    | _ -> unexpected_stack "CALLMETHOD" (func_expr :: obj :: ctx.stack)
+  in
+  let e =
+    Call
+      (Method (obj, func), reshape_args ctx (Ain.Function.arg_types func) args)
+  in
+  match (func.return_type, ctx.stack) with
+  | Void, Number 0l :: obj' :: stack
+    when Ain.Function.is_property_setter func && obj == obj' -> (
+      let is_getter getter_name =
+        match
+          (parse_qualified_name func.name, parse_qualified_name getter_name)
+        with
+        | (Some l, _), (Some r, _) -> String.equal l r
+        | _, _ -> false
+      in
+      match (ctx.instructions, List.hd_exn args) with
+      | ( { txt = POP; _ }
+          :: { txt = PUSH fid; _ }
+          :: { txt = CALLMETHOD 0; _ }
+          :: insns,
+          BinaryOp (insn, Call (Method (obj', { id = fid'; name; _ }), []), rhs)
+        )
+        when obj == obj' && Int32.to_int_exn fid = fid' && is_getter name ->
+          ctx.instructions <- insns;
+          ctx.stack <- stack;
+          let op = Instructions.to_assign_op insn in
+          push ctx (PropertySet { obj; op; func; rhs })
+      | _ -> emit_expression ctx e)
+  | Void, e :: stack
+    when Ain.Function.is_property_setter func && e == List.hd_exn args ->
+      ctx.stack <- stack;
+      push ctx (PropertySet { obj; op = ASSIGN; func; rhs = List.hd_exn args })
+  | Void, _ -> emit_expression ctx e
+  | _, _ -> push_call_result ctx func.return_type e
+
 (* Analyzes a basic block. *)
 let analyze ctx =
   let terminator = ref None in
@@ -749,49 +794,7 @@ let analyze ctx =
         push_call_result ctx dg_type.return_type
           (Call (Delegate (dg_type, delg), args))
     | CALLMETHOD n ->
-        if Ain.ain.vers >= 11 then
-          let args = pop_n ctx n in
-          match pop2 ctx with
-          | this, Number fid -> (
-              let func = Ain.ain.func.(Int32.to_int_exn fid) in
-              let e =
-                Call
-                  ( Method (this, func),
-                    reshape_args ctx (Ain.Function.arg_types func) args )
-              in
-              match func.return_type with
-              | Void ->
-                  if
-                    n = 1
-                    && Option.exists (List.hd ctx.stack) ~f:(fun v ->
-                        v == List.hd_exn args)
-                  then (
-                    ctx.stack <- List.tl_exn ctx.stack;
-                    push ctx (PropertySet (this, func, List.hd_exn args)))
-                  else emit_expression ctx e
-              | _ -> push_call_result ctx func.return_type e)
-          | ( obj,
-              Deref
-                (ObjRef (_, BinaryOp (ADD, (Number 0l | Void), Number index))) )
-            -> (
-              let func = resolve_method ctx obj (Int32.to_int_exn index) in
-              let e =
-                Call
-                  ( Method (obj, func),
-                    reshape_args ctx (Ain.Function.arg_types func) args )
-              in
-              match func.return_type with
-              | Void ->
-                  if
-                    n = 1
-                    && Option.exists (List.hd ctx.stack) ~f:(fun v ->
-                        Poly.(v = List.hd_exn args))
-                  then (
-                    ctx.stack <- List.tl_exn ctx.stack;
-                    push ctx (PropertySet (obj, func, List.hd_exn args)))
-                  else emit_expression ctx e
-              | _ -> push_call_result ctx func.return_type e)
-          | a, b -> unexpected_stack "CALLMETHOD" (a :: b :: ctx.stack)
+        if Ain.ain.vers >= 11 then ain11_callmethod ctx n
         else
           let func = Ain.ain.func.(n) in
           let args = pop_args ctx (Ain.Function.arg_types func) in

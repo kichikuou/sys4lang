@@ -306,6 +306,28 @@ type instruction =
   | PSEUDO_ARRAY_ASSIGN
 [@@deriving show { with_path = false }]
 
+let to_assign_op = function
+  | ADD -> PLUSA
+  | SUB -> MINUSA
+  | MUL -> MULA
+  | DIV -> DIVA
+  | MOD -> MODA
+  | AND -> ANDA
+  | OR -> ORA
+  | XOR -> XORA
+  | LSHIFT -> LSHIFTA
+  | RSHIFT -> RSHIFTA
+  | F_ADD -> F_PLUSA
+  | F_SUB -> F_MINUSA
+  | F_MUL -> F_MULA
+  | F_DIV -> F_DIVA
+  | LI_ADD -> LI_PLUSA
+  | LI_SUB -> LI_MINUSA
+  | LI_MUL -> LI_MULA
+  | LI_DIV -> LI_DIVA
+  | LI_MOD -> LI_MODA
+  | op -> raise (Invalid_argument ("to_assign_op " ^ show_instruction op))
+
 let width = function
   | JUMP _ -> 6
   | op ->

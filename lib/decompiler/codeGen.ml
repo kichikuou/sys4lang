@@ -407,9 +407,9 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
             str (self#pr_expr 0) i
       | C_Assign (str, i, ch) ->
           self#pr_binary_op parent_op prec (operator ASSIGN) (C_Ref (str, i)) ch
-      | PropertySet (obj, m, rhs) ->
-          self#pr_binary_op parent_op prec (operator ASSIGN)
-            (BoundMethod (obj, m))
+      | PropertySet { obj; op; func; rhs } ->
+          self#pr_binary_op parent_op prec (operator op)
+            (BoundMethod (obj, func))
             rhs
       | InterfaceCast (sno, expr) ->
           bprintf out "%s(%a)" Ain.ain.strt.(sno).name (self#pr_expr 0) expr

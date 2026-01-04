@@ -53,6 +53,7 @@ module Function : sig
   val args : t -> Variable.t list
   val arg_types : t -> type_t list
   val to_type : t -> Type.func_type
+  val is_property_setter : t -> bool
 end
 
 module InitVal : sig

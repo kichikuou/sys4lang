@@ -294,17 +294,17 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           and i', _t2 = self#analyze_expr Int i
           and char', _t3 = self#analyze_expr Char char in
           (C_Assign (str', i', char'), Char)
-      | PropertySet (obj, m, rhs) ->
+      | PropertySet { obj; op; func; rhs } ->
           let obj, _ = self#analyze_expr Any obj in
           let arg_type =
-            match Ain.Function.arg_types m with
+            match Ain.Function.arg_types func with
             | [ t ] -> t
             | _ -> failwith "non-unary property setter function"
           in
           let rhs, t = self#analyze_expr arg_type rhs in
           unify_if_functype arg_type t;
           let rhs = remove_cast arg_type rhs in
-          (PropertySet (obj, m, rhs), t)
+          (PropertySet { obj; op; func; rhs }, t)
       | InterfaceCast (struc, e) ->
           let e', _ = self#analyze_expr Any e in
           (InterfaceCast (struc, e'), IFace struc)

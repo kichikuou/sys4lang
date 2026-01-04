@@ -308,6 +308,7 @@ val width : instruction -> int
 val decode : bytes -> instruction loc list
 val detect_ifthen_optimization : instruction loc list -> bool
 val builtin_method_name : instruction -> string
+val to_assign_op : instruction -> instruction
 
 type syscall = {
   name : string;
