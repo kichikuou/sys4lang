@@ -89,6 +89,8 @@ module Variable = struct
     let type_ = read_variable_type br in
     let group_index = if br.context.version >= 5 then BR.int br else -1 in
     { name; name2; type_; init_val = None; group_index }
+
+  let is_dummy v = String.is_prefix v.name ~prefix:"<dummy"
 end
 
 module Function = struct

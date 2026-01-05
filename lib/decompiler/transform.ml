@@ -20,8 +20,6 @@ open Loc
 
 type ast_transform = statement loc -> statement loc
 
-let is_dummy_var v = String.is_prefix v.Ain.Variable.name ~prefix:"<dummy"
-
 (* Rewrites
       if (cond) { /*empty*/ } else {
         <else-body>
@@ -284,13 +282,13 @@ let remove_generated_initializer_call = function
 let remove_dummy_variable_assignment stmt =
   let strip_dummy_assignment = function
     | AssignOp (PSEUDO_REF_ASSIGN, PageRef (LocalPage, v), expr)
-      when is_dummy_var v ->
+      when Ain.Variable.is_dummy v ->
         expr
     | expr -> expr
   in
   map_expr ~f:strip_dummy_assignment stmt
   |> map_stmt ~f:(function
-    | VarDecl (v, Some (_, e)) when is_dummy_var v -> Expression e
+    | VarDecl (v, Some (_, e)) when Ain.Variable.is_dummy v -> Expression e
     | stmt -> stmt)
 
 let remove_generated_lockpeek stmt =
@@ -397,7 +395,7 @@ let recognize_foreach stmt =
                 Number 0l ) )
           when phys_equal i_var i_var'
                && phys_equal arr_dummy arr_var
-               && is_dummy_var arr_dummy -> (
+               && Ain.Variable.is_dummy arr_dummy -> (
             let body_stmts =
               match while_body.txt with
               | Block stmts -> stmts
@@ -427,7 +425,8 @@ let recognize_foreach stmt =
                             rev = not Poly.(i_init = Number (-1l));
                             var = loop_var;
                             ivar =
-                              (if is_dummy_var i_var then None else Some i_var);
+                              (if Ain.Variable.is_dummy i_var then None
+                               else Some i_var);
                             array = array_expr;
                             body = new_body;
                           };

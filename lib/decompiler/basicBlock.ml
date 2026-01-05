@@ -436,6 +436,11 @@ let sr_assign ctx =
     update_stack ctx (function
       | value :: Deref lvalue :: stack ->
           AssignOp (SR_ASSIGN, lvalue, value) :: stack
+      | value
+        :: (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as assign)
+        :: stack
+        when Ain.Variable.is_dummy v ->
+          AssignOp (SR_ASSIGN, RefValue assign, value) :: stack
       | stack -> unexpected_stack "SR_ASSIGN" stack)
   else
     update_stack ctx (function

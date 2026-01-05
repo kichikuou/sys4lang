@@ -30,6 +30,8 @@ module Variable : sig
     group_index : int;
   }
   [@@deriving show]
+
+  val is_dummy : t -> bool
 end
 
 module Function : sig
