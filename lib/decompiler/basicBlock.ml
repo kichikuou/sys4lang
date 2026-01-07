@@ -681,6 +681,7 @@ let analyze ctx =
     | POP | DG_POP -> (
         match pop ctx with
         | Void | Number _ | Page _
+        | TernaryOp (_, (Void | Number _), (Void | Number _))
         | Deref (PageRef _)
         | DerefRef (PageRef _)
         | Option _ ->
@@ -700,7 +701,8 @@ let analyze ctx =
     | DELETE -> (
         match pop ctx with
         | Deref (PageRef _ | ObjRef _ | RefRef _)
-        | DerefRef (PageRef _ | ObjRef _ | RefRef _) ->
+        | DerefRef (PageRef _ | ObjRef _ | RefRef _)
+        | BoundMethod _ ->
             ()
         | e when is_null_in_this_branch ctx e -> ()
         | e when List.is_empty ctx.stack -> emit_expression ctx e
