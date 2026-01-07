@@ -496,10 +496,7 @@ let incdec ctx op =
     | Number slot :: Page page :: Deref (PageRef (_, var) as lval) :: stack'
       when phys_equal var (varref ctx page (Int32.to_int_exn slot)) ->
         Deref (IncDec (Postfix, op, lval)) :: stack'
-    | slot1
-      :: Deref obj1
-      :: Deref (ObjRef (Deref obj2, slot2) as operand)
-      :: stack'
+    | slot1 :: obj1 :: Deref (ObjRef (obj2, slot2) as operand) :: stack'
       when phys_equal obj1 obj2 && phys_equal slot1 slot2 ->
         Deref (IncDec (Postfix, op, operand)) :: stack'
     | Void :: DerefRef lval :: Deref (RefRef lval') :: stack'
