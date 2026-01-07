@@ -463,3 +463,24 @@ let simplify_boolean_expr stmt =
       | UnaryOp (NOT, BinaryOp (NOTE, e1, e2)) -> BinaryOp (EQUALE, e1, e2)
       | BinaryOp (NOTE, e, Boolean false) -> e
       | expr -> expr)
+
+let convert_ternary_op_to_null_coalescing stmt =
+  if Ain.ain.vers < 11 then stmt
+  else
+    map_expr stmt ~f:(function
+      | TernaryOp
+          ( UnaryOp
+              ( NOT,
+                BinaryOp ((EQUALE | R_EQUALE), Option obj, (Null | Number -1l))
+              ),
+            e1,
+            e2 )
+        when contains_expr e1 obj ->
+          BinaryOp (PSEUDO_NULL_COALESCE, insert_option e1 obj, e2)
+      | TernaryOp
+          ( BinaryOp ((EQUALE | R_EQUALE), Option obj, (Null | Number -1l)),
+            e1,
+            e2 )
+        when contains_expr e2 obj ->
+          BinaryOp (PSEUDO_NULL_COALESCE, insert_option e2 obj, e1)
+      | expr -> expr)

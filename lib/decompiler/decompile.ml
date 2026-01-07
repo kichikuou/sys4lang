@@ -34,6 +34,7 @@ let rec decompile_function ~lambdas (f : CodeSection.function_t) =
     |> BasicBlock.generate_var_decls f.func
     |> ControlFlow.analyze
     |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
+    |> Transform.convert_ternary_op_to_null_coalescing
     |> Transform.expand_else_scope |> Transform.rename_labels
     |> Transform.recover_loop_initializer |> Transform.recognize_foreach
     |> Transform.remove_implicit_array_free
@@ -62,6 +63,7 @@ let inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
   |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
+  |> Transform.convert_ternary_op_to_null_coalescing
   |> Transform.expand_else_scope |> Transform.rename_labels
   |> Transform.recover_loop_initializer |> Transform.recognize_foreach
   |> Transform.remove_implicit_array_free
