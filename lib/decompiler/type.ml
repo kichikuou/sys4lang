@@ -139,6 +139,10 @@ and func_type_unify ft ft' =
   | Ok b -> b
   | Unequal_lengths -> false
 
+let is_scalar = function
+  | Int | LongInt | Bool | Float | Enum _ -> true
+  | _ -> false
+
 let is_fat_reference = function
   | FatRef _ | Ref (Int | LongInt | Bool | Float | Enum _ | IFace _) -> true
   | _ -> false

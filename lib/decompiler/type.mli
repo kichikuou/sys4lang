@@ -56,6 +56,7 @@ and func_type = { return_type : ain_type; arg_types : ain_type list }
 val func_type_unify : func_type -> func_type -> bool
 val create : int -> struc:int -> rank:int -> ain_type
 val create_ain11 : int -> struc:int -> subtype:ain_type option -> ain_type
+val is_scalar : ain_type -> bool
 val is_fat : ain_type -> bool
 val is_fat_reference : ain_type -> bool
 val array_base_and_rank : ain_type -> ain_type * int

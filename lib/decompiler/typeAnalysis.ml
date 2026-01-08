@@ -244,6 +244,9 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | _ ->
               let lval', t = self#analyze_lvalue lval in
               (DerefRef lval', Ref t))
+      | RvalueRef (v, e) ->
+          let e, _ = self#analyze_expr v.type_ e in
+          (RvalueRef (v, e), v.type_)
       | Null -> (
           match expected with
           | Delegate _ -> (Null, expected)

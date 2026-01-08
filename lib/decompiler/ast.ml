@@ -59,6 +59,7 @@ and expr =
   | BoundMethod of expr * Ain.Function.t
   | Deref of lvalue
   | DerefRef of lvalue
+  | RvalueRef of Ain.Variable.t * expr
   | Null
   | Void
   | Option of expr
@@ -220,6 +221,7 @@ let subst expr e1 e2 =
       | BoundMethod (e, m) -> BoundMethod (rec_expr e, m)
       | Deref l -> Deref (rec_lvalue l)
       | DerefRef l -> DerefRef (rec_lvalue l)
+      | RvalueRef (v, e) -> RvalueRef (v, rec_expr e)
       | Option e -> Option (rec_expr e)
       | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es)
       | DerefStruct (n, e) -> DerefStruct (n, rec_expr e)
@@ -270,6 +272,7 @@ let map_expr stmt ~f =
     | BoundMethod (expr, m) -> BoundMethod (rec_expr expr, m) |> f
     | Deref lval -> Deref (rec_lvalue lval) |> f
     | DerefRef lval -> DerefRef (rec_lvalue lval) |> f
+    | RvalueRef (v, e) -> RvalueRef (v, rec_expr e) |> f
     | Null -> f Null
     | Void -> f Void
     | Option expr -> Option (rec_expr expr) |> f
@@ -362,6 +365,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | BoundMethod (expr, _) -> rec_expr expr
     | Deref lval -> rec_lvalue lval
     | DerefRef lval -> rec_lvalue lval
+    | RvalueRef (_, e) -> rec_expr e
     | Null -> ()
     | Void -> ()
     | Option expr -> rec_expr expr

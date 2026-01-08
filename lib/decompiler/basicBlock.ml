@@ -304,26 +304,7 @@ let ref_ ctx =
   update_stack ctx (function
     | TernaryOp (cond, l12, l22) :: TernaryOp (cond', l11, l21) :: stack
       when cond == cond' ->
-        (match l21 with
-        | BinaryOp (PSEUDO_COMMA, assign, l21) ->
-            (* HACK for debug::detail::CDebugFileDataList@GetModeFlag in Ixseal *)
-            TernaryOp
-              ( cond,
-                Deref (lvalue ctx l11 l12),
-                BinaryOp (PSEUDO_COMMA, assign, Deref (lvalue ctx l21 l22)) )
-        | _ ->
-            TernaryOp
-              (cond, Deref (lvalue ctx l11 l12), Deref (lvalue ctx l21 l22)))
-        :: stack
-    (* [l11 ?? (var=val, l21), l12 ?? l22] => [l11.l12, (var=val, l21.l22)] *)
-    | BinaryOp (PSEUDO_NULL_COALESCE, l12, l22)
-      :: BinaryOp
-           (PSEUDO_NULL_COALESCE, l11, BinaryOp (PSEUDO_COMMA, assign, l21))
-      :: stack ->
-        BinaryOp
-          ( PSEUDO_NULL_COALESCE,
-            Deref (lvalue ctx l11 l12),
-            BinaryOp (PSEUDO_COMMA, assign, Deref (lvalue ctx l21 l22)) )
+        TernaryOp (cond, Deref (lvalue ctx l11 l12), Deref (lvalue ctx l21 l22))
         :: stack
     | slot :: page :: stack -> Deref (lvalue ctx page slot) :: stack
     | stack -> unexpected_stack "ref" stack)
@@ -372,8 +353,22 @@ let ref_binary_op ctx op =
 
 let assign_op ctx op =
   update_stack ctx (function
-    | value :: slot :: page :: stack ->
-        AssignOp (op, lvalue ctx page slot, value) :: stack
+    | value :: slot :: page :: stack -> (
+        let lhs = lvalue ctx page slot in
+        match (op, lhs, slot, ctx.instructions) with
+        | ( (ASSIGN | F_ASSIGN),
+            PageRef (LocalPage, v),
+            Number varno',
+            { txt = POP; _ }
+            :: { txt = PUSHLOCALPAGE; _ }
+            :: { txt = PUSH varno; _ }
+            :: rest )
+          when Int32.(varno = varno')
+               && Type.is_scalar v.type_
+               && String.is_suffix v.name ~suffix:" : 右辺値参照化用>" ->
+            ctx.instructions <- rest;
+            Void :: RvalueRef (v, value) :: stack
+        | _ -> AssignOp (op, lhs, value) :: stack)
     | stack -> unexpected_stack (show_instruction op) stack)
 
 let assign_op2 ctx op =
@@ -1477,45 +1472,6 @@ let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
     when obj == obj' && es1 == es2 && stmts == p2.stmts
          && ctx.func.vars.(Int32.to_int_exn slot) == v ->
       Some { condition; stack = Void :: obj :: es1; stmts }
-  (* e1.e2 ?? (dummy_var = val) *)
-  (* {obj != NULL} [e1, e2] stmts=[]
-     {obj == NULL} [LocalPage, slot] stmts=[localvar(slot) = ...]
-     when e1 contains obj
-     => [e1{obj/Option(obj)} ?? (localvar(slot) = ..., LocalPage), e2 ?? slot] *)
-  | ( { stack = e2 :: e1 :: es1; _ },
-      {
-        condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
-        stack = Number slot :: Page LocalPage :: es2;
-        stmts =
-          {
-            txt =
-              Expression
-                (AssignOp ((ASSIGN | F_ASSIGN), PageRef (LocalPage, v), _) as
-                 assign);
-            _;
-          }
-          :: stmts;
-      } )
-    when contains_expr e1 (strip_option obj)
-         && es1 == es2 && p1.stmts == stmts
-         && ctx.func.vars.(Int32.to_int_exn slot) == v ->
-      let e1 =
-        match obj with
-        | Option o -> insert_option e1 o
-        | o -> insert_option e1 o
-      in
-      Some
-        {
-          condition;
-          stack =
-            BinaryOp (PSEUDO_NULL_COALESCE, e2, Number slot)
-            :: BinaryOp
-                 ( PSEUDO_NULL_COALESCE,
-                   e1,
-                   BinaryOp (PSEUDO_COMMA, assign, Page LocalPage) )
-            :: es1;
-          stmts = p1.stmts;
-        }
   | _ -> None
 
 let merge_predecessors ctx address (p1 : predecessor basic_block)
@@ -1733,44 +1689,6 @@ and reduce ctx acc rest =
         | [ b2; b1 ], [ c2; c1 ] when pred2.addr = label1' ->
             [ TernaryOp (a, b2, c2); TernaryOp (a, b1, c1) ]
         | _ -> failwith "cannot happen"
-      in
-      replace_top2_predecessors ctx (List.hd_exn rest).addr
-        {
-          top with
-          end_addr = pred1.end_addr;
-          code = { condition = pred1.code.condition; stack; stmts };
-        };
-      reduce ctx stack' rest
-  (* HACK for debug::detail::CDebugFileDataList@GetModeFlag in Ixseal *)
-  | ( ({ code = { txt = Branch (label1', a); _ }, stmts; _ } as top) :: stack',
-      Some
-        ( ({
-             code =
-               {
-                 stack = [ Number slot; Page LocalPage ];
-                 stmts =
-                   [
-                     {
-                       txt =
-                         Expression
-                           (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as
-                            assign);
-                       _;
-                     };
-                   ];
-                 _;
-               };
-             _;
-           } as pred1),
-          ({ code = { stack = [ b2; b1 ]; stmts = []; _ }; _ } as pred2) ) )
-    when pred2.addr = label1'
-         && ctx.func.vars.(Int32.to_int_exn slot) == v
-         && pred1.code.condition == pred2.code.condition ->
-      let stack =
-        [
-          TernaryOp (a, b2, Number slot);
-          TernaryOp (a, b1, BinaryOp (PSEUDO_COMMA, assign, Page LocalPage));
-        ]
       in
       replace_top2_predecessors ctx (List.hd_exn rest).addr
         {

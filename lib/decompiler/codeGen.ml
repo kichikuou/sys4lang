@@ -343,6 +343,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
             expr method_name
       | Deref lval -> self#pr_lvalue prec out lval
       | DerefRef lval -> self#pr_lvalue prec out lval
+      | RvalueRef (_, e) -> self#pr_expr ?parent_op prec out e
       | New { struc; func = -1; args = [] } ->
           bprintf out "new %s" Ain.ain.strt.(struc).name
       | New { struc; args; _ } ->
