@@ -281,8 +281,7 @@ let remove_generated_initializer_call = function
 
 let remove_dummy_variable_assignment stmt =
   let strip_dummy_assignment = function
-    | AssignOp (PSEUDO_REF_ASSIGN, PageRef (LocalPage, v), expr)
-      when Ain.Variable.is_dummy v ->
+    | AssignOp (_, PageRef (LocalPage, v), expr) when Ain.Variable.is_dummy v ->
         expr
     | expr -> expr
   in

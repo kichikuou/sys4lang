@@ -276,7 +276,7 @@ let map_expr stmt ~f =
     | Null -> f Null
     | Void -> f Void
     | Option expr -> Option (rec_expr expr) |> f
-    | New _ as expr -> f expr
+    | New r -> New { r with args = List.map ~f:rec_expr r.args } |> f
     | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es) |> f
     | DerefStruct (n, expr) -> DerefStruct (n, rec_expr expr) |> f
     | UnaryOp (inst, expr) -> UnaryOp (inst, rec_expr expr) |> f
