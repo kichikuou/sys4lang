@@ -135,8 +135,18 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           let obj', ot = self#analyze_expr Any obj
           and key', kt = self#analyze_expr Int key in
           match (auto_deref ot, auto_deref kt) with
-          | Array t, (Int | LongInt | Char | Enum _) ->
-              (ArrayRef (obj', key'), t)
+          | Array t, (Int | LongInt | Char | Enum _) -> (
+              (* Indexes into interface arrays are doubled by the compiler. *)
+              match (t, key') with
+              | IFace _, Number n when Int32.(n % 2l = 0l) ->
+                  (ArrayRef (obj', Number Int32.(n / 2l)), t)
+              | IFace _, BinaryOp (MUL, key', (Number 2l | EnumValue (_, 2l)))
+                ->
+                  (ArrayRef (obj', key'), t)
+              | IFace _, _ ->
+                  Printf.failwithf "interface array index must be even: %s"
+                    (show_expr key') ()
+              | _ -> (ArrayRef (obj', key'), t))
           | (Struct s | IFace s), Int -> (
               match key' with
               | Number n ->

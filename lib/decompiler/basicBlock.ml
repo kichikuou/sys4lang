@@ -676,6 +676,7 @@ let analyze ctx =
     | POP | DG_POP -> (
         match pop ctx with
         | Void | Number _ | Page _
+        | BinaryOp (MUL, _, Number 2l) (* index to interface array *)
         | TernaryOp (_, (Void | Number _), (Void | Number _))
         | Deref (PageRef _)
         | DerefRef (PageRef _)
