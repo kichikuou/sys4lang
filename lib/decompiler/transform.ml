@@ -218,7 +218,11 @@ let remove_implicit_array_free stmt =
       List.drop_while stmts ~f:(function
         | {
             txt =
-              Expression (Call (Builtin (A_FREE, PageRef (LocalPage, v)), []));
+              Expression
+                ( Call (Builtin (A_FREE, PageRef (LocalPage, v)), [])
+                | Call
+                    ( HllFunc ("Array", { name = "Free"; _ }),
+                      [ Deref (PageRef (_, v)) ] ) );
             _;
           } ->
             List.exists vars ~f:(fun var -> phys_equal var v)

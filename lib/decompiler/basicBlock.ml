@@ -1782,7 +1782,24 @@ let generate_var_decls (func : Ain.Function.t) bbs =
     | Expression (Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), _) as expr)
       when is_uninitialized var ->
         VarDecl (var, Some (ASSIGN, expr))
-    | Expression (Call (Builtin (A_FREE, PageRef (LocalPage, var)), []))
+    | Expression
+        (Call
+           ( HllFunc ("Array", { name = "Alloc"; _ }),
+             Deref (PageRef (_, var)) :: dims ))
+      when is_uninitialized var ->
+        let dims =
+          List.take_while dims ~f:(function Number -1l -> false | _ -> true)
+        in
+        VarDecl
+          ( var,
+            Some
+              (ASSIGN, Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), dims))
+          )
+    | Expression
+        ( Call (Builtin (A_FREE, PageRef (LocalPage, var)), [])
+        | Call
+            ( HllFunc ("Array", { name = "Free"; _ }),
+              [ Deref (PageRef (_, var)) ] ) )
       when is_uninitialized var ->
         VarDecl (var, None)
     | Expression
