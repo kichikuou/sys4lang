@@ -19,6 +19,7 @@ open Loc
 
 type ast_transform = statement loc -> statement loc
 
+val apply_all_transforms : ast_transform
 val expand_else_scope : ast_transform
 
 (* Assigns sequential numbers to labels, and removes unnecessary labels. *)
@@ -34,6 +35,7 @@ val recognize_foreach : ast_transform
 val remove_redundant_return : ast_transform
 val remove_implicit_array_free : ast_transform
 val remove_array_free_for_dead_arrays : ast_transform
+val remove_array_free_for_temporary_arrays : ast_transform
 
 (* Removes `this.2();` call inserted at the beginning of constructors. *)
 val remove_generated_initializer_call : ast_transform

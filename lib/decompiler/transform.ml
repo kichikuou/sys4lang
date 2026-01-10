@@ -270,6 +270,25 @@ let remove_array_free_for_dead_arrays stmt =
   in
   map_block stmt ~f:process_block
 
+(* Removes Array.Free() for temporary arrays for array literals. *)
+let remove_array_free_for_temporary_arrays stmt =
+  if Ain.ain.vers < 12 then stmt
+  else
+    let process_block =
+      List.filter ~f:(function
+        | {
+            txt =
+              Expression
+                (Call
+                   ( HllFunc ("Array", { name = "Free"; _ }),
+                     [ Deref (PageRef (_, v)) ] ));
+            _;
+          } ->
+            not (String.is_prefix v.name ~prefix:"<dummy : new array")
+        | _ -> true)
+    in
+    map_block stmt ~f:process_block
+
 let remove_generated_initializer_call = function
   | { txt = Block stmts; _ } as stmt -> (
       match List.rev stmts with
@@ -494,3 +513,13 @@ let simplify_null_coalescing stmt =
       | BinaryOp (PSEUDO_NULL_COALESCE, Option e1, e2) ->
           BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
       | expr -> expr)
+
+let apply_all_transforms stmt =
+  stmt |> convert_ternary_op_to_null_coalescing |> simplify_null_coalescing
+  |> expand_else_scope |> rename_labels |> recover_loop_initializer
+  |> recognize_foreach |> remove_implicit_array_free
+  |> remove_array_free_for_dead_arrays |> remove_array_free_for_temporary_arrays
+  |> remove_generated_lockpeek |> remove_redundant_return
+  |> remove_dummy_variable_assignment |> remove_vardecl_default_rhs
+  |> fold_newline_func_to_msg |> remove_optional_arguments
+  |> simplify_boolean_expr

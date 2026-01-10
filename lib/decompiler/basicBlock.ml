@@ -1841,7 +1841,7 @@ let generate_var_decls (func : Ain.Function.t) bbs =
         | Call
             ( HllFunc ("Array", { name = "Free"; _ }),
               [ Deref (PageRef (_, var)) ] ) )
-      when is_uninitialized var ->
+      when is_uninitialized var && not (Ain.Variable.is_dummy var) ->
         VarDecl (var, None)
     | Expression
         (Call (Builtin2 (DG_CLEAR, Deref (PageRef (LocalPage, var))), []))
