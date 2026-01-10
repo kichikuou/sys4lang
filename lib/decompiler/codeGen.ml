@@ -324,7 +324,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | MemberPointer (struc, slot) ->
           bprintf out "&%s::%s" Ain.ain.strt.(struc).name
             Ain.ain.strt.(struc).members.(slot).name
-      | BoundMethod (_, ({ is_lambda = true; _ } as func)) -> (
+      | BoundMethod (_, ({ kind = Lambda; _ } as func)) -> (
           match
             List.find (Stack.top_exn current_function).lambdas ~f:(fun f ->
                 Poly.equal f.func func)
@@ -400,6 +400,10 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
             (self#pr_expr (op_prec + 1))
             expr2 (self#pr_expr op_prec) expr3;
           close_paren prec op_prec out
+      | Call (Method (expr, { kind = Getter name; _ }), []) ->
+          bprintf out "%a.%s"
+            (self#pr_expr (prec_value PREC_DOT))
+            expr (strip_class_name name)
       | Call (f, args) ->
           bprintf out "%a(%a)" self#pr_callable f self#pr_arg_list args
       | C_Ref (str, i) ->
@@ -672,8 +676,8 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       let print_func_signature (func : function_t) =
         let return_type = func.func.return_type in
         (if not as_lambda then
-           match func.struc with
-           | Some (struc : Ain.Struct.t) ->
+           match func with
+           | { struc = Some (struc : Ain.Struct.t); _ } ->
                if String.equal func.name "0" then
                  bprintf out "%s::%s" struc.name (strip_qualifiers struc.name)
                else if String.equal func.name "1" then
@@ -681,9 +685,8 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
                else
                  bprintf out "%a %s::%s" self#pr_type return_type struc.name
                    func.name
-           | None ->
-               if func.func.is_label then bprintf out "#%s" func.name
-               else bprintf out "%a %s" self#pr_type return_type func.name);
+           | { func = { kind = Label; _ }; _ } -> bprintf out "#%s" func.name
+           | _ -> bprintf out "%a %s" self#pr_type return_type func.name);
         bprintf out "(%a)"
           (pr_param_list self#pr_vardecl)
           (Ain.Function.args func.func);

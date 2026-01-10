@@ -35,12 +35,14 @@ module Variable : sig
 end
 
 module Function : sig
+  type kind = Normal | Label | Lambda | Getter of string | Setter of string
+  [@@deriving show]
+
   type t = {
     id : int;
     address : int;
     mutable name : string;
-    is_label : bool;
-    is_lambda : bool;
+    kind : kind;
     capture : bool;
     return_type : type_t;
     vars : Variable.t array;
@@ -55,7 +57,6 @@ module Function : sig
   val args : t -> Variable.t list
   val arg_types : t -> type_t list
   val to_type : t -> Type.func_type
-  val is_property_setter : t -> bool
 end
 
 module InitVal : sig

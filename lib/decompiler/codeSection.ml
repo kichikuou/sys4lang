@@ -119,7 +119,8 @@ let rec parse_function func_id code lambdas =
           let owner, name = parse_method_name func.name in
           ( { func; name; owner; end_addr; code = List.rev acc; parent = None },
             tl )
-    | { txt = FUNC n; _ } :: tl when Ain.ain.func.(n).is_lambda -> (
+    | { txt = FUNC n; _ } :: tl when phys_equal Ain.ain.func.(n).kind Lambda
+      -> (
         let lambda, code = parse_function n tl lambdas in
         Hashtbl.add_exn lambdas ~key:n ~data:lambda;
         (* Remove JUMP over the lambda *)
@@ -144,7 +145,7 @@ let parse_functions code lambdas =
   let rec aux acc = function
     | { txt = FUNC func_id; _ } :: tl ->
         let parsed, code = parse_function func_id tl lambdas in
-        if parsed.func.is_lambda then (
+        if phys_equal parsed.func.kind Lambda then (
           Hashtbl.add_exn lambdas ~key:func_id ~data:parsed;
           aux acc code)
         else aux (parsed :: acc) code

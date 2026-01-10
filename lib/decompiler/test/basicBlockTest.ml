@@ -23,8 +23,7 @@ let make_function ?(vars = [||]) ?(return_type = Type.Void) name =
       id = 0;
       address = 0;
       name;
-      is_label = false;
-      is_lambda = false;
+      kind = Normal;
       capture = false;
       return_type;
       vars;
@@ -431,7 +430,7 @@ let%expect_test "var?.void_method();" =
                                 init_val = None; group_index = 0 }
                               )))),
                      { Ain.Function.id = 0; address = 0; name = "void_method";
-                       is_label = false; is_lambda = false; capture = false;
+                       kind = Ain.Function.Normal; capture = false;
                        return_type = Type.Void; vars = [||]; nr_args = 0;
                        crc = 0l }
                      )),
@@ -494,10 +493,9 @@ let%expect_test "return var?.int_method() ?? 42;" =
                                      init_val = None; group_index = 0 }
                                    ))),
                              { Ain.Function.id = 0; address = 0;
-                               name = "int_method"; is_label = false;
-                               is_lambda = false; capture = false;
-                               return_type = Type.Int; vars = [||]; nr_args = 0;
-                               crc = 0l }
+                               name = "int_method"; kind = Ain.Function.Normal;
+                               capture = false; return_type = Type.Int;
+                               vars = [||]; nr_args = 0; crc = 0l }
                              )),
                           [])),
                        (Number 42l)))));

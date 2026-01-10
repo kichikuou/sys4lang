@@ -20,7 +20,7 @@ open Loc
 let collect_lambdas lambdas parent body =
   let acc = ref [] in
   Ast.walk body ~expr_cb:(function
-    | BoundMethod (_, f) when f.is_lambda ->
+    | BoundMethod (_, ({ kind = Lambda; _ } as f)) ->
         let f = Hashtbl.find_exn lambdas f.id in
         f.CodeSection.parent <- Some parent;
         acc := f :: !acc
@@ -296,7 +296,8 @@ let decompile ~move_to_original_file ~continue_on_error =
                   Stdio.eprintf
                     "Warning: Removing ill-typed tagBusho::getSp() function\n"
                 else (
-                  if not f.func.is_lambda then s.methods <- f :: s.methods;
+                  if not (phys_equal f.func.kind Lambda) then
+                    s.methods <- f :: s.methods;
                   decompiled_funcs := f :: !decompiled_funcs)
             | { owner = None; name = "0"; _ } ->
                 globals :=

@@ -94,12 +94,14 @@ module Variable = struct
 end
 
 module Function = struct
+  type kind = Normal | Label | Lambda | Getter of string | Setter of string
+  [@@deriving show]
+
   type t = {
     id : int;
     address : int;
     mutable name : string;
-    is_label : bool;
-    is_lambda : bool;
+    kind : kind;
     capture : bool;
     return_type : type_t;
     vars : Variable.t array;
@@ -131,27 +133,22 @@ module Function = struct
     let return_type = read_return_type br in
     let nr_args = BR.int br in
     let nr_vars = BR.int br in
-    let is_lambda = String.is_substring name ~substring:"<lambda :" in
     let capture = br.context.version >= 11 && BR.bool br in
     let crc = if br.context.version > 1 then BR.i32 br else 0l in
     let vars = read_array br nr_vars Variable.read in
-    {
-      id;
-      address;
-      name;
-      is_label;
-      is_lambda;
-      capture;
-      return_type;
-      vars;
-      nr_args;
-      crc;
-    }
-
-  let is_property_setter = function
-    | { nr_args = 1; return_type = Void; name; _ } ->
-        String.is_suffix name ~suffix:"::set"
-    | _ -> false
+    let kind =
+      if is_label then Label
+      else if String.is_substring name ~substring:"<lambda :" then Lambda
+      else if nr_args = 0 && String.is_suffix name ~suffix:"::get" then
+        Getter (String.chop_suffix_exn name ~suffix:"::get")
+      else if
+        nr_args = 1
+        && phys_equal return_type Void
+        && String.is_suffix name ~suffix:"::set"
+      then Setter (String.chop_suffix_exn name ~suffix:"::set")
+      else Normal
+    in
+    { id; address; name; kind; capture; return_type; vars; nr_args; crc }
 end
 
 module InitVal = struct

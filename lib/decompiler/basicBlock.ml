@@ -15,7 +15,6 @@
  *)
 
 open Base
-open Common.Util
 open Loc
 open Ast
 open Instructions
@@ -624,34 +623,29 @@ let ain11_callmethod ctx nr_args =
     Call
       (Method (obj, func), reshape_args ctx (Ain.Function.arg_types func) args)
   in
-  match (func.return_type, ctx.stack) with
-  | Void, Number 0l :: obj' :: stack
-    when Ain.Function.is_property_setter func && obj == obj' -> (
-      let is_getter getter_name =
-        match
-          (parse_qualified_name func.name, parse_qualified_name getter_name)
-        with
-        | (Some l, _), (Some r, _) -> String.equal l r
-        | _, _ -> false
-      in
+  match (func, ctx.stack) with
+  | { kind = Setter prop; _ }, Number 0l :: obj' :: stack when obj == obj' -> (
       match (ctx.instructions, List.hd_exn args) with
       | ( { txt = POP; _ }
           :: { txt = PUSH fid; _ }
           :: { txt = CALLMETHOD 0; _ }
           :: insns,
-          BinaryOp (insn, Call (Method (obj', { id = fid'; name; _ }), []), rhs)
-        )
-        when obj == obj' && Int32.to_int_exn fid = fid' && is_getter name ->
+          BinaryOp
+            ( insn,
+              Call (Method (obj', { id = fid'; kind = Getter prop'; _ }), []),
+              rhs ) )
+        when obj == obj'
+             && Int32.to_int_exn fid = fid'
+             && String.equal prop prop' ->
           ctx.instructions <- insns;
           ctx.stack <- stack;
           let op = Instructions.to_assign_op insn in
           push ctx (PropertySet { obj; op; func; rhs })
       | _ -> emit_expression ctx e)
-  | Void, e :: stack
-    when Ain.Function.is_property_setter func && e == List.hd_exn args ->
+  | { kind = Setter _; _ }, e :: stack when e == List.hd_exn args ->
       ctx.stack <- stack;
       push ctx (PropertySet { obj; op = ASSIGN; func; rhs = List.hd_exn args })
-  | Void, _ -> emit_expression ctx e
+  | { return_type = Void; _ }, _ -> emit_expression ctx e
   | _, _ -> push_call_result ctx func.return_type e
 
 (* Analyzes a basic block. *)
