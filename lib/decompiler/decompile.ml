@@ -30,20 +30,18 @@ let collect_lambdas lambdas parent body =
 let rec decompile_function ~lambdas (f : CodeSection.function_t) =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   let body =
+    let open Transform in
     BasicBlock.create f
     |> BasicBlock.generate_var_decls f.func
     |> ControlFlow.analyze
     |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
-    |> Transform.convert_ternary_op_to_null_coalescing
-    |> Transform.expand_else_scope |> Transform.rename_labels
-    |> Transform.recover_loop_initializer |> Transform.recognize_foreach
-    |> Transform.remove_implicit_array_free
-    |> Transform.remove_array_free_for_dead_arrays
-    |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
-    |> Transform.remove_dummy_variable_assignment
-    |> Transform.remove_vardecl_default_rhs
-    |> Transform.fold_newline_func_to_msg |> Transform.remove_optional_arguments
-    |> Transform.simplify_boolean_expr
+    |> convert_ternary_op_to_null_coalescing |> simplify_null_coalescing
+    |> expand_else_scope |> rename_labels |> recover_loop_initializer
+    |> recognize_foreach |> remove_implicit_array_free
+    |> remove_array_free_for_dead_arrays |> remove_generated_lockpeek
+    |> remove_redundant_return |> remove_dummy_variable_assignment
+    |> remove_vardecl_default_rhs |> fold_newline_func_to_msg
+    |> remove_optional_arguments |> simplify_boolean_expr
   in
   let lambdas =
     collect_lambdas lambdas f body |> List.map ~f:(decompile_function ~lambdas)
@@ -52,6 +50,7 @@ let rec decompile_function ~lambdas (f : CodeSection.function_t) =
 
 let inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
+  let open Transform in
   BasicBlock.create f
   |> (fun bbs ->
   Stdio.printf "BasicBlock representation:\n%s\n\n"
@@ -63,15 +62,13 @@ let inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
   |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
-  |> Transform.convert_ternary_op_to_null_coalescing
-  |> Transform.expand_else_scope |> Transform.rename_labels
-  |> Transform.recover_loop_initializer |> Transform.recognize_foreach
-  |> Transform.remove_implicit_array_free
-  |> Transform.remove_array_free_for_dead_arrays
-  |> Transform.remove_generated_lockpeek |> Transform.remove_redundant_return
-  |> Transform.remove_dummy_variable_assignment
-  |> Transform.remove_vardecl_default_rhs |> Transform.fold_newline_func_to_msg
-  |> Transform.remove_optional_arguments |> Transform.simplify_boolean_expr
+  |> convert_ternary_op_to_null_coalescing |> simplify_null_coalescing
+  |> expand_else_scope |> rename_labels |> recover_loop_initializer
+  |> recognize_foreach |> remove_implicit_array_free
+  |> remove_array_free_for_dead_arrays |> remove_generated_lockpeek
+  |> remove_redundant_return |> remove_dummy_variable_assignment
+  |> remove_vardecl_default_rhs |> fold_newline_func_to_msg
+  |> remove_optional_arguments |> simplify_boolean_expr
   |> fun body ->
   let printer = new CodeGen.code_printer ~print_addr "" in
   let lambdas =

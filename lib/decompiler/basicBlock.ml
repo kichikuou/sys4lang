@@ -248,15 +248,8 @@ let lvalue ctx page slot =
 
 let rec interface_value obj vofs =
   match (obj, vofs) with
-  | TernaryOp (c1, a1, b1), TernaryOp (c2, a2, b2) when c1 == c2 -> (
-      let a = interface_value a1 a2 in
-      let b = interface_value b1 b2 in
-      match (c1, b) with
-      | ( BinaryOp (EQUALE, Option (InterfaceCast _ as cast), Number -1l),
-          DerefRef (RefValue o) )
-        when cast == o ->
-          BinaryOp (PSEUDO_NULL_COALESCE, cast, a)
-      | _ -> TernaryOp (c1, a, b))
+  | TernaryOp (c1, a1, b1), TernaryOp (c2, a2, b2) when c1 == c2 ->
+      TernaryOp (c1, interface_value a1 a2, interface_value b1 b2)
   | Number -1l, Number 0l -> DerefRef NullRef
   | _, Void -> DerefRef (RefValue obj)
   | _, _ -> DerefRef (ObjRef (obj, vofs))
@@ -1284,20 +1277,22 @@ let strip_option = function Option obj -> obj | obj -> obj
 
 let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
   match (p1, p2) with
-  (* {e1 != -1} [e1]
-     {e1 == -1} [e2]
-     => [e1 ?? e2] *)
+  (* {obj != -1} [e1]
+     {obj == -1} [e2]
+     => [e1{obj/Option(obj)} ?? e2] *)
   | ( { stack = e1 :: es1; _ },
       {
-        condition = BinaryOp (EQUALE, e1', Number -1l) :: condition;
+        condition =
+          BinaryOp (EQUALE, (Option obj | obj), Number -1l) :: condition;
         stack = e2 :: es2;
         _;
       } )
-    when e1 == e1' && es1 == es2 && p1.stmts == p2.stmts ->
+    when Ain.ain.vers >= 11 && es1 == es2 && p1.stmts == p2.stmts ->
       Some
         {
           condition;
-          stack = BinaryOp (PSEUDO_NULL_COALESCE, e1, e2) :: es1;
+          stack =
+            BinaryOp (PSEUDO_NULL_COALESCE, insert_option e1 obj, e2) :: es1;
           stmts = p1.stmts;
         }
   (* {obj != -1} [e, 0]
@@ -1380,23 +1375,6 @@ let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
           stack = [];
           stmts =
             { stmt with txt = Expression (insert_option expr obj) } :: stmts1;
-        }
-  (* {obj != -1} [e1]
-     {obj == -1} [e2]
-     => [e1{obj/Option(obj)} ?? e2] *)
-  | ( { stack = e1 :: es1; _ },
-      {
-        condition = BinaryOp (EQUALE, Option obj, Number -1l) :: condition;
-        stack = e2 :: es2;
-        _;
-      } )
-    when es1 == es2 && p1.stmts == p2.stmts ->
-      Some
-        {
-          condition;
-          stack =
-            BinaryOp (PSEUDO_NULL_COALESCE, insert_option e1 obj, e2) :: es1;
-          stmts = p1.stmts;
         }
   (* obj?.e1 ?? obj?.e2 *)
   (* {Option(obj) != -1} [e1, 0]

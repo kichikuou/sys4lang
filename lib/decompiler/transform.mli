@@ -44,3 +44,4 @@ val fold_newline_func_to_msg : ast_transform
 val remove_optional_arguments : ast_transform
 val simplify_boolean_expr : ast_transform
 val convert_ternary_op_to_null_coalescing : ast_transform
+val simplify_null_coalescing : ast_transform

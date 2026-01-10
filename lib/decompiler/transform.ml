@@ -483,3 +483,14 @@ let convert_ternary_op_to_null_coalescing stmt =
           BinaryOp
             (PSEUDO_NULL_COALESCE, insert_option e2 (strip_option obj), e1)
       | expr -> expr)
+
+let simplify_null_coalescing stmt =
+  if Ain.ain.vers < 11 then stmt
+  else
+    map_expr stmt ~f:(function
+      (* expr? ?? NULL | expr ?? NULL => expr *)
+      | BinaryOp (PSEUDO_NULL_COALESCE, (Option e1 | e1), Null) -> e1
+      (* expr1? ?? expr2 => expr1 ?? expr2 *)
+      | BinaryOp (PSEUDO_NULL_COALESCE, Option e1, e2) ->
+          BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
+      | expr -> expr)

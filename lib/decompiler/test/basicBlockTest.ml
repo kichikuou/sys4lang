@@ -366,7 +366,17 @@ let%expect_test "return var1 ?? var2;" =
        ({ txt = Seq; addr = -1; end_addr = -1 },
         [{ txt =
            (Return
-              (Some (BinaryOp (PSEUDO_NULL_COALESCE,
+              (Some (TernaryOp (
+                       (UnaryOp (NOT,
+                          (BinaryOp (EQUALE,
+                             (Deref
+                                (PageRef (LocalPage,
+                                   { Ain.Variable.name = "var0"; name2 = "";
+                                     type_ = (Type.Ref Type.String);
+                                     init_val = None; group_index = 0 }
+                                   ))),
+                             (Number -1l)))
+                          )),
                        (Deref
                           (PageRef (LocalPage,
                              { Ain.Variable.name = "var0"; name2 = "";
@@ -463,9 +473,9 @@ let%expect_test "return var?.int_method() ?? 42;" =
        ({ txt = Seq; addr = -1; end_addr = -1 },
         [{ txt =
            (Return
-              (Some (BinaryOp (PSEUDO_NULL_COALESCE,
-                       (Call (
-                          (Method (
+              (Some (TernaryOp (
+                       (UnaryOp (NOT,
+                          (BinaryOp (EQUALE,
                              (Option
                                 (Deref
                                    (PageRef (LocalPage,
@@ -473,6 +483,16 @@ let%expect_test "return var?.int_method() ?? 42;" =
                                         type_ = (Type.Ref (Type.Struct 0));
                                         init_val = None; group_index = 0 }
                                       )))),
+                             (Number -1l)))
+                          )),
+                       (Call (
+                          (Method (
+                             (Deref
+                                (PageRef (LocalPage,
+                                   { Ain.Variable.name = "var0"; name2 = "";
+                                     type_ = (Type.Ref (Type.Struct 0));
+                                     init_val = None; group_index = 0 }
+                                   ))),
                              { Ain.Function.id = 0; address = 0;
                                name = "int_method"; is_label = false;
                                is_lambda = false; capture = false;
