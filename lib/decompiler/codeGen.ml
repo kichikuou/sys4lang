@@ -213,6 +213,10 @@ let pr_param_list pr_var out (params : Ain.Variable.t list) =
   in
   print_list ", " pr_var out params
 
+let is_builtin_hll = function
+  | "Array" | "Delegate" | "Float" | "Int" | "String" -> Ain.ain.vers >= 8
+  | _ -> false
+
 type debug_mapping = { addr : int; src : int; line : int }
 
 type debug_info = {
@@ -404,6 +408,10 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           bprintf out "%a.%s"
             (self#pr_expr (prec_value PREC_DOT))
             expr (strip_class_name name)
+      | Call (HllFunc (hll, f), obj :: args) when is_builtin_hll hll ->
+          bprintf out "%a.%s(%a)"
+            (self#pr_expr (prec_value PREC_DOT))
+            obj f.name self#pr_arg_list args
       | Call (f, args) ->
           bprintf out "%a(%a)" self#pr_callable f self#pr_arg_list args
       | C_Ref (str, i) ->
