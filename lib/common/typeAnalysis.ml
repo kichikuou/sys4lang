@@ -24,11 +24,29 @@ open CompileError
 let loose_functype_check = ref false
 let sprintf = Printf.sprintf
 
+(* An lvalue is an expression which denotes a location that can be assigned to. *)
+let is_lvalue = function
+  | { ty = TyFunction _; _ } -> false
+  | { node = Ident _ | Member _ | Subscript _ | New _; _ } -> true
+  | _ -> false
+
+(* A value from which a reference can be made. NULL, reference, this, and
+   lvalue are referenceable. *)
+let is_referenceable = function
+  | { ty = NullType | Ref _; _ } -> true
+  | { node = This; _ } -> true
+  | e -> is_lvalue e
+
 (* Implicit dereference of variables and members. *)
 let maybe_deref (e : expression) =
   match e with
   | { ty = Ref t; node = Ident _ | Member _; _ } -> e.ty <- t
   | _ -> ()
+
+let insert_rvalue_ref e =
+  if not (is_referenceable e) then (
+    e.node <- RvalueRef (clone_expr e);
+    e.ty <- Ref e.ty)
 
 let rec type_equal (expected : jaf_type) (actual : jaf_type) =
   match (expected, actual) with
@@ -140,14 +158,27 @@ let is_builtin = function
   | Ref (Int | Float | String | Array _ | Delegate _) -> true
   | _ -> false
 
-let builtin_of_string (t : Jaf.jaf_type) name =
-  match t with
-  | Int -> Bytecode.int_builtin_of_string name
-  | Float -> Bytecode.float_builtin_of_string name
-  | String -> Bytecode.string_builtin_of_string name
-  | Array _ -> Bytecode.array_builtin_of_string name
-  | Delegate _ -> Bytecode.delegate_builtin_of_string name
-  | _ -> None
+let resolve_builtin ctx e name =
+  let lib_name, builtin_getter =
+    match e.ty with
+    | Int | Ref Int -> ("Int", Bytecode.int_builtin_of_string)
+    | Float | Ref Float -> ("Float", Bytecode.float_builtin_of_string)
+    | String | Ref String -> ("String", Bytecode.string_builtin_of_string)
+    | Array _ | Ref (Array _) -> ("Array", Bytecode.array_builtin_of_string)
+    | Delegate _ | Ref (Delegate _) ->
+        ("Delegate", Bytecode.delegate_builtin_of_string)
+    | _ -> failwith "cannot happen"
+  in
+  match Hashtbl.find ctx.libraries lib_name with
+  | Some l when ctx.version >= 800 -> (
+      match Hashtbl.find l.functions name with
+      | Some _ -> Some (BuiltinHLL lib_name)
+      | None -> None)
+  | _ -> (
+      maybe_deref e;
+      match builtin_getter name with
+      | Some b -> Some (BuiltinMethod b)
+      | None -> None)
 
 let insert_cast t (e : expression) =
   e.node <- Cast (t, clone_expr e);
@@ -191,24 +222,11 @@ class type_analyze_visitor ctx =
     method catch_errors f =
       try f () with Compile_error e -> errors <- e :: errors
 
-    (* an lvalue is an expression which denotes a location that can be assigned to *)
-    method check_lvalue (e : expression) (parent : ast_node) =
-      let check_lvalue_type = function
-        | TyFunction _ -> not_an_lvalue_error e parent
-        | _ -> ()
-      in
-      match e.node with
-      | Ident (_, _) -> check_lvalue_type e.ty
-      | Member (_, _, _) -> check_lvalue_type e.ty
-      | Subscript _ | New _ -> ()
-      | _ -> not_an_lvalue_error e parent
+    method check_lvalue e parent =
+      if not (is_lvalue e) then not_an_lvalue_error e parent
 
-    (* A value from which a reference can be made. NULL, reference, this, and lvalue are referenceable. *)
-    method check_referenceable (e : expression) (parent : ast_node) =
-      match e.ty with
-      | NullType -> ()
-      | Ref _ -> ()
-      | _ -> ( match e.node with This -> () | _ -> self#check_lvalue e parent)
+    method check_referenceable e parent =
+      if not (is_referenceable e) then not_an_lvalue_error e parent
 
     (*
      * Assigning to a functype or delegate variable is special.
@@ -581,10 +599,9 @@ class type_analyze_visitor ctx =
                 (ASTExpression expr))
       (* built-in methods *)
       | Member (e, name, _) when is_builtin e.ty -> (
-          maybe_deref e;
-          match builtin_of_string e.ty name with
+          match resolve_builtin ctx e name with
           | Some builtin ->
-              expr.node <- Member (e, name, BuiltinMethod builtin);
+              expr.node <- Member (e, name, builtin);
               expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
@@ -689,6 +706,24 @@ class type_analyze_visitor ctx =
           let args = check_call f.name f.params args in
           expr.node <- Call (e, args, BuiltinCall builtin);
           expr.ty <- f.return.ty
+      (* built-in method call via HLL *)
+      | Call
+          ( ({ node = Member (obj, fun_name, BuiltinHLL lib_name); _ } as e),
+            args,
+            _ ) ->
+          let lib = Hashtbl.find_exn ctx.libraries lib_name in
+          let f = Hashtbl.find_exn lib.functions fun_name in
+          let args = check_call f.name (List.tl_exn f.params) args in
+          let lib_no =
+            Option.value_exn (Ain.get_library_index ctx.ain lib.hll_name)
+          in
+          let fun_no =
+            Option.value_exn
+              (Ain.get_library_function_index ctx.ain lib_no fun_name)
+          in
+          insert_rvalue_ref obj;
+          expr.node <- Call (e, Some obj :: args, HLLCall (lib_no, fun_no));
+          expr.ty <- f.return.ty
       (* functype/delegate call *)
       | Call (e, args, _) -> (
           match e.ty with
@@ -710,7 +745,9 @@ class type_analyze_visitor ctx =
           | Struct _ -> expr.ty <- Ref ty
           | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
       | DummyRef _ ->
-          compiler_bug "dummy ref in type checker" (Some (ASTExpression expr))
+          compiler_bug "DummyRef in type checker" (Some (ASTExpression expr))
+      | RvalueRef _ ->
+          compiler_bug "RvalueRef in type checker" (Some (ASTExpression expr))
       | This -> (
           match self#env#current_class with
           | Some ty -> expr.ty <- ty

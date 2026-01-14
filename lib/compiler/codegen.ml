@@ -407,6 +407,9 @@ class jaf_compiler ctx debug_info =
               self#compile_expression ref_expr;
               self#write_instruction0
                 (if is_ref_scalar ref_expr.ty then R_ASSIGN else ASSIGN))
+      | RvalueRef e ->
+          (* TODO: Insert <dummy : 右辺値参照化用> variable *)
+          self#compile_expression e
       | This -> self#write_instruction0 PUSHSTRUCTPAGE
       | Null -> (
           match e.ty with
@@ -815,7 +818,7 @@ class jaf_compiler ctx debug_info =
       | Member (_, _, SystemFunction _) ->
           compiler_bug "tried to compile system call member expression"
             (Some (ASTExpression expr))
-      | Member (_, _, BuiltinMethod _) ->
+      | Member (_, _, (BuiltinMethod _ | BuiltinHLL _)) ->
           compiler_bug "tried to compile built-in method member expression"
             (Some (ASTExpression expr))
       | Member (_, _, UnresolvedMember) ->
@@ -947,6 +950,8 @@ class jaf_compiler ctx debug_info =
       | Call (_, _, _) ->
           compiler_bug "invalid call expression" (Some (ASTExpression expr))
       | New _ -> compiler_bug "bare new expression" (Some (ASTExpression expr))
+      | RvalueRef _ ->
+          compiler_bug "RvalueRef in rvalue context" (Some (ASTExpression expr))
       | DummyRef _ -> (
           self#compile_lvalue expr;
           match expr.ty with

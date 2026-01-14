@@ -222,6 +222,21 @@ class type_resolve_visitor ctx ~decl_only =
 let resolve_types ?(decl_only = false) ctx decls =
   (new type_resolve_visitor ctx ~decl_only)#visit_toplevel decls
 
+let check_builtin_library builtin_type =
+  (* All functions in HLL for a built-in type T must have a first argument of
+     type ref T. *)
+  List.iter ~f:(fun func ->
+      match func.params with
+      | [] ->
+          compile_error "builtin HLL function must have at least one parameter"
+            (ASTDeclaration (Function func))
+      | param :: _ ->
+          if not (Poly.equal param.type_spec.ty (Ref builtin_type)) then
+            compile_error
+              (Printf.sprintf "first parameter must be of type ref %s"
+                 (jaf_type_to_string builtin_type))
+              (ASTVariable param))
+
 let define_library ctx decls hll_name import_name =
   let functions =
     List.map decls ~f:(function
@@ -230,6 +245,14 @@ let define_library ctx decls hll_name import_name =
           compiler_bug "unexpected declaration in .hll file"
             (Some (ASTDeclaration decl)))
   in
+  (if ctx.version >= 800 then
+     match import_name with
+     | "Int" -> check_builtin_library Int functions
+     | "Float" -> check_builtin_library Float functions
+     | "String" -> check_builtin_library String functions
+     | "Array" -> check_builtin_library (Array HLLParam) functions
+     | "Delegate" -> check_builtin_library (Delegate None) functions
+     | _ -> ());
   let lib =
     match Ain.get_library_index ctx.ain hll_name with
     | Some i -> Ain.get_library_by_index ctx.ain i

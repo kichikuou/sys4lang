@@ -62,11 +62,20 @@ let print_disassemble ain =
     Dasm.next dasm
   done
 
-let compile_test input =
-  let ctx = Jaf.context_from_ain (Ain.create 4 0) in
+let compile_test ?(ain_version = 4) ?(hlls = []) input =
+  let ctx = Jaf.context_from_ain (Ain.create ain_version 0) in
   let debug_info = DebugInfo.create () in
   try
-    Compile.compile ctx [ Pje.Jaf "test.jaf" ] debug_info (fun _ -> input);
+    let srcs =
+      List.(
+        append
+          (map hlls ~f:(fun (name, _) ->
+               Pje.Hll (name, Stdlib.Filename.chop_extension name)))
+          [ Pje.Jaf "test.jaf" ])
+    in
+    Compile.compile ctx srcs debug_info (fun name ->
+        List.Assoc.find hlls ~equal:String.equal name
+        |> Option.value ~default:input);
     print_disassemble ctx.ain
   with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> Some input)
@@ -1193,4 +1202,37 @@ let%expect_test "dg_argument" =
     054: EOF test.jaf
     060: FUNC NULL
     066: EOF
+    |}]
+
+let%expect_test "HLL-implemented builtin methods" =
+  compile_test ~ain_version:8
+    ~hlls:
+      [
+        ("String.hll", "void foo(ref string self);");
+        ("Int.hll", "void bar(ref int self);");
+      ]
+    {|
+      void f(string s, int i) {
+        s.foo();
+        "a".foo();
+        i.bar();
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: PUSHLOCALPAGE
+    008: PUSH 0
+    014: REF
+    016: CALLHLL library(0), library_function(0)
+    026: S_PUSH "a"
+    032: CALLHLL library(0), library_function(0)
+    042: PUSHLOCALPAGE
+    044: PUSH 1
+    050: CALLHLL library(1), library_function(0)
+    060: RETURN
+    062: ENDFUNC f
+    068: EOF test.jaf
+    074: FUNC NULL
+    080: EOF
     |}]

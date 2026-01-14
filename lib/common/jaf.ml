@@ -137,6 +137,7 @@ type member_type =
   | HLLFunction of string * string
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
+  | BuiltinHLL of string
 
 type variable_type = Parameter | LocalVar | GlobalVar | ClassVar
 
@@ -175,6 +176,7 @@ and ast_expression =
   | Call of expression * expression option list * call_type
   | New of type_specifier
   | DummyRef of int * expression
+  | RvalueRef of expression
   | This
   | Null
   | Lambda of fundecl
@@ -478,6 +480,7 @@ class ivisitor ctx =
           List.iter args ~f:(Option.iter ~f:self#visit_expression)
       | New t -> self#visit_type_specifier t
       | DummyRef (_, e) -> self#visit_expression e
+      | RvalueRef e -> self#visit_expression e
       | This -> ()
       | Null -> ()
       | Lambda f -> self#visit_fundecl f
@@ -684,6 +687,7 @@ let rec expr_to_string (e : expression) =
       sprintf "%s%s" (expr_to_string f) (arglist_to_string args)
   | New ts -> sprintf "new %s" (jaf_type_to_string ts.ty)
   | DummyRef (_, e) -> expr_to_string e
+  | RvalueRef e -> expr_to_string e
   | This -> "this"
   | Null -> "NULL"
   | Lambda _ -> "lambda" (* FIXME *)

@@ -195,6 +195,7 @@ class const_eval_visitor ctx =
       | Call (_, _, _) -> ()
       | New _ -> ()
       | DummyRef _ -> ()
+      | RvalueRef _ -> ()
       | This -> ()
       | Null -> ()
       | Lambda _ -> ()
