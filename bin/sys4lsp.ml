@@ -28,12 +28,18 @@ let () =
     | Sys_error msg -> Some msg
     | _ -> None)
 
-class lsp_server ~sw ~fs =
+class lsp_server ~sw ~fs ~domain_mgr =
   object (self)
     inherit Linol_eio.Jsonrpc2.server as super
 
     val project =
-      Project.create ~read_file:(fun path -> Eio.Path.(load (fs / path)))
+      Project.create ~read_file:(fun path ->
+          if String.equal Sys.os_type "Win32" then
+            (* Workaround for Eio.Path not handling absolute paths correctly on Windows.
+               See https://github.com/ocaml-multicore/eio/issues/762 *)
+            Eio.Domain_manager.run domain_mgr (fun () ->
+                Stdio.In_channel.read_all path)
+          else Eio.Path.(load (fs / path)))
 
     val initial_scan_done = Eio.Promise.create ()
     method spawn_query_handler f = Linol_eio.spawn f
@@ -115,7 +121,8 @@ let run () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let fs = Eio.Stdenv.fs env in
-  let s = new lsp_server ~sw ~fs in
+  let domain_mgr = Eio.Stdenv.domain_mgr env in
+  let s = new lsp_server ~sw ~fs ~domain_mgr in
   let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
   let task () =
     let shutdown () = Poly.(s#get_status = `ReceivedExit) in
