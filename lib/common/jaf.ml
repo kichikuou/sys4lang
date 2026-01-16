@@ -252,7 +252,9 @@ let ft_of_fundecl fundecl =
   (args, ret)
 
 let is_constructor (f : fundecl) =
-  match f.class_name with Some s -> String.equal f.name s | _ -> false
+  match f.class_name with
+  | Some s -> String.equal f.name (snd (Util.parse_qualified_name s))
+  | _ -> false
 
 let mangled_name fdecl =
   match fdecl.class_name with

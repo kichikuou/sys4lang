@@ -22,6 +22,17 @@ C2::C2() {
 	set();
 }
 
+class some_namespace::C3 {
+public:
+	C3();
+	array@int a[42];
+	int len;
+};
+
+some_namespace::C3::C3() {
+	this.len = this.a.Numof();
+}
+
 int main()
 {
 	C f;
@@ -32,6 +43,9 @@ int main()
 
 	C2 c2;
 	assert(c2.m == 2);
+
+	some_namespace::C3 c3;
+	assert(c3.len == 42);
 
 	return 0;
 }
