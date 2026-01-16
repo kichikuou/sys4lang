@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 - 2026-01-16
+- Tsumamigui 3 and Heartful Maman are now supported.
+- Compiler: `(type)expression` cast syntax has been removed. Please use `type(expression)` instead.
+- Decompiler: Now `sys4dc` can produce output for Ixseal and Rance X (though they cannot be recompiled with `sys4c`).
+- Decompiler: Added `--continue-on-error` command line flag.
+- LSP: The language server no longer loads AIN file. Instead it scans all source files in the background.
+- LSP: Added support for goto-definition for global constants and HLL functions.
+
 ## 0.6.0 - 2025-11-01
 - Decompiler: Changed the generated code style to be more compact
 - Compiler: Added support for the optional argument of `float.String()`
