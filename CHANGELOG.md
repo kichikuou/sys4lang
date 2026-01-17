@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.1 - 2026-01-17
+- LSP: Fixed an issue where project files failed to load on Windows.
+
 ## 0.7.0 - 2026-01-16
 - Tsumamigui 3 and Heartful Maman are now supported.
 - Compiler: `(type)expression` cast syntax has been removed. Please use `type(expression)` instead.
