@@ -41,7 +41,7 @@ let rec decompile_function ~lambdas (f : CodeSection.function_t) =
   in
   CodeGen.{ func = f.func; struc; name = f.name; body; lambdas }
 
-let inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
+let rec inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   BasicBlock.create f
   |> (fun bbs ->
@@ -58,10 +58,13 @@ let inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   |> fun body ->
   let printer = new CodeGen.code_printer ~print_addr "" in
   let lambdas =
-    collect_lambdas lambdas f body |> List.map ~f:(decompile_function ~lambdas)
+    collect_lambdas lambdas f body
+    |> List.map ~f:(inspect_function ~lambdas ~print_addr)
   in
-  printer#print_function { func = f.func; struc; name = f.name; body; lambdas };
-  Stdio.printf "\nDecompiled code:\n%s\n" (Buffer.contents printer#get_buffer)
+  let func = CodeGen.{ func = f.func; struc; name = f.name; body; lambdas } in
+  printer#print_function func;
+  Stdio.printf "\nDecompiled code:\n%s\n" (Buffer.contents printer#get_buffer);
+  func
 
 let to_variable_list vars =
   List.map (Array.to_list vars) ~f:CodeGen.from_ain_variable
@@ -310,7 +313,7 @@ let decompile ~move_to_original_file ~continue_on_error =
     ain_minor_version;
   }
 
-let inspect funcname =
+let inspect funcname ~print_addr =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
   Ain.ain.ifthen_optimized <- Instructions.detect_ifthen_optimization code;
@@ -335,7 +338,7 @@ let inspect funcname =
             String.equal f.CodeSection.func.name funcname))
   with
   | None -> failwith ("cannot find function " ^ funcname)
-  | Some f -> inspect_function f ~lambdas
+  | Some f -> inspect_function f ~lambdas ~print_addr |> ignore
 
 let export ~print_addr decompiled ain_path write_to_file =
   let sources = ref [] in
