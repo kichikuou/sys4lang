@@ -520,6 +520,12 @@ let simplify_null_coalescing stmt =
       (* expr1? ?? expr2 => expr1 ?? expr2 *)
       | BinaryOp (PSEUDO_NULL_COALESCE, Option e1, e2) ->
           BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
+      (* SceneTitle@0 and SceneLoad@0 in Rance10. Conversion from option<enum> to ref<enum> *)
+      | BinaryOp
+          ( PSEUDO_NULL_COALESCE,
+            DerefRef (RefValue (RvalueRef (_, Option e1))),
+            e2 ) ->
+          BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
       | expr -> expr)
 
 let apply_all_transforms stmt =
