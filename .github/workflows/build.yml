@@ -18,11 +18,13 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      # Workaround for ppx_expect test failure on Windows
-      - name: Set git to use LF
+      - name: Windows-specific setup
         if: matrix.os == 'windows-latest'
         run: |
+          # Workaround for ppx_expect test failure on Windows
           git config --global core.autocrlf false
+          # https://github.com/ocaml/setup-ocaml/issues/815
+          echo "SHELLOPTS=igncr" >>"$GITHUB_ENV"
 
       - uses: actions/checkout@v4
 
@@ -37,8 +39,6 @@ jobs:
 
       - name: Copy license files
         shell: bash
-        env:
-          SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
         run: |
           mkdir -p dist/sys4lang/licenses
           eval $(opam env)
@@ -59,13 +59,19 @@ jobs:
       - name: Unit tests
         run: opam exec -- dune runtest
 
+      - name: Smoke tests
+        shell: bash
+        if: matrix.os == 'windows-latest'
+        run: |
+          curl -L -o xsystem4-1.0.0.zip https://github.com/nunuhara/xsystem4/releases/download/1.0.0/xsystem4-1.0.0.zip
+          unzip xsystem4-1.0.0.zip
+          SYS4C=../_build/default/bin/sys4c.exe XSYSTEM4=../xsystem4-1.0.0/xsystem4.exe AIN_FILE=out.ain test/run-tests.sh
+
       - name: Ocamlformat check
         run: opam exec -- dune build @fmt
 
       - name: Copy the build artifact
         shell: bash
-        env:
-          SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
         run: |
           cp _build/default/bin/*.exe dist/sys4lang/
           cp README.md CHANGELOG.md COPYING dist/sys4lang/
@@ -73,8 +79,6 @@ jobs:
       - name: Copy DLLs
         shell: bash
         if: matrix.os == 'windows-latest'
-        env:
-          SHELLOPTS: igncr  # https://github.com/ocaml/setup-ocaml/issues/815
         run: |
           cp "${CYGWIN_ROOT}/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib1.dll" dist/sys4lang/
 

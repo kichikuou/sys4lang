@@ -1,7 +1,7 @@
 #!/bin/sh
 
 TEST_FILE="$1"
-AIN_FILE="$(mktemp --suffix=.ain)"
+AIN_FILE="${AIN_FILE:-$(mktemp --suffix=.ain)}"
 
 printf "Running test $TEST_FILE... "
 
