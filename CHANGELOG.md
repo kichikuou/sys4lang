@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.2 - 2026-01-31
+- Decompiler: Fixed an issue where floating-point numbers close to zero were output with lower precision than required.
+
 ## 0.7.1 - 2026-01-17
 - LSP: Fixed an issue where project files failed to load on Windows.
 
