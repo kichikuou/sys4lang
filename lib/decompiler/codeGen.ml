@@ -101,14 +101,19 @@ let prec_value p = op_prec_to_enum p * 2
 let open_paren prec op_prec out = if prec > op_prec then print_string out "("
 let close_paren prec op_prec out = if prec > op_prec then print_string out ")"
 
-let format_float x =
-  let s = Printf.sprintf "%f" x in
-  let i = ref (String.length s - 1) in
-  while Char.equal (String.get s !i) '0' do
-    Int.decr i
-  done;
-  if Char.equal (String.get s !i) '.' then Int.incr i;
-  String.sub s ~pos:0 ~len:(!i + 1)
+let format_float f =
+  (* Try to find the shortest decimal representation that perfectly
+     reconstructs the original 32-bit float value (round-trip safety). *)
+  let s =
+    let b = Int32.bits_of_float f in
+    let s = Printf.sprintf "%.7g" f in
+    if Int32.(b = bits_of_float (Float.of_string s)) then s
+    else
+      let s = Printf.sprintf "%.8g" f in
+      if Int32.(b = bits_of_float (Float.of_string s)) then s
+      else Printf.sprintf "%.9g" f
+  in
+  if String.mem s '.' || String.mem s 'e' then s else s ^ ".0"
 
 let escape_map = [ ('\t', 't'); ('\r', 'r'); ('\n', 'n'); ('\x00', '0') ]
 
