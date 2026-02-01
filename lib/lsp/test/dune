@@ -1,6 +1,8 @@
 (library
  (name test)
  (libraries system4_lsp)
- (inline_tests)
+ (inline_tests
+  (deps
+   (source_tree ./testdata)))
  (preprocess
   (pps ppx_expect)))

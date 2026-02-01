@@ -1,0 +1,26 @@
+int definition_local(int x) {
+    return x;
+        /* ^definition */
+}
+
+int definition_global() {
+    return global_int;
+        /* ^definition */
+}
+
+void foo(void) {}
+
+void definition_function(void) {
+    foo();
+  /* ^definition */
+}
+
+int type_definition_struct(S s) {
+    return s.x;
+        /* ^type_definition */
+}
+
+void type_definition_functype(ft func) {
+    func();
+ /* ^type_definition */
+}

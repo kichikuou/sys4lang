@@ -78,7 +78,9 @@ let initialize proj (options : Types.InitializationOptions.t) =
   | pjePath ->
       proj.pje <- PjeLoader.load proj.read_file pjePath;
       let open Stdlib.Filename in
-      if is_relative proj.pje.source_dir then
+      if String.equal proj.pje.source_dir "." then
+        proj.pje.source_dir <- dirname pjePath
+      else if is_relative proj.pje.source_dir then
         proj.pje.source_dir <- concat (dirname pjePath) proj.pje.source_dir
 
 let resolve_source_path proj fname =

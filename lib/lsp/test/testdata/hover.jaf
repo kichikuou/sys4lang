@@ -1,0 +1,9 @@
+int hover_local(int x) {
+    return x;
+        /* ^hover */
+}
+
+string hover_global() {
+    return global_string;
+        /* ^hover */
+}

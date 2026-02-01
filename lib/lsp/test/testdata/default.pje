@@ -1,0 +1,7 @@
+Encoding = "UTF-8"
+Source = {
+    "classes.jaf",
+    "globals.jaf",
+    "hover.jaf",
+    "definition.jaf",
+}
