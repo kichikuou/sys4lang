@@ -30,6 +30,14 @@ type t = {
   documents : (string, Document.t) Hashtbl.t;
 }
 
+let backslash_to_slash = String.map ~f:(function '\\' -> '/' | c -> c)
+
+let find_document proj path =
+  Hashtbl.find proj.documents (backslash_to_slash path)
+
+let set_document proj path doc =
+  Hashtbl.set proj.documents ~key:(backslash_to_slash path) ~data:doc
+
 let predefined_constants =
   Jaf.
     [
@@ -88,7 +96,7 @@ let resolve_source_path proj fname =
 
 let update_document proj ~path contents =
   let doc = Document.create proj.ctx ~fname:path contents in
-  Hashtbl.set proj.documents ~key:path ~data:doc;
+  set_document proj path doc;
   List.map doc.errors ~f:(fun (range, message) ->
       Lsp.Types.Diagnostic.create ~range ~message:(`String message) ())
 
@@ -117,7 +125,7 @@ let initial_scan proj =
         | Include _ -> failwith "unexpected include")
     |> List.iter ~f:(fun doc ->
         Document.resolve ~decl_only:true doc;
-        Hashtbl.set proj.documents ~key:doc.path ~data:doc)
+        set_document proj doc.path doc)
   with _ -> ()
 
 let rec jaf_base_type = function
@@ -125,7 +133,7 @@ let rec jaf_base_type = function
   | t -> t
 
 let get_hover proj ~path pos =
-  match Hashtbl.find proj.documents path with
+  match find_document proj path with
   | None -> None
   | Some doc -> (
       let make_hover location content =
@@ -193,8 +201,6 @@ let filename_of_func ain (func : Ain.Function.t) =
   in
   find_eof func.address
 
-let backslash_to_slash = String.map ~f:(function '\\' -> '/' | c -> c)
-
 let location_of_func proj name =
   match Hashtbl.find proj.ctx.functions name with
   | Some f when Option.is_some f.body -> Some f.loc
@@ -207,13 +213,13 @@ let location_of_func proj name =
         Hashtbl.find proj.ctx.functions name >>| fun f -> f.loc)
 
 let find_location proj path pos f =
-  match Hashtbl.find proj.documents path with
+  match find_document proj path with
   | None -> None
   | Some doc -> (
       match f (get_nodes_for_pos doc pos) with
       | Some loc -> (
           let fname = (fst loc).Lexing.pos_fname in
-          match Hashtbl.find proj.documents fname with
+          match find_document proj fname with
           | None -> None
           | Some doc ->
               let range = to_lsp_range doc.lexbuf.lex_buffer loc in
@@ -277,7 +283,7 @@ let get_entrypoint proj =
   match location_of_func proj "main" with
   | Some loc -> (
       let fname = (fst loc).Lexing.pos_fname in
-      match Hashtbl.find proj.documents fname with
+      match find_document proj fname with
       | None -> None
       | Some doc ->
           let range = to_lsp_range doc.lexbuf.lex_buffer loc in
