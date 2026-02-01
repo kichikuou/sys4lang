@@ -48,7 +48,8 @@ class lsp_server ~sw ~fs ~domain_mgr =
         (uri : Lsp.Types.DocumentUri.t) (contents : string) =
       try
         Eio.Promise.await (fst initial_scan_done);
-        let diagnostics = update_document project uri contents in
+        let path = Lsp.Types.DocumentUri.to_path uri in
+        let diagnostics = update_document project ~path contents in
         notify_back#send_diagnostic diagnostics
       with e -> show_exn notify_back e
 
@@ -71,7 +72,8 @@ class lsp_server ~sw ~fs ~domain_mgr =
       fun ~notify_back ~id -> function
         | Lsp.Client_request.TextDocumentTypeDefinition
             { textDocument; position; _ } ->
-            get_type_definition project textDocument.uri position
+            let path = Lsp.Types.DocumentUri.to_path textDocument.uri in
+            get_type_definition project ~path position
         | r -> super#on_request_unhandled ~notify_back ~id r
 
     method! on_req_initialize ~notify_back i =
@@ -100,13 +102,15 @@ class lsp_server ~sw ~fs ~domain_mgr =
     method! config_hover = Some (`Bool true)
 
     method! on_req_hover ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_ _ =
-      get_hover project uri pos
+      let path = Lsp.Types.DocumentUri.to_path uri in
+      get_hover project ~path pos
 
     method! config_definition = Some (`Bool true)
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ _ =
-      get_definition project uri pos
+      let path = Lsp.Types.DocumentUri.to_path uri in
+      get_definition project ~path pos
 
     method! on_unknown_request ~notify_back ~server_request ~id meth params =
       if String.equal meth "system4/entryPoint" then

@@ -81,21 +81,22 @@ let initialize proj (options : Types.InitializationOptions.t) =
       if is_relative proj.pje.source_dir then
         proj.pje.source_dir <- concat (dirname pjePath) proj.pje.source_dir
 
-let update_document proj uri contents =
-  let doc =
-    Document.create proj.ctx ~fname:(Lsp.Types.DocumentUri.to_path uri) contents
-  in
-  Hashtbl.set proj.documents ~key:(Lsp.Types.DocumentUri.to_path uri) ~data:doc;
+let resolve_source_path proj fname =
+  Stdlib.Filename.concat proj.pje.source_dir fname
+
+let update_document proj ~path contents =
+  let doc = Document.create proj.ctx ~fname:path contents in
+  Hashtbl.set proj.documents ~key:path ~data:doc;
   List.map doc.errors ~f:(fun (range, message) ->
       Lsp.Types.Diagnostic.create ~range ~message:(`String message) ())
 
 let load_document proj fname =
-  let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+  let path = resolve_source_path proj fname in
   let to_utf8 =
     match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
   in
   let contents = proj.read_file path |> to_utf8 in
-  update_document proj (Lsp.Types.DocumentUri.of_path path) contents |> ignore
+  update_document proj ~path contents |> ignore
 
 let initial_scan proj =
   let to_utf8 =
@@ -105,10 +106,10 @@ let initial_scan proj =
     List.map (Pje.collect_sources proj.pje) ~f:(fun source ->
         match source with
         | Jaf fname ->
-            let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+            let path = resolve_source_path proj fname in
             Document.parse proj.ctx ~fname:path (proj.read_file path |> to_utf8)
         | Hll (fname, hll_import_name) ->
-            let path = Stdlib.Filename.concat proj.pje.source_dir fname in
+            let path = resolve_source_path proj fname in
             Document.parse proj.ctx ~fname:path ~hll_import_name
               (proj.read_file path |> to_utf8)
         | Include _ -> failwith "unexpected include")
@@ -121,8 +122,8 @@ let rec jaf_base_type = function
   | Jaf.Ref t | Jaf.Array t | Jaf.Wrap t -> jaf_base_type t
   | t -> t
 
-let get_hover proj uri pos =
-  match Hashtbl.find proj.documents (Lsp.Types.DocumentUri.to_path uri) with
+let get_hover proj ~path pos =
+  match Hashtbl.find proj.documents path with
   | None -> None
   | Some doc -> (
       let make_hover location content =
@@ -204,8 +205,8 @@ let location_of_func proj name =
         load_document proj (backslash_to_slash fname);
         Hashtbl.find proj.ctx.functions name >>| fun f -> f.loc)
 
-let find_location proj uri pos f =
-  match Hashtbl.find proj.documents (Lsp.Types.DocumentUri.to_path uri) with
+let find_location proj path pos f =
+  match Hashtbl.find proj.documents path with
   | None -> None
   | Some doc -> (
       match f (get_nodes_for_pos doc pos) with
@@ -219,8 +220,8 @@ let find_location proj uri pos f =
               Some (`Location [ Lsp.Types.Location.create ~uri ~range ]))
       | None -> None)
 
-let get_definition proj uri pos =
-  find_location proj uri pos (function
+let get_definition proj ~path pos =
+  find_location proj path pos (function
     | Jaf.ASTExpression { node = Ident (_, LocalVariable (_, loc)); _ } :: _ ->
         Some loc
     | Jaf.ASTExpression
@@ -259,8 +260,8 @@ let get_definition proj uri pos =
         location_of_func proj (Jaf.mangled_name d)
     | _ -> None)
 
-let get_type_definition proj uri pos =
-  find_location proj uri pos (function
+let get_type_definition proj ~path pos =
+  find_location proj path pos (function
     | Jaf.ASTExpression { ty; _ } :: _ -> (
         match jaf_base_type ty with
         | Struct (name, _) -> Some (Hashtbl.find_exn proj.ctx.structs name).loc
