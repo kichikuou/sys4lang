@@ -7,3 +7,8 @@ string hover_global() {
     return global_string;
         /* ^hover */
 }
+
+void hover_array_copy(array@string as) {
+    as.Copy(0, as, 0, 0);
+    /* ^hover */
+}

@@ -150,9 +150,8 @@ let get_hover proj ~path pos =
       | (Jaf.ASTExpression
            { node = Member (obj, _, BuiltinMethod builtin); loc; _ } as ast_node)
         :: _ ->
-          let elem_t = match obj.ty with Array t -> t | _ -> Void in
           let f =
-            Builtin.fundecl_of_builtin proj.ctx builtin elem_t (Some ast_node)
+            Builtin.fundecl_of_builtin proj.ctx builtin obj.ty (Some ast_node)
           in
           make_hover loc (Jaf.decl_to_string (Function f))
       | Jaf.ASTExpression

@@ -37,9 +37,11 @@ let%expect_test "get_hover" =
               Stdio.print_endline value
           | _ -> Stdio.print_endline "No hover info")
       | None -> ());
-  [%expect {|
-    3:11: int
-    8:11: string
+  [%expect
+    {|
+    1:11: int
+    6:11: string
+    11:7: int Copy(int , ref array@string , int , int );
     |}]
 
 let definition_test
