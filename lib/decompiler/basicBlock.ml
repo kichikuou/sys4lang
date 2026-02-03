@@ -1347,6 +1347,7 @@ let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
          | Number 0l -> true
          | Option e -> contains_interface_expr e obj
          | _ -> false ->
+      let obj = strip_option obj in
       Some
         {
           condition;
