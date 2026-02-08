@@ -240,7 +240,7 @@ type instruction =
   | SH_STRUCT_SR_REF of int * int
   | SH_STRUCT_S_REF of int
   | S_REF2 of int32
-  (* SH_REF_LOCAL_ASSIGN_STRUCTREF2, *)
+  | SH_REF_LOCAL_ASSIGN_STRUCTREF2 of int * int * int32
   | SH_GLOBAL_S_REF of int
   | SH_LOCAL_S_REF of int
   | SH_LOCALREF_SASSIGN_LOCALSREF of int * int

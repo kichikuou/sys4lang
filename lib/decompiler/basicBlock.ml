@@ -1098,6 +1098,12 @@ let analyze ctx =
         push ctx
           (Deref
              (lvalue ctx (Deref (pageref ctx StructPage memb)) (Number slot)))
+    | SH_REF_LOCAL_ASSIGN_STRUCTREF2 (memb, ref_local, slot) ->
+        let rhs =
+          Deref (lvalue ctx (Deref (pageref ctx StructPage memb)) (Number slot))
+        in
+        emit_expression ctx
+          (AssignOp (ASSIGN, RefRef (pageref ctx LocalPage ref_local), rhs))
     | SH_REF_STRUCTREF2 (slot1, slot2) ->
         update_stack ctx (function
           | page :: stack' ->

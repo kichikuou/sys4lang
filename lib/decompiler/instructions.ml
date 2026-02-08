@@ -242,7 +242,7 @@ type instruction =
   | SH_STRUCT_SR_REF of int * int
   | SH_STRUCT_S_REF of int
   | S_REF2 of int32
-  (* SH_REF_LOCAL_ASSIGN_STRUCTREF2, *)
+  | SH_REF_LOCAL_ASSIGN_STRUCTREF2 of int * int * int32
   | SH_GLOBAL_S_REF of int
   | SH_LOCAL_S_REF of int
   | SH_LOCALREF_SASSIGN_LOCALSREF of int * int
@@ -691,6 +691,11 @@ let decode code_bytes =
           SH_STRUCT_SR_REF (memb, struc)
       | 0xdc -> SH_STRUCT_S_REF (BR.int br)
       | 0xdd -> S_REF2 (BR.i32 br)
+      | 0xde ->
+          let memb = BR.int br in
+          let ref_local = BR.int br in
+          let slot = BR.i32 br in
+          SH_REF_LOCAL_ASSIGN_STRUCTREF2 (memb, ref_local, slot)
       | 0xdf -> SH_GLOBAL_S_REF (BR.int br)
       | 0xe0 -> SH_LOCAL_S_REF (BR.int br)
       | 0xe1 ->
