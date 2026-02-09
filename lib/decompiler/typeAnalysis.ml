@@ -399,11 +399,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       let t =
         match (insn, auto_deref et) with
         | FTOI, Float -> Int
-        | ITOF, (Int | LongInt | Bool | Enum _) -> Float
-        | ITOLI, (Int | LongInt | Bool | Enum _) -> LongInt
-        | ITOB, (Int | LongInt | Bool | Enum _) -> Bool
+        | ITOF, (Int | LongInt | Bool | Char | Enum _) -> Float
+        | ITOLI, (Int | LongInt | Bool | Char | Enum _) -> LongInt
+        | ITOB, (Int | LongInt | Bool | Char | Enum _) -> Bool
         | STOI, String -> Int
-        | I_STRING, (Int | LongInt | Bool | Enum _) -> String
+        | I_STRING, (Int | LongInt | Bool | Char | Enum _) -> String
         | (INV | COMPL), Int -> Int
         | F_INV, Float -> Float
         | NOT, t -> t
