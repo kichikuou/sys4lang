@@ -112,21 +112,19 @@ let initial_scan proj =
   let to_utf8 =
     match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
   in
-  try
-    List.map (Pje.collect_sources proj.pje) ~f:(fun source ->
-        match source with
-        | Jaf fname ->
-            let path = resolve_source_path proj fname in
-            Document.parse proj.ctx ~fname:path (proj.read_file path |> to_utf8)
-        | Hll (fname, hll_import_name) ->
-            let path = resolve_source_path proj fname in
-            Document.parse proj.ctx ~fname:path ~hll_import_name
-              (proj.read_file path |> to_utf8)
-        | Include _ -> failwith "unexpected include")
-    |> List.iter ~f:(fun doc ->
-        Document.resolve ~decl_only:true doc;
-        set_document proj doc.path doc)
-  with _ -> ()
+  List.map (Pje.collect_sources proj.pje) ~f:(fun source ->
+      match source with
+      | Jaf fname ->
+          let path = resolve_source_path proj fname in
+          Document.parse proj.ctx ~fname:path (proj.read_file path |> to_utf8)
+      | Hll (fname, hll_import_name) ->
+          let path = resolve_source_path proj fname in
+          Document.parse proj.ctx ~fname:path ~hll_import_name
+            (proj.read_file path |> to_utf8)
+      | Include _ -> failwith "unexpected include")
+  |> List.iter ~f:(fun doc ->
+      Document.resolve ~decl_only:true doc;
+      set_document proj doc.path doc)
 
 let rec jaf_base_type = function
   | Jaf.Ref t | Jaf.Array t | Jaf.Wrap t -> jaf_base_type t

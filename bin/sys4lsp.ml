@@ -84,7 +84,8 @@ class lsp_server ~sw ~fs ~domain_mgr =
       (try
          Project.initialize project options;
          Eio.Fiber.fork ~sw (fun () ->
-             Project.initial_scan project;
+             (try Project.initial_scan project
+              with e -> show_exn notify_back e);
              Eio.Promise.resolve (snd initial_scan_done) ());
          notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
            (options.pjePath ^ " loaded")
