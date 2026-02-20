@@ -1,7 +1,7 @@
 Encoding = "UTF-8"
 Source = {
-    "classes.jaf",
-    "globals.jaf",
-    "hover.jaf",
-    "definition.jaf",
+    "src\classes.jaf",
+    "src\globals.jaf",
+    "src\hover.jaf",
+    "src\definition.jaf",
 }

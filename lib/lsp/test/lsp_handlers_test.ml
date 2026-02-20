@@ -2,10 +2,11 @@ open Base
 open System4_lsp
 
 let test_project_dir = Stdlib.Filename.concat (Stdlib.Sys.getcwd ()) "testdata"
+let testdir_path = List.fold ~init:test_project_dir ~f:Stdlib.Filename.concat
 
 let initialize_project () =
   let proj = Project.create ~read_file:Stdio.In_channel.read_all in
-  let pjePath = Stdlib.Filename.concat test_project_dir "default.pje" in
+  let pjePath = testdir_path [ "default.pje" ] in
   let options = { Types.InitializationOptions.default with pjePath } in
   Project.initialize proj options;
   Project.initial_scan proj;
@@ -23,7 +24,7 @@ let load_jaf proj path =
 
 let%expect_test "get_hover" =
   let proj = initialize_project () in
-  let path = Stdlib.Filename.concat test_project_dir "hover.jaf" in
+  let path = testdir_path [ "src"; "hover.jaf" ] in
   let jaf_text = load_jaf proj path in
   let lines = String.split_lines jaf_text in
   List.iteri lines ~f:(fun i line ->
@@ -51,7 +52,7 @@ let definition_test
       Lsp.Types.Position.t ->
       Lsp.Types.Locations.t option) pattern =
   let proj = initialize_project () in
-  let path = Stdlib.Filename.concat test_project_dir "definition.jaf" in
+  let path = testdir_path [ "src"; "definition.jaf" ] in
   let jaf_text = load_jaf proj path in
   let lines = String.split_lines jaf_text in
   List.iteri lines ~f:(fun i line ->
