@@ -19,6 +19,17 @@ open Base
 open Jaf
 open CompileError
 
+let copy_default_params decl_params def_params =
+  match
+    List.map2 decl_params def_params ~f:(fun decl_param def_param ->
+        match decl_param.initval with
+        | Some e ->
+            { def_param with initval = Some { e with loc = dummy_location } }
+        | None -> def_param)
+  with
+  | Ok params -> params
+  | Unequal_lengths -> def_params
+
 (*
  * AST pass over top-level declarations register names in the .ain file.
  *)
@@ -44,11 +55,11 @@ class type_declare_visitor ctx =
             (* Make sure the declaration has the default parameters specified
                 in the method declaration (default values cannot be specified
                 in method definition) *)
-            decl.params <- prev_decl.params;
+            decl.params <- copy_default_params prev_decl.params decl.params;
             decl
         | Some prev_decl
           when Option.is_none decl.body && Option.is_some prev_decl.body ->
-            prev_decl.params <- decl.params;
+            prev_decl.params <- copy_default_params decl.params prev_decl.params;
             prev_decl
         | _ -> decl);
       let prev_lambda_index = lambda_index in
