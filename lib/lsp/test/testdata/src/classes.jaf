@@ -1,2 +1,3 @@
 struct S { int x; };
+class C { public: int method(); };
 functype void ft(void);

@@ -40,15 +40,16 @@ class type_declare_visitor ctx =
       let name = mangled_name decl in
       Hashtbl.update ctx.functions name ~f:(function
         | Some prev_decl
-          when Option.is_some decl.body
-               && Option.is_none prev_decl.body
-               && ft_compatible (ft_of_fundecl decl) (ft_of_fundecl prev_decl)
-          ->
+          when Option.is_some decl.body && Option.is_none prev_decl.body ->
             (* Make sure the declaration has the default parameters specified
                 in the method declaration (default values cannot be specified
                 in method definition) *)
             decl.params <- prev_decl.params;
             decl
+        | Some prev_decl
+          when Option.is_none decl.body && Option.is_some prev_decl.body ->
+            prev_decl.params <- decl.params;
+            prev_decl
         | _ -> decl);
       let prev_lambda_index = lambda_index in
       lambda_index <- 0;

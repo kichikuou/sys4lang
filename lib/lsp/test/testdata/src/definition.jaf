@@ -10,9 +10,11 @@ int definition_global() {
 
 void foo(void) {}
 
-void definition_function(void) {
+void definition_function(ref C c) {
     foo();
   /* ^definition */
+    c.method();
+   /* ^definition */
 }
 
 int type_definition_struct(S s) {
@@ -24,3 +26,5 @@ void type_definition_functype(ft func) {
     func();
  /* ^type_definition */
 }
+
+int C::method() {}

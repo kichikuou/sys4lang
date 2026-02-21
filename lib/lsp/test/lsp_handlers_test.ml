@@ -50,10 +50,12 @@ let definition_test
       Project.t ->
       path:string ->
       Lsp.Types.Position.t ->
-      Lsp.Types.Locations.t option) pattern =
+      Lsp.Types.Locations.t option) pattern ~load_classes_after_def =
   let proj = initialize_project () in
   let path = testdir_path [ "src"; "definition.jaf" ] in
   let jaf_text = load_jaf proj path in
+  if load_classes_after_def then
+    load_jaf proj (testdir_path [ "src"; "classes.jaf" ]) |> ignore;
   let lines = String.split_lines jaf_text in
   List.iteri lines ~f:(fun i line ->
       match String.substr_index line ~pattern with
@@ -79,18 +81,28 @@ let definition_test
       | None -> ())
 
 let%expect_test "get_definition" =
-  definition_test Project.get_definition "^definition";
-  [%expect
-    {|
-    1:11: definition.jaf:0:21-26 "int x"
-    6:11: globals.jaf:0:4-14 "global_int"
-    13:5: definition.jaf:10:0-17 "void foo(void) {}"
-    |}]
+  let test ~load_classes_after_def =
+    definition_test Project.get_definition "^definition" ~load_classes_after_def;
+    [%expect
+      {|
+      1:11: definition.jaf:0:21-26 "int x"
+      6:11: globals.jaf:0:4-14 "global_int"
+      13:5: definition.jaf:10:0-17 "void foo(void) {}"
+      15:6: definition.jaf:29:0-18 "int C::method() {}"
+      |}]
+  in
+  test ~load_classes_after_def:false;
+  test ~load_classes_after_def:true
 
 let%expect_test "get_type_definition" =
-  definition_test Project.get_type_definition "^type_definition";
-  [%expect
-    {|
-    18:11: classes.jaf:0:0-20 "struct S { int x; };"
-    23:4: classes.jaf:1:0-23 "functype void ft(void);"
-    |}]
+  let test ~load_classes_after_def =
+    definition_test Project.get_type_definition "^type_definition"
+      ~load_classes_after_def;
+    [%expect
+      {|
+      20:11: classes.jaf:0:0-20 "struct S { int x; };"
+      25:4: classes.jaf:2:0-23 "functype void ft(void);"
+      |}]
+  in
+  test ~load_classes_after_def:false;
+  test ~load_classes_after_def:true
