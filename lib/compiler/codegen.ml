@@ -800,7 +800,7 @@ class jaf_compiler ctx debug_info =
           | String -> self#write_instruction0 C_REF
           | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
       | Member ({ node = This; _ }, _, ClassVariable member_no)
-        when ctx.version < 630 && is_scalar expr.ty ->
+        when ctx.version < 630 && Ain.Type.is_scalar (self#member_type expr) ->
           self#write_instruction1 SH_STRUCTREF member_no
       | Member (e, _, ClassVariable member_no) ->
           self#compile_lvalue e;

@@ -368,6 +368,31 @@ let%expect_test "return_struct_from_ref" =
     100: EOF
     |}]
 
+let%expect_test "local ref int" =
+  compile_test
+    {|
+      struct S {
+        void f(int a) {
+          this.f(this.r);
+        }
+        ref int r;
+      };
+    |};
+  [%expect
+    {|
+    000: FUNC S@f
+    006: PUSHSTRUCTPAGE
+    008: PUSHSTRUCTPAGE
+    010: PUSH 0
+    016: REFREF
+    018: REF
+    020: CALLMETHOD S@f
+    026: RETURN
+    028: EOF test.jaf
+    034: FUNC NULL
+    040: EOF
+    |}]
+
 let%expect_test "bool ? ref int : int" =
   compile_test
     {|

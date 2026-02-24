@@ -37,6 +37,7 @@ module Type : sig
   val to_string : t -> string
   val int_of_data_type : int -> t -> int
   val is_ref : t -> bool
+  val is_scalar : t -> bool
 end
 
 module Variable : sig
