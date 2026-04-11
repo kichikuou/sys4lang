@@ -20,4 +20,11 @@ val get_definition :
 val get_type_definition :
   t -> path:string -> Lsp.Types.Position.t -> Lsp.Types.Locations.t option
 
+val get_references :
+  t ->
+  path:string ->
+  Lsp.Types.Position.t ->
+  include_declaration:bool ->
+  Lsp.Types.Location.t list option
+
 val get_entrypoint : t -> Lsp.Types.Location.t option

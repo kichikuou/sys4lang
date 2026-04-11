@@ -1,0 +1,35 @@
+int refs_local(int x) {
+ /* ^ref */
+    int y = x + 1;
+         /* ^ref */
+    y = y + x;
+ /* ^ref */
+    return y;
+        /* ^ref */
+}
+
+int refs_global() {
+    int n = global_int;
+             /* ^ref */
+    global_int = n;
+     /* ^ref */
+    return global_int;
+            /* ^ref */
+}
+
+void refs_function_callee(void) {}
+      /* ^ref */
+
+void refs_function_caller() {
+    refs_function_callee();
+       /* ^ref */
+    refs_function_callee();
+       /* ^ref */
+}
+
+int refs_struct(S s) {
+    s.x = 1;
+ /* ^ref */
+    return s.x;
+          /* ^ref */
+}

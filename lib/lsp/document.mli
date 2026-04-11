@@ -7,6 +7,7 @@ type t = {
   lexbuf : Lexing.lexbuf;
   toplevel : Common.Jaf.declaration list;
   mutable errors : (Lsp.Types.Range.t * string) list;
+  mutable fully_resolved : bool;
 }
 
 val parse :

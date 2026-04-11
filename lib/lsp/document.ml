@@ -60,6 +60,7 @@ type t = {
   lexbuf : Lexing.lexbuf;
   toplevel : Jaf.declaration list;
   mutable errors : (Lsp.Types.Range.t * string) list;
+  mutable fully_resolved : bool;
 }
 
 external reraise : exn -> 'a = "%reraise"
@@ -96,6 +97,7 @@ let parse ctx ~fname ?hll_import_name text =
       lexbuf;
       toplevel;
       errors = [];
+      fully_resolved = false;
     }
   with e ->
     {
@@ -105,13 +107,14 @@ let parse ctx ~fname ?hll_import_name text =
       lexbuf;
       toplevel = [];
       errors = [ make_error lexbuf e ];
+      fully_resolved = false;
     }
 
 let resolve ?(decl_only = false) doc =
   if not (List.is_empty doc.errors) then ()
   else
     try
-      match doc.import_name with
+      (match doc.import_name with
       | None ->
           (* .jaf *)
           Declarations.resolve_types doc.ctx doc.toplevel ~decl_only;
@@ -125,7 +128,8 @@ let resolve ?(decl_only = false) doc =
           let hll_name = Stdlib.Filename.(chop_extension (basename doc.path)) in
           Declarations.resolve_hll_types doc.ctx doc.toplevel;
           Declarations.resolve_types doc.ctx doc.toplevel;
-          Declarations.define_library doc.ctx doc.toplevel hll_name import_name
+          Declarations.define_library doc.ctx doc.toplevel hll_name import_name);
+      if not decl_only then doc.fully_resolved <- true
     with e -> doc.errors <- [ make_error doc.lexbuf e ]
 
 let create ctx ~fname ?hll_import_name ?(decl_only = false) text =

@@ -278,6 +278,207 @@ let get_type_definition proj ~path pos =
         | _ -> None)
     | _ -> None)
 
+(* ---- Find references ---- *)
+
+type ref_symbol =
+  | RefGlobal of string
+  | RefFunction of string
+  | RefStructMember of string * string
+  | RefStruct of string
+  | RefFuncType of string
+  | RefDelegate of string
+  | RefLocalVar of Jaf.location
+
+let loc_equal (a : Jaf.location) (b : Jaf.location) = Poly.equal a b
+
+let symbol_at_nodes nodes =
+  let rec enclosing_struct = function
+    | Jaf.ASTDeclaration (Jaf.StructDef s) :: _ -> Some s.name
+    | _ :: rest -> enclosing_struct rest
+    | [] -> None
+  in
+  match nodes with
+  | Jaf.ASTExpression { node = Ident (_, LocalVariable (_, loc)); _ } :: _ ->
+      Some (RefLocalVar loc)
+  | Jaf.ASTExpression
+      { node = Ident (name, (GlobalVariable _ | GlobalConstant)); _ }
+    :: _ ->
+      Some (RefGlobal name)
+  | Jaf.ASTExpression { node = Ident (_, FunctionName name); _ } :: _
+  | Jaf.ASTExpression { node = Member (_, _, ClassMethod (name, _)); _ } :: _
+  | Jaf.ASTExpression { node = FuncAddr (name, _); _ } :: _ ->
+      Some (RefFunction name)
+  | Jaf.ASTExpression
+      {
+        node = Member ({ ty = Struct (s_name, _); _ }, m_name, ClassVariable _);
+        _;
+      }
+    :: _ ->
+      Some (RefStructMember (s_name, m_name))
+  | Jaf.ASTExpression { node = MemberAddr (s_name, m_name, _); _ } :: _ ->
+      Some (RefStructMember (s_name, m_name))
+  | Jaf.ASTType { ty; _ } :: _ -> (
+      match jaf_base_type ty with
+      | Struct (name, _) -> Some (RefStruct name)
+      | FuncType (Some (name, _)) -> Some (RefFuncType name)
+      | Delegate (Some (name, _)) -> Some (RefDelegate name)
+      | _ -> None)
+  | Jaf.ASTStructDecl (Method d | Constructor d | Destructor d) :: _ ->
+      Some (RefFunction (Jaf.mangled_name d))
+  | Jaf.ASTDeclaration (Function d) :: _ ->
+      Some (RefFunction (Jaf.mangled_name d))
+  | Jaf.ASTDeclaration (StructDef s) :: _ -> Some (RefStruct s.name)
+  | Jaf.ASTDeclaration (FuncTypeDef f) :: _ -> Some (RefFuncType f.name)
+  | Jaf.ASTDeclaration (DelegateDef f) :: _ -> Some (RefDelegate f.name)
+  | Jaf.ASTVariable v :: rest -> (
+      match v.kind with
+      | GlobalVar -> Some (RefGlobal v.name)
+      | LocalVar | Parameter -> Some (RefLocalVar v.location)
+      | ClassVar -> (
+          match enclosing_struct rest with
+          | Some s_name -> Some (RefStructMember (s_name, v.name))
+          | None -> None))
+  | _ -> None
+
+(* Walks a subtree (fundecl or toplevel) and collects locations of
+   expressions/types/declarations matching [target]. Declaration-site
+   matches are emitted only when [include_declaration] is true. *)
+class reference_collector ctx target ~include_declaration =
+  object (self)
+    inherit Jaf.ivisitor ctx as super
+    val mutable refs : Jaf.location list = []
+    method refs = refs
+    method private add loc = refs <- loc :: refs
+
+    method! visit_expression expr =
+      (match (expr.node, target) with
+      | Ident (_, LocalVariable (_, loc)), RefLocalVar tgt
+        when loc_equal loc tgt ->
+          self#add expr.loc
+      | Ident (name, (GlobalVariable _ | GlobalConstant)), RefGlobal tgt
+        when String.equal name tgt ->
+          self#add expr.loc
+      | Ident (_, FunctionName name), RefFunction tgt when String.equal name tgt
+        ->
+          self#add expr.loc
+      | Member (_, _, ClassMethod (name, _)), RefFunction tgt
+        when String.equal name tgt ->
+          self#add expr.loc
+      | FuncAddr (name, _), RefFunction tgt when String.equal name tgt ->
+          self#add expr.loc
+      | ( Member ({ ty = Struct (s, _); _ }, m, ClassVariable _),
+          RefStructMember (ts, tm) )
+        when String.equal s ts && String.equal m tm ->
+          self#add expr.loc
+      | MemberAddr (s, m, _), RefStructMember (ts, tm)
+        when String.equal s ts && String.equal m tm ->
+          self#add expr.loc
+      | _ -> ());
+      super#visit_expression expr
+
+    method! visit_type_specifier ts =
+      (match (jaf_base_type ts.ty, target) with
+      | Struct (name, _), RefStruct tgt when String.equal name tgt ->
+          self#add ts.location
+      | FuncType (Some (name, _)), RefFuncType tgt when String.equal name tgt ->
+          self#add ts.location
+      | Delegate (Some (name, _)), RefDelegate tgt when String.equal name tgt ->
+          self#add ts.location
+      | _ -> ());
+      super#visit_type_specifier ts
+
+    method! visit_variable v =
+      (if include_declaration then
+         match (v.kind, target) with
+         | GlobalVar, RefGlobal tgt when String.equal v.name tgt ->
+             self#add v.location
+         | (LocalVar | Parameter), RefLocalVar tgt when loc_equal v.location tgt
+           ->
+             self#add v.location
+         | ClassVar, RefStructMember (ts, tm) when String.equal v.name tm -> (
+             match self#current_struct_name with
+             | Some s when String.equal s ts -> self#add v.location
+             | _ -> ())
+         | _ -> ());
+      super#visit_variable v
+
+    method! visit_fundecl f =
+      (if include_declaration then
+         match target with
+         | RefFunction tgt when String.equal (Jaf.mangled_name f) tgt ->
+             self#add f.loc
+         | _ -> ());
+      super#visit_fundecl f
+
+    method! visit_declaration d =
+      (if include_declaration then
+         match (d, target) with
+         | StructDef s, RefStruct tgt when String.equal s.name tgt ->
+             self#add s.loc
+         | FuncTypeDef f, RefFuncType tgt when String.equal f.name tgt ->
+             self#add f.loc
+         | DelegateDef f, RefDelegate tgt when String.equal f.name tgt ->
+             self#add f.loc
+         | _ -> ());
+      super#visit_declaration d
+  end
+
+let ensure_fully_resolved proj =
+  Hashtbl.iter proj.documents ~f:(fun doc ->
+      if not doc.fully_resolved then (
+        let saved_errors = doc.errors in
+        Document.resolve doc;
+        (* Errors from type analysis on files the user hasn't opened should
+           not leak into diagnostics. *)
+        doc.errors <- saved_errors;
+        doc.fully_resolved <- true))
+
+let location_to_lsp proj (loc : Jaf.location) =
+  let fname = (fst loc).Lexing.pos_fname in
+  match find_document proj fname with
+  | None -> None
+  | Some doc ->
+      let range = to_lsp_range doc.lexbuf.lex_buffer loc in
+      let uri = Lsp.Types.DocumentUri.of_path fname in
+      Some (Lsp.Types.Location.create ~uri ~range)
+
+(* Find the innermost enclosing fundecl from a node stack returned by
+   [get_nodes_for_pos] (innermost-first). *)
+let rec enclosing_fundecl_of_nodes = function
+  | Jaf.ASTDeclaration (Jaf.Function f) :: _ -> Some f
+  | Jaf.ASTStructDecl (Method f | Constructor f | Destructor f) :: _ -> Some f
+  | _ :: rest -> enclosing_fundecl_of_nodes rest
+  | [] -> None
+
+let get_references proj ~path pos ~include_declaration =
+  match find_document proj path with
+  | None -> None
+  | Some doc ->
+      let nodes = get_nodes_for_pos doc pos in
+      Option.map (symbol_at_nodes nodes) ~f:(fun target ->
+          let locs =
+            match target with
+            | RefLocalVar _ ->
+                let v =
+                  new reference_collector proj.ctx target ~include_declaration
+                in
+                Option.iter
+                  (enclosing_fundecl_of_nodes nodes)
+                  ~f:v#visit_fundecl;
+                v#refs
+            | _ ->
+                ensure_fully_resolved proj;
+                Hashtbl.fold proj.documents ~init:[]
+                  ~f:(fun ~key:_ ~data:doc acc ->
+                    let v =
+                      new reference_collector
+                        proj.ctx target ~include_declaration
+                    in
+                    v#visit_toplevel doc.toplevel;
+                    List.rev_append v#refs acc)
+          in
+          List.filter_map locs ~f:(location_to_lsp proj))
+
 let get_entrypoint proj =
   match location_of_func proj "main" with
   | Some loc -> (

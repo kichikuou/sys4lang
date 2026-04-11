@@ -447,7 +447,9 @@ class environment ctx current_function =
 class ivisitor ctx =
   object (self)
     val env_stack = Stack.singleton (new environment ctx None)
+    val mutable current_struct_name : string option = None
     method env = Stack.top_exn env_stack
+    method current_struct_name = current_struct_name
 
     method visit_expression (e : expression) =
       match e.node with
@@ -557,7 +559,11 @@ class ivisitor ctx =
       | Global ds -> self#visit_vardecls ds
       | GlobalGroup gg -> List.iter gg.vardecls ~f:self#visit_vardecls
       | Function f | FuncTypeDef f | DelegateDef f -> self#visit_fundecl f
-      | StructDef s -> List.iter s.decls ~f:self#visit_struct_declaration
+      | StructDef s ->
+          let prev = current_struct_name in
+          current_struct_name <- Some s.name;
+          List.iter s.decls ~f:self#visit_struct_declaration;
+          current_struct_name <- prev
       | Enum enum ->
           let visit_enumval (_, expr) =
             Option.iter expr ~f:self#visit_expression

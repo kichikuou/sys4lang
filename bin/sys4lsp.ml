@@ -63,7 +63,11 @@ class lsp_server ~sw ~fs ~domain_mgr =
       }
 
     method! config_modify_capabilities c =
-      { c with typeDefinitionProvider = Some (`Bool true) }
+      {
+        c with
+        typeDefinitionProvider = Some (`Bool true);
+        referencesProvider = Some (`Bool true);
+      }
 
     method! on_request_unhandled : type r.
         notify_back:Linol_eio.Jsonrpc2.notify_back ->
@@ -75,6 +79,11 @@ class lsp_server ~sw ~fs ~domain_mgr =
             { textDocument; position; _ } ->
             let path = Lsp.Types.DocumentUri.to_path textDocument.uri in
             get_type_definition project ~path position
+        | Lsp.Client_request.TextDocumentReferences
+            { textDocument; position; context; _ } ->
+            let path = Lsp.Types.DocumentUri.to_path textDocument.uri in
+            get_references project ~path position
+              ~include_declaration:context.includeDeclaration
         | r -> super#on_request_unhandled ~notify_back ~id r
 
     method! on_req_initialize ~notify_back i =
