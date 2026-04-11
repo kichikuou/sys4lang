@@ -1,5 +1,6 @@
 open Base
 open System4_lsp
+module Lsp = Linol_lsp.Lsp
 
 let test_project_dir = Stdlib.Filename.concat (Stdlib.Sys.getcwd ()) "testdata"
 let testdir_path = List.fold ~init:test_project_dir ~f:Stdlib.Filename.concat

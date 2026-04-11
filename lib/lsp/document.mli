@@ -1,3 +1,5 @@
+module Lsp = Linol_lsp.Lsp
+
 type t = {
   ctx : Common.Jaf.context;
   path : string;

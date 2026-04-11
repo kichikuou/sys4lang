@@ -15,6 +15,7 @@
  *)
 open Common
 open Base
+module Lsp = Linol_lsp.Lsp
 
 (* LSP expects character offsets based on utf-16 representation. *)
 let count_utf16_code_units_of_utf8_bytes bytes start end_ =

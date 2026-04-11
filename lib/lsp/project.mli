@@ -1,4 +1,5 @@
 open Base
+module Lsp = Linol_lsp.Lsp
 
 type t
 

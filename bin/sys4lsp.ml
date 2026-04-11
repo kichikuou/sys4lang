@@ -2,6 +2,7 @@ open Base
 open System4_lsp
 open Types
 open Project
+module Lsp = Linol_lsp.Lsp
 
 let show_error notify_back message =
   let params =
@@ -42,7 +43,7 @@ class lsp_server ~sw ~fs ~domain_mgr =
           else Eio.Path.(load (fs / path)))
 
     val initial_scan_done = Eio.Promise.create ()
-    method spawn_query_handler f = Linol_eio.spawn f
+    method spawn_query_handler f = Linol_eio.spawn ~sw f
 
     method private _on_doc ~(notify_back : Linol_eio.Jsonrpc2.notify_back)
         (uri : Lsp.Types.DocumentUri.t) (contents : string) =

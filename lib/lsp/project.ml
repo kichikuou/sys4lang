@@ -16,6 +16,7 @@
 open Common
 open Base
 open Document
+module Lsp = Linol_lsp.Lsp
 
 let encoding_of_string s =
   match String.lowercase s with

@@ -31,7 +31,7 @@
    camlzip
    dune
    dune-build-info
-   (linol-eio (and (>= "0.8") (< "0.10")))
+   (linol-eio (and (>= "0.11") (< "0.12")))
    eio_main
    fpath
    menhir
