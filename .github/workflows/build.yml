@@ -26,7 +26,7 @@ jobs:
           # https://github.com/ocaml/setup-ocaml/issues/815
           echo "SHELLOPTS=igncr" >>"$GITHUB_ENV"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup OCaml
         uses: ocaml/setup-ocaml@v3
@@ -83,7 +83,7 @@ jobs:
           cp "${CYGWIN_ROOT}/usr/x86_64-w64-mingw32/sys-root/mingw/bin/zlib1.dll" dist/sys4lang/
 
       - name: Upload the build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sys4lang-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
           path: dist
