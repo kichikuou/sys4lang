@@ -56,6 +56,9 @@ class type_declare_visitor ctx =
                 in the method declaration (default values cannot be specified
                 in method definition) *)
             decl.params <- copy_default_params prev_decl.params decl.params;
+            (* Out-of-class definitions don't carry access modifiers; preserve
+               the visibility set during struct registration. *)
+            decl.is_private <- prev_decl.is_private;
             decl
         | Some prev_decl
           when Option.is_none decl.body && Option.is_some prev_decl.body ->

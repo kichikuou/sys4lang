@@ -335,6 +335,29 @@ let%expect_test "private members" =
        14 |         c.priv_memb;    // error
                     ^^^^^^^^^^^ |}]
 
+let%expect_test "private method with out-of-class definition" =
+  type_test
+    {|
+      class C {
+      private:
+        int priv_func();
+      public:
+        int pub_func();
+      };
+      int C::priv_func() { return 0; }
+      int C::pub_func() { return 0; }
+      void test() {
+        C c;
+        c.pub_func();
+        c.priv_func();  // error
+      }
+    |};
+  [%expect
+    {|
+    -:13:9-20: C::priv_func is not public
+       13 |         c.priv_func();  // error
+                    ^^^^^^^^^^^ |}]
+
 let%expect_test "Member access for temporary object" =
   type_test
     {|
