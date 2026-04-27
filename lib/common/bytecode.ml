@@ -1274,6 +1274,39 @@ let string_of_syscall = function
   | ExistFunc -> "ExistFunc"
   | CopySaveFile -> "CopySaveFile"
 
+let all_syscalls : syscall list =
+  [
+    Exit;
+    GlobalSave;
+    GlobalLoad;
+    LockPeek;
+    UnlockPeek;
+    Reset;
+    Output;
+    MsgBox;
+    ResumeSave;
+    ResumeLoad;
+    ExistFile;
+    OpenWeb;
+    GetSaveFolderName;
+    GetTime;
+    GetGameName;
+    Error;
+    ExistSaveFile;
+    IsDebugMode;
+    MsgBoxOkCancel;
+    GetFuncStackName;
+    Peek;
+    Sleep;
+    ResumeWriteComment;
+    ResumeReadComment;
+    GroupSave;
+    GroupLoad;
+    DeleteSaveFile;
+    ExistFunc;
+    CopySaveFile;
+  ]
+
 type builtin =
   | Assert
   | IntString
@@ -1350,6 +1383,44 @@ let delegate_builtin_of_string = function
   | "Erase" -> Some DelegateErase
   | "Clear" -> Some DelegateClear
   | _ -> None
+
+let int_builtins : builtin list = [ IntString ]
+let float_builtins : builtin list = [ FloatString ]
+
+let string_builtins : builtin list =
+  [
+    StringInt;
+    StringLength;
+    StringLengthByte;
+    StringEmpty;
+    StringFind;
+    StringGetPart;
+    StringPushBack;
+    StringPopBack;
+    StringErase;
+  ]
+
+let array_builtins : builtin list =
+  [
+    ArrayAlloc;
+    ArrayRealloc;
+    ArrayFree;
+    ArrayNumof;
+    ArrayCopy;
+    ArrayFill;
+    ArrayPushBack;
+    ArrayPopBack;
+    ArrayEmpty;
+    ArrayErase;
+    ArrayInsert;
+    ArraySort;
+    ArraySortBy;
+    ArrayReverse;
+    ArrayFind;
+  ]
+
+let delegate_builtins : builtin list =
+  [ DelegateNumof; DelegateExist; DelegateErase; DelegateClear ]
 
 type argtype =
   | Int

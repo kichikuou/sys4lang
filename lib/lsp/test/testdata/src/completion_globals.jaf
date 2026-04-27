@@ -1,0 +1,25 @@
+int gvar;
+const int GCONST = 42;
+string gstr;
+
+struct SType { int x; };
+functype void ftype(void);
+delegate void dtype(void);
+
+class TestCls {
+public:
+	int tc_member;
+	int tc_method();
+	TestCls();
+	~TestCls();
+private:
+	int tc_priv_field;
+	int tc_priv_method();
+};
+
+int TestCls::tc_method() { return tc_member; }
+int TestCls::tc_priv_method() { return tc_priv_field; }
+TestCls::TestCls() {}
+TestCls::~TestCls() {}
+
+void gfunc(int x) {}

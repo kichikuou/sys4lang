@@ -1,0 +1,6 @@
+Encoding = "UTF-8"
+Source = {
+    "src\completion_globals.jaf",
+    "src\completion.jaf",
+    "src\MyLib.hll", "MyLib",
+}

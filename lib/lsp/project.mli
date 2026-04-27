@@ -27,4 +27,12 @@ val get_references :
   include_declaration:bool ->
   Lsp.Types.Location.t list option
 
+val get_completion :
+  t ->
+  path:string ->
+  Lsp.Types.Position.t ->
+  [ `CompletionList of Lsp.Types.CompletionList.t
+  | `List of Lsp.Types.CompletionItem.t list ]
+  option
+
 val get_entrypoint : t -> Lsp.Types.Location.t option

@@ -18,7 +18,7 @@ Games released between 2003 (Daibanchou) and early 2017 (Heartful Maman) are cur
 - [x] Hover
 - [x] Jump to Definition
 - [x] Find References
-- [ ] Code Completion
+- [x] Code Completion
 - [ ] Signature Help
 - [ ] Semantic Tokens
 

@@ -59,6 +59,8 @@ type t = {
   import_name : string option;
   lexbuf : Lexing.lexbuf;
   toplevel : Jaf.declaration list;
+  last_good_toplevel : Jaf.declaration list;
+  last_good_lexbuf : Lexing.lexbuf;
   mutable errors : (Lsp.Types.Range.t * string) list;
   mutable fully_resolved : bool;
 }
@@ -76,7 +78,7 @@ let make_error lexbuf exn =
   | CompileError.Compile_error (Error (msg, loc)) -> make lexbuf loc msg
   | e -> reraise e
 
-let parse ctx ~fname ?hll_import_name text =
+let parse ctx ~fname ?hll_import_name ?previous text =
   let lexbuf = Lexing.from_string text in
   Lexing.set_filename lexbuf fname;
   try
@@ -96,16 +98,25 @@ let parse ctx ~fname ?hll_import_name text =
       import_name = hll_import_name;
       lexbuf;
       toplevel;
+      last_good_toplevel = toplevel;
+      last_good_lexbuf = lexbuf;
       errors = [];
       fully_resolved = false;
     }
   with e ->
+    let last_good_toplevel, last_good_lexbuf =
+      match previous with
+      | Some prev -> (prev.last_good_toplevel, prev.last_good_lexbuf)
+      | None -> ([], lexbuf)
+    in
     {
       ctx;
       path = fname;
       import_name = hll_import_name;
       lexbuf;
       toplevel = [];
+      last_good_toplevel;
+      last_good_lexbuf;
       errors = [ make_error lexbuf e ];
       fully_resolved = false;
     }
@@ -132,8 +143,8 @@ let resolve ?(decl_only = false) doc =
       if not decl_only then doc.fully_resolved <- true
     with e -> doc.errors <- [ make_error doc.lexbuf e ]
 
-let create ctx ~fname ?hll_import_name ?(decl_only = false) text =
-  let doc = parse ctx ~fname ?hll_import_name text in
+let create ctx ~fname ?hll_import_name ?(decl_only = false) ?previous text =
+  let doc = parse ctx ~fname ?hll_import_name ?previous text in
   resolve ~decl_only doc;
   doc
 

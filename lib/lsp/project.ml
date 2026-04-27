@@ -96,7 +96,8 @@ let resolve_source_path proj fname =
   Stdlib.Filename.concat proj.pje.source_dir fname
 
 let update_document proj ~path contents =
-  let doc = Document.create proj.ctx ~fname:path contents in
+  let previous = find_document proj path in
+  let doc = Document.create proj.ctx ~fname:path ?previous contents in
   set_document proj path doc;
   List.map doc.errors ~f:(fun (range, message) ->
       Lsp.Types.Diagnostic.create ~range ~message:(`String message) ())
@@ -478,6 +479,16 @@ let get_references proj ~path pos ~include_declaration =
                     List.rev_append v#refs acc)
           in
           List.filter_map locs ~f:(location_to_lsp proj))
+
+let get_completion proj ~path pos =
+  let text, scope =
+    match find_document proj path with
+    | None -> (Stdlib.Bytes.empty, None)
+    | Some doc ->
+        ( doc.lexbuf.lex_buffer,
+          Some (doc.last_good_toplevel, doc.last_good_lexbuf.lex_buffer) )
+  in
+  Completion.get_completion proj.ctx ~text ~scope pos
 
 let get_entrypoint proj =
   match location_of_func proj "main" with

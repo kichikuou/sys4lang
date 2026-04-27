@@ -69,6 +69,16 @@ class lsp_server ~sw ~fs ~domain_mgr =
         referencesProvider = Some (`Bool true);
       }
 
+    method! config_completion =
+      Some
+        (Lsp.Types.CompletionOptions.create ~triggerCharacters:[ "." ]
+           ~resolveProvider:false ())
+
+    method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
+        ~workDoneToken:_ ~partialResultToken:_ _doc =
+      let path = Lsp.Types.DocumentUri.to_path uri in
+      get_completion project ~path pos
+
     method! on_request_unhandled : type r.
         notify_back:Linol_eio.Jsonrpc2.notify_back ->
         id:Linol_eio.Jsonrpc2.Req_id.t ->

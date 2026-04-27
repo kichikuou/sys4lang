@@ -130,6 +130,9 @@ let rec multidim_array dims t =
 %start hll
 %type <declaration list> hll
 
+%start expression_eof
+%type <expression> expression_eof
+
 %%
 
 jaf
@@ -138,6 +141,10 @@ jaf
 
 hll
   : hll_declaration* EOF { $1 }
+  ;
+
+expression_eof
+  : expression EOF { $1 }
   ;
 
 qualified_name
