@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 - 2026-04-29
+- LSP: Added code completion for identifiers, member access (`.`), and built-in methods.
+- LSP: Added function signature help -- when you type a function call, parameter names are shown and the current parameter is highlighted.
+- LSP: Added find-all-references support.
+- LSP: Fixed incorrect hover info for `Array` and `Delegate` built-in methods.
+- Compiler: Fixed a code generation bug with `ref` parameters of scalar types in structs.
+- Decompiler: Bugfixes.
+
 ## 0.7.2 - 2026-01-31
 - Decompiler: Fixed an issue where floating-point numbers close to zero were output with lower precision than required.
 
