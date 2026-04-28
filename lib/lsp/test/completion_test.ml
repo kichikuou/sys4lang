@@ -201,20 +201,20 @@ let%expect_test "get_completion_member_for_local_inside_while_body" =
   completion_at proj path text pos;
   [%expect
     {|
-    Alloc [Method] void Alloc(int );
-    Copy [Method] int Copy(int , ref array@int , int , int );
+    Alloc [Method] void Alloc(int nElements);
+    Copy [Method] int Copy(int nDestIndex, ref array@int a, int nSrcIndex, int nLength);
     Empty [Method] int Empty();
-    Erase [Method] int Erase(int );
-    Fill [Method] int Fill(int , int , int );
-    Find [Method] int Find(int , int , int , bool(int, int)  = &NULL);
+    Erase [Method] int Erase(int nIndex);
+    Fill [Method] int Fill(int nIndex, int nLength, int value);
+    Find [Method] int Find(int nBegin, int nEnd, int key, bool(int, int) func = &NULL);
     Free [Method] void Free();
-    Insert [Method] void Insert(int , int );
-    Numof [Method] int Numof(int  = 1);
+    Insert [Method] void Insert(int nIndex, int value);
+    Numof [Method] int Numof(int nDimension = 1);
     PopBack [Method] void PopBack();
-    PushBack [Method] void PushBack(int );
-    Realloc [Method] void Realloc(int );
+    PushBack [Method] void PushBack(int value);
+    Realloc [Method] void Realloc(int nElements);
     Reverse [Method] void Reverse();
-    Sort [Method] void Sort(int(int, int)  = &NULL);
+    Sort [Method] void Sort(int(int, int) func = &NULL);
     |}]
 
 let%expect_test "get_completion_class_members_in_method" =
@@ -330,34 +330,34 @@ let%expect_test "get_completion_system" =
   completion_at proj path text pos;
   [%expect
     {|
-    CopySaveFile [Function] int CopySaveFile(string , string );
-    DeleteSaveFile [Function] int DeleteSaveFile(string );
-    Error [Function] string Error(string );
-    ExistFile [Function] int ExistFile(string );
-    ExistFunc [Function] bool ExistFunc(string );
-    ExistSaveFile [Function] int ExistSaveFile(string );
-    Exit [Function] void Exit(int );
-    GetFuncStackName [Function] string GetFuncStackName(int );
+    CopySaveFile [Function] int CopySaveFile(string szDestFileName, string szSourceFileName);
+    DeleteSaveFile [Function] int DeleteSaveFile(string szFileName);
+    Error [Function] string Error(string szText);
+    ExistFile [Function] int ExistFile(string szFileName);
+    ExistFunc [Function] bool ExistFunc(string szFuncName);
+    ExistSaveFile [Function] int ExistSaveFile(string szFileName);
+    Exit [Function] void Exit(int nResult);
+    GetFuncStackName [Function] string GetFuncStackName(int nIndex);
     GetGameName [Function] string GetGameName();
     GetSaveFolderName [Function] string GetSaveFolderName();
     GetTime [Function] int GetTime();
-    GlobalLoad [Function] int GlobalLoad(string , string );
-    GlobalSave [Function] int GlobalSave(string , string );
-    GroupLoad [Function] int GroupLoad(string , string , string , ref int );
-    GroupSave [Function] int GroupSave(string , string , string , ref int );
+    GlobalLoad [Function] int GlobalLoad(string szKeyName, string szFileName);
+    GlobalSave [Function] int GlobalSave(string szKeyName, string szFileName);
+    GroupLoad [Function] int GroupLoad(string szKeyName, string szFileName, string szGroupName, ref int nNumofLoad);
+    GroupSave [Function] int GroupSave(string szKeyName, string szFileName, string szGroupName, ref int nNumofLoad);
     IsDebugMode [Function] int IsDebugMode();
     LockPeek [Function] int LockPeek();
-    MsgBox [Function] string MsgBox(string );
-    MsgBoxOkCancel [Function] int MsgBoxOkCancel(string );
-    OpenWeb [Function] void OpenWeb(string );
-    Output [Function] string Output(string );
+    MsgBox [Function] string MsgBox(string szText);
+    MsgBoxOkCancel [Function] int MsgBoxOkCancel(string szText);
+    OpenWeb [Function] void OpenWeb(string szURL);
+    Output [Function] string Output(string szText);
     Peek [Function] void Peek();
     Reset [Function] void Reset();
-    ResumeLoad [Function] void ResumeLoad(string , string );
-    ResumeReadComment [Function] bool ResumeReadComment(string , string , ref array@string );
-    ResumeSave [Function] int ResumeSave(string , string , ref int );
-    ResumeWriteComment [Function] bool ResumeWriteComment(string , string , ref array@string );
-    Sleep [Function] void Sleep(int );
+    ResumeLoad [Function] void ResumeLoad(string szKeyName, string szFileName);
+    ResumeReadComment [Function] bool ResumeReadComment(string szKeyName, string szFileName, ref array@string aszComment);
+    ResumeSave [Function] int ResumeSave(string szKeyName, string szFileName, ref int nResult);
+    ResumeWriteComment [Function] bool ResumeWriteComment(string szKeyName, string szFileName, ref array@string aszComment);
+    Sleep [Function] void Sleep(int nSleep);
     UnlockPeek [Function] int UnlockPeek();
     |}]
 
@@ -371,14 +371,14 @@ let%expect_test "get_completion_string_builtin" =
   [%expect
     {|
     Empty [Method] int Empty();
-    Erase [Method] void Erase(int );
-    Find [Method] int Find(string );
-    GetPart [Method] string GetPart(int , int );
+    Erase [Method] void Erase(int nIndex);
+    Find [Method] int Find(string szKey);
+    GetPart [Method] string GetPart(int nIndex, int nLength);
     Int [Method] int Int();
     Length [Method] int Length();
     LengthByte [Method] int LengthByte();
     PopBack [Method] void PopBack();
-    PushBack [Method] void PushBack(int );
+    PushBack [Method] void PushBack(int nChara);
     |}]
 
 let%expect_test "get_completion_array_builtin" =
@@ -392,20 +392,20 @@ let%expect_test "get_completion_array_builtin" =
   completion_at proj path text pos;
   [%expect
     {|
-    Alloc [Method] void Alloc(int );
-    Copy [Method] int Copy(int , ref array@int , int , int );
+    Alloc [Method] void Alloc(int nElements);
+    Copy [Method] int Copy(int nDestIndex, ref array@int a, int nSrcIndex, int nLength);
     Empty [Method] int Empty();
-    Erase [Method] int Erase(int );
-    Fill [Method] int Fill(int , int , int );
-    Find [Method] int Find(int , int , int , bool(int, int)  = &NULL);
+    Erase [Method] int Erase(int nIndex);
+    Fill [Method] int Fill(int nIndex, int nLength, int value);
+    Find [Method] int Find(int nBegin, int nEnd, int key, bool(int, int) func = &NULL);
     Free [Method] void Free();
-    Insert [Method] void Insert(int , int );
-    Numof [Method] int Numof(int  = 1);
+    Insert [Method] void Insert(int nIndex, int value);
+    Numof [Method] int Numof(int nDimension = 1);
     PopBack [Method] void PopBack();
-    PushBack [Method] void PushBack(int );
-    Realloc [Method] void Realloc(int );
+    PushBack [Method] void PushBack(int value);
+    Realloc [Method] void Realloc(int nElements);
     Reverse [Method] void Reverse();
-    Sort [Method] void Sort(int(int, int)  = &NULL);
+    Sort [Method] void Sort(int(int, int) func = &NULL);
     |}]
 
 let%expect_test "get_completion_hll_library" =
@@ -662,8 +662,8 @@ let%expect_test "get_signature_help_syscall" =
   [%expect
     {|
     active: 0
-      string Output(string );
-        param: [14, 21)
+      string Output(string szText);
+        param: [14, 27)
     |}]
 
 let%expect_test "get_signature_help_hll" =
@@ -690,8 +690,8 @@ let%expect_test "get_signature_help_builtin_array" =
   [%expect
     {|
     active: 0
-      void PushBack(int );
-        param: [14, 18)
+      void PushBack(int value);
+        param: [14, 23)
     |}]
 
 let%expect_test "get_signature_help_builtin_string" =
@@ -703,8 +703,8 @@ let%expect_test "get_signature_help_builtin_string" =
   [%expect
     {|
     active: 0
-      int Find(string );
-        param: [9, 16)
+      int Find(string szKey);
+        param: [9, 21)
     |}]
 
 let%expect_test "get_signature_help_functype_var" =

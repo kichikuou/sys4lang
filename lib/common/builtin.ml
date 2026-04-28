@@ -18,15 +18,15 @@ open Base
 open Bytecode
 open Jaf
 
-let make_params (types : jaf_type list) defaults =
+let make_params (params : (string * jaf_type) list) defaults =
   let defaults =
     match defaults with
-    | [] -> List.map types ~f:(fun _ -> None)
+    | [] -> List.map params ~f:(fun _ -> None)
     | _ -> defaults
   in
-  List.mapi (List.zip_exn types defaults) ~f:(fun i (t, initval) ->
+  List.mapi (List.zip_exn params defaults) ~f:(fun i ((name, t), initval) ->
       {
-        name = "";
+        name;
         location = dummy_location;
         array_dim = [];
         is_const = false;
@@ -38,12 +38,12 @@ let make_params (types : jaf_type list) defaults =
       })
 
 let fundecl_of_syscall sys =
-  let make return_type arg_types =
+  let make return_type params =
     {
       name = string_of_syscall sys;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
-      params = make_params arg_types [];
+      params = make_params params [];
       body = None;
       is_label = false;
       is_lambda = false;
@@ -54,35 +54,64 @@ let fundecl_of_syscall sys =
     }
   in
   match sys with
-  | Exit -> make Void [ Int ]
-  | GlobalSave -> make Int [ String; String ]
-  | GlobalLoad -> make Int [ String; String ]
+  | Exit -> make Void [ ("nResult", Int) ]
+  | GlobalSave -> make Int [ ("szKeyName", String); ("szFileName", String) ]
+  | GlobalLoad -> make Int [ ("szKeyName", String); ("szFileName", String) ]
   | LockPeek -> make Int []
   | UnlockPeek -> make Int []
   | Reset -> make Void []
-  | Output -> make String [ String ]
-  | MsgBox -> make String [ String ]
-  | ResumeSave -> make Int [ String; String; Ref Int ]
-  | ResumeLoad -> make Void [ String; String ]
-  | ExistFile -> make Int [ String ]
-  | OpenWeb -> make Void [ String ]
+  | Output -> make String [ ("szText", String) ]
+  | MsgBox -> make String [ ("szText", String) ]
+  | ResumeSave ->
+      make Int
+        [ ("szKeyName", String); ("szFileName", String); ("nResult", Ref Int) ]
+  | ResumeLoad -> make Void [ ("szKeyName", String); ("szFileName", String) ]
+  | ExistFile -> make Int [ ("szFileName", String) ]
+  | OpenWeb -> make Void [ ("szURL", String) ]
   | GetSaveFolderName -> make String []
   | GetTime -> make Int []
   | GetGameName -> make String []
-  | Error -> make String [ String ]
-  | ExistSaveFile -> make Int [ String ]
+  | Error -> make String [ ("szText", String) ]
+  | ExistSaveFile -> make Int [ ("szFileName", String) ]
   | IsDebugMode -> make Int []
-  | MsgBoxOkCancel -> make Int [ String ]
-  | GetFuncStackName -> make String [ Int ]
+  | MsgBoxOkCancel -> make Int [ ("szText", String) ]
+  | GetFuncStackName -> make String [ ("nIndex", Int) ]
   | Peek -> make Void []
-  | Sleep -> make Void [ Int ]
-  | ResumeWriteComment -> make Bool [ String; String; Ref (Array String) ]
-  | ResumeReadComment -> make Bool [ String; String; Ref (Array String) ]
-  | GroupSave -> make Int [ String; String; String; Ref Int ]
-  | GroupLoad -> make Int [ String; String; String; Ref Int ]
-  | DeleteSaveFile -> make Int [ String ]
-  | ExistFunc -> make Bool [ String ]
-  | CopySaveFile -> make Int [ String; String ]
+  | Sleep -> make Void [ ("nSleep", Int) ]
+  | ResumeWriteComment ->
+      make Bool
+        [
+          ("szKeyName", String);
+          ("szFileName", String);
+          ("aszComment", Ref (Array String));
+        ]
+  | ResumeReadComment ->
+      make Bool
+        [
+          ("szKeyName", String);
+          ("szFileName", String);
+          ("aszComment", Ref (Array String));
+        ]
+  | GroupSave ->
+      make Int
+        [
+          ("szKeyName", String);
+          ("szFileName", String);
+          ("szGroupName", String);
+          ("nNumofLoad", Ref Int);
+        ]
+  | GroupLoad ->
+      make Int
+        [
+          ("szKeyName", String);
+          ("szFileName", String);
+          ("szGroupName", String);
+          ("nNumofLoad", Ref Int);
+        ]
+  | DeleteSaveFile -> make Int [ ("szFileName", String) ]
+  | ExistFunc -> make Bool [ ("szFuncName", String) ]
+  | CopySaveFile ->
+      make Int [ ("szDestFileName", String); ("szSourceFileName", String) ]
 
 (* `&NULL` expression (used as default value for callback functions) *)
 let addr_null =
@@ -100,12 +129,13 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
         TyMethod (ft_of_fundecl (Hashtbl.find_exn ctx.delegates dg_name))
     | _ -> failwith ("Delegate expected, got " ^ jaf_type_to_string receiver_ty)
   in
-  let make return_type name ?(defaults = []) (arg_types : jaf_type list) =
+  let make return_type name ?(defaults = []) (params : (string * jaf_type) list)
+      =
     {
       name;
       loc = dummy_location;
       return = { ty = return_type; location = dummy_location };
-      params = make_params arg_types defaults;
+      params = make_params params defaults;
       body = None;
       is_label = false;
       is_lambda = false;
@@ -116,34 +146,47 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
     }
   in
   match builtin with
-  | Assert -> make Void "assert" [ Int; String; String; Int ]
+  | Assert ->
+      make Void "assert"
+        [ ("exp", Int); ("szExp", String); ("file", String); ("line", Int) ]
   | IntString -> make String "String" []
   | FloatString ->
-      make String "String" [ Int ]
+      make String "String"
+        [ ("nDecimal", Int) ]
         ~defaults:[ Some (make_expr ~ty:Int (ConstInt (-1))) ]
   | StringInt -> make Int "Int" []
   | StringLength -> make Int "Length" []
   | StringLengthByte -> make Int "LengthByte" []
   | StringEmpty -> make Int "Empty" []
-  | StringFind -> make Int "Find" [ String ]
-  | StringGetPart -> make String "GetPart" [ Int; Int ]
-  | StringPushBack -> make Void "PushBack" [ Int ]
+  | StringFind -> make Int "Find" [ ("szKey", String) ]
+  | StringGetPart -> make String "GetPart" [ ("nIndex", Int); ("nLength", Int) ]
+  | StringPushBack -> make Void "PushBack" [ ("nChara", Int) ]
   | StringPopBack -> make Void "PopBack" []
-  | StringErase -> make Void "Erase" [ Int ]
-  | ArrayAlloc -> make Void "Alloc" (List.init rank ~f:(fun _ -> Int))
-  | ArrayRealloc -> make Void "Realloc" [ Int ]
+  | StringErase -> make Void "Erase" [ ("nIndex", Int) ]
+  | ArrayAlloc ->
+      make Void "Alloc" (List.init rank ~f:(fun _ -> ("nElements", Int)))
+  | ArrayRealloc -> make Void "Realloc" [ ("nElements", Int) ]
   | ArrayFree -> make Void "Free" []
   | ArrayNumof ->
-      make Int "Numof" [ Int ]
+      make Int "Numof"
+        [ ("nDimension", Int) ]
         ~defaults:
           (if rank = 1 then [ Some (make_expr ~ty:Int (ConstInt 1)) ] else [])
-  | ArrayCopy -> make Int "Copy" [ Int; Ref receiver_ty; Int; Int ]
-  | ArrayFill -> make Int "Fill" [ Int; Int; elem_ty ]
-  | ArrayPushBack -> make Void "PushBack" [ elem_ty ]
+  | ArrayCopy ->
+      make Int "Copy"
+        [
+          ("nDestIndex", Int);
+          ("a", Ref receiver_ty);
+          ("nSrcIndex", Int);
+          ("nLength", Int);
+        ]
+  | ArrayFill ->
+      make Int "Fill" [ ("nIndex", Int); ("nLength", Int); ("value", elem_ty) ]
+  | ArrayPushBack -> make Void "PushBack" [ ("value", elem_ty) ]
   | ArrayPopBack -> make Void "PopBack" []
   | ArrayEmpty -> make Int "Empty" []
-  | ArrayErase -> make Int "Erase" [ Int ]
-  | ArrayInsert -> make Void "Insert" [ Int; elem_ty ]
+  | ArrayErase -> make Int "Erase" [ ("nIndex", Int) ]
+  | ArrayInsert -> make Void "Insert" [ ("nIndex", Int); ("value", elem_ty) ]
   | ArrayReverse -> make Void "Reverse" []
   | ArraySort ->
       let cb_argtype, cb_default =
@@ -161,11 +204,12 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
         if ctx.version < 800 then TyFunction ([ cb_argtype; cb_argtype ], Int)
         else TyMethod ([ cb_argtype; cb_argtype ], Bool)
       in
-      make Void "Sort" [ cb_type ] ~defaults:[ cb_default ]
+      make Void "Sort" [ ("func", cb_type) ] ~defaults:[ cb_default ]
   | ArraySortBy -> (
       match elem_ty with
       | Struct (name, _) ->
-          make Void "SortBy" [ MemberPtr (name, TypeUnion (Int, String)) ]
+          make Void "SortBy"
+            [ ("func", MemberPtr (name, TypeUnion (Int, String))) ]
       | _ ->
           CompileError.compile_error
             ("SortBy() is not supported for array@" ^ jaf_type_to_string elem_ty)
@@ -187,11 +231,13 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
         else TyMethod ([ cb_argtype; cb_argtype ], Bool)
       in
       make Int "Find"
-        [ Int; Int; cb_argtype; cb_type ]
+        [
+          ("nBegin", Int); ("nEnd", Int); ("key", cb_argtype); ("func", cb_type);
+        ]
         ~defaults:[ None; None; None; cb_default ]
   | DelegateNumof -> make Int "Numof" []
-  | DelegateExist -> make Int "Exist" [ delegate_ft receiver_ty ]
-  | DelegateErase -> make Void "Erase" [ delegate_ft receiver_ty ]
+  | DelegateExist -> make Int "Exist" [ ("func", delegate_ft receiver_ty) ]
+  | DelegateErase -> make Void "Erase" [ ("func", delegate_ft receiver_ty) ]
   | DelegateClear -> make Void "Clear" []
 
 let default_function : Ain.Function.t =

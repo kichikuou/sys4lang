@@ -43,7 +43,7 @@ let%expect_test "get_hover" =
     {|
     1:11: int
     6:11: string
-    11:7: int Copy(int , ref array@string , int , int );
+    11:7: int Copy(int nDestIndex, ref array@string a, int nSrcIndex, int nLength);
     |}]
 
 let definition_test
