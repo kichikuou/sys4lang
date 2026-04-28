@@ -1,0 +1,6 @@
+void signature_help_test(void) {
+}
+
+int SHCls::sh_test_method(int n) {
+	return sh_method2("");
+}

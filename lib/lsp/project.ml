@@ -490,6 +490,16 @@ let get_completion proj ~path pos =
   in
   Completion.get_completion proj.ctx ~text ~scope pos
 
+let get_signature_help proj ~path pos =
+  match find_document proj path with
+  | None -> None
+  | Some doc ->
+      let text = doc.lexbuf.lex_buffer in
+      let scope =
+        Some (doc.last_good_toplevel, doc.last_good_lexbuf.lex_buffer)
+      in
+      Completion.get_signature_help proj.ctx ~text ~scope pos
+
 let get_entrypoint proj =
   match location_of_func proj "main" with
   | Some loc -> (

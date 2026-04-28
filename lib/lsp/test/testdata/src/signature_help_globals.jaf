@@ -1,0 +1,24 @@
+void gfunc(int x) {}
+void gfunc2(int a, int b) {}
+void sh_unicode(int あ, int い) {}
+
+class SHCls {
+public:
+	int sh_method(int x, int y);
+	int sh_method2(string s);
+	int sh_test_method(int n);
+};
+
+int SHCls::sh_method(int x, int y) {
+	return sh_method2("");
+}
+int SHCls::sh_method2(string s) { return 0; }
+
+functype int sh_ft(int n);
+delegate void sh_dg(string s);
+
+sh_ft sh_ft_var;
+sh_dg sh_dg_var;
+SHCls sh_obj;
+array@int sh_arr;
+string sh_str;

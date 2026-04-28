@@ -1,0 +1,6 @@
+Encoding = "UTF-8"
+Source = {
+    "src\signature_help_globals.jaf",
+    "src\signature_help.jaf",
+    "src\SHLib.hll", "SHLib",
+}

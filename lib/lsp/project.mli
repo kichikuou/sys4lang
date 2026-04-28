@@ -35,4 +35,7 @@ val get_completion :
   | `List of Lsp.Types.CompletionItem.t list ]
   option
 
+val get_signature_help :
+  t -> path:string -> Lsp.Types.Position.t -> Lsp.Types.SignatureHelp.t option
+
 val get_entrypoint : t -> Lsp.Types.Location.t option

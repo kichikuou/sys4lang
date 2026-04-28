@@ -51,12 +51,7 @@ let byte_offset_of_utf16 text line_start target_utf16 =
    l = [a-zA-Z_] | uch,  a = [a-zA-Z_0-9] | uch
    uch = u2 u | u3 u u | u4 u u u  (UTF-8 multibyte, 2–4 bytes) *)
 
-let is_ascii_ident_cont c =
-  let n = Char.to_int c in
-  (n >= Char.to_int '0' && n <= Char.to_int '9')
-  || (n >= Char.to_int 'A' && n <= Char.to_int 'Z')
-  || (n >= Char.to_int 'a' && n <= Char.to_int 'z')
-  || n = Char.to_int '_'
+let is_ascii_ident_cont c = Char.is_alphanum c || Char.equal c '_'
 
 let is_utf8_cont c =
   let n = Char.to_int c in
@@ -282,12 +277,13 @@ let class_member_candidates (ctx : Jaf.context) ?(include_private = false)
 
 (* --- Member completion: receiver text extraction -------------------- *)
 
-(* Walk backward from the dot to find the start byte of the receiver
-   expression. Handles identifier chains, '.' chains, balanced (), [],
-   and string literals (including strings nested inside brackets).
-   Returns the [start, dot_idx) byte range of the receiver text, or
-   [None] if no plausible receiver was found. *)
-let extract_receiver text line_start dot_idx =
+(* Walk backward from [end_idx] to find the start byte of an expression.
+   Handles identifier chains, '.' chains, balanced (), [], and string
+   literals (including strings nested inside brackets). Used both for
+   member completion (right boundary = '.') and signature help
+   (right boundary = '('). Returns the [start, end_idx) byte range of
+   the expression, or [None] if no plausible expression was found. *)
+let extract_receiver text line_start end_idx =
   (* State: byte index [i] (walking backward), bracket [depth], and
      whether we are currently scanning the inside of a string literal
      (between two double-quote characters, walking backward). *)
@@ -313,8 +309,8 @@ let extract_receiver text line_start dot_idx =
             walk (i - 1) 0 false
         | _ -> i + 1
   in
-  let start = walk (dot_idx - 1) 0 false in
-  if start >= dot_idx then None else Some (start, dot_idx)
+  let start = walk (end_idx - 1) 0 false in
+  if start >= end_idx then None else Some (start, end_idx)
 
 (* --- Member completion: receiver type analysis ---------------------- *)
 
@@ -450,3 +446,224 @@ let get_completion ctx ~text ~scope (pos : Lsp.Types.Position.t) =
               result
                 (member_candidates ctx ~viewer_class:snap.enclosing_class expr))
       )
+
+(* --- Signature help -------------------------------------------------- *)
+
+(* Cap on how far we scan backward from the cursor when looking for the
+   enclosing call site. Calls longer than this are not supported (and
+   are extremely rare in practice). *)
+let max_signature_scan_back = 4096
+
+(* Byte offset of the start of the line containing [byte_idx]. *)
+let line_start_of_byte text byte_idx =
+  match Stdlib.Bytes.rindex_from_opt text (byte_idx - 1) '\n' with
+  | None -> 0
+  | Some i -> i + 1
+
+(* Byte offset of the next '\n' at or after [byte_idx], or [len] if none. *)
+let line_end_of_byte text byte_idx =
+  match Stdlib.Bytes.index_from_opt text byte_idx '\n' with
+  | None -> Bytes.length text
+  | Some i -> i
+
+(* Forward-scan a single line [line_start, line_end) and return the byte
+   offset of the first "//" that is not inside a string literal. Returns
+   [line_end] if the line has no line comment. *)
+let line_comment_start text line_start line_end =
+  let rec loop i in_string =
+    if i >= line_end then line_end
+    else
+      let c = Bytes.get text i in
+      if in_string then loop (i + 1) (not (Char.equal c '"'))
+      else
+        match c with
+        | '"' -> loop (i + 1) true
+        | '/' when i + 1 < line_end && Char.equal (Bytes.get text (i + 1)) '/'
+          ->
+            i
+        | _ -> loop (i + 1) false
+  in
+  loop line_start false
+
+(* Scan backward from [cursor] looking for the innermost unmatched '('.
+   Returns its byte offset along with the number of top-level commas
+   between it and the cursor (= activeParameter index). Returns [None]
+   if the cursor is not inside a call. Stops at statement / block
+   boundaries (';', '{', '}'). Bytes inside a '//' line comment are
+   masked out (treated as whitespace) so a '(' or ',' in a comment is
+   not picked up. '/* */' block comments are not handled. *)
+let scan_back_for_call_site text cursor =
+  let len = Bytes.length text in
+  let cursor = min cursor len in
+  let stop = max 0 (cursor - max_signature_scan_back) in
+  let initial_line_start = line_start_of_byte text cursor in
+  let initial_line_end = line_end_of_byte text initial_line_start in
+  let initial_comment_start =
+    line_comment_start text initial_line_start initial_line_end
+  in
+  let rec loop i depth arg_index in_string comment_start =
+    if i < stop then None
+    else
+      let c = Bytes.get text i in
+      if Char.equal c '\n' then
+        let new_line_start = line_start_of_byte text i in
+        let new_comment_start = line_comment_start text new_line_start i in
+        loop (i - 1) depth arg_index in_string new_comment_start
+      else if i >= comment_start then
+        loop (i - 1) depth arg_index in_string comment_start
+      else if in_string then
+        loop (i - 1) depth arg_index (not (Char.equal c '"')) comment_start
+      else if depth > 0 then
+        match c with
+        | ')' | ']' -> loop (i - 1) (depth + 1) arg_index false comment_start
+        | '(' | '[' -> loop (i - 1) (depth - 1) arg_index false comment_start
+        | '"' -> loop (i - 1) depth arg_index true comment_start
+        | _ -> loop (i - 1) depth arg_index false comment_start
+      else
+        match c with
+        | '(' -> Some (i, arg_index)
+        | ',' -> loop (i - 1) 0 (arg_index + 1) false comment_start
+        | ')' | ']' -> loop (i - 1) 1 arg_index false comment_start
+        | ';' | '{' | '}' -> None
+        | '"' -> loop (i - 1) 0 arg_index true comment_start
+        | _ -> loop (i - 1) 0 arg_index false comment_start
+  in
+  loop (cursor - 1) 0 0 false initial_comment_start
+
+(* Count UTF-16 code units in a UTF-8 encoded string. ASCII = 1 unit,
+   2–3 byte sequences = 1 unit (BMP), 4 byte sequences = 2 units
+   (a surrogate pair). Invalid bytes are skipped without contributing. *)
+let utf16_units_of_string s =
+  let len = String.length s in
+  let rec loop i count =
+    if i >= len then count
+    else
+      let c = Char.to_int s.[i] in
+      if c < 0x80 then loop (i + 1) (count + 1)
+      else if c < 0xc0 then loop (i + 1) count
+      else if c < 0xe0 then loop (i + 2) (count + 1)
+      else if c < 0xf0 then loop (i + 3) (count + 1)
+      else loop (i + 4) (count + 2)
+  in
+  loop 0 0
+
+(* Build the signature label and per-parameter UTF-16 offsets in lockstep.
+   Output mirrors [Jaf.decl_to_string (Function { f with body = None })]:
+   `<ret> <name>(<p1>, <p2>, ...);`. The buffer contents are UTF-8 (LSP
+   transmits the label as UTF-8), but [ParameterInformation.label] offsets
+   are in UTF-16 code units, so we keep a parallel counter. *)
+let format_signature (f : Jaf.fundecl) =
+  let buf = Buffer.create 64 in
+  let utf16_pos = ref 0 in
+  let append s =
+    Buffer.add_string buf s;
+    utf16_pos := !utf16_pos + utf16_units_of_string s
+  in
+  let append_param (p : Jaf.variable) =
+    let start = !utf16_pos in
+    append (Jaf.var_to_string' p);
+    let end_ = !utf16_pos in
+    Lsp.Types.ParameterInformation.create ~label:(`Offset (start, end_)) ()
+  in
+  append (Jaf.jaf_type_to_string f.return.ty);
+  append " ";
+  append f.name;
+  append "(";
+  let parameters =
+    match f.params with
+    | [] -> []
+    | p :: ps ->
+        let first = append_param p in
+        let rest =
+          List.map ps ~f:(fun p ->
+              append ", ";
+              append_param p)
+        in
+        first :: rest
+  in
+  append ");";
+  Lsp.Types.SignatureInformation.create ~label:(Buffer.contents buf) ~parameters
+    ()
+
+(* Resolve the typed callee expression to a fundecl. *)
+let fundecl_of_callee (ctx : Jaf.context) (e : Jaf.expression) =
+  match e.node with
+  | Ident (_, FunctionName name) | Member (_, _, ClassMethod (name, _)) ->
+      Hashtbl.find ctx.functions name
+  | Member (_, _, SystemFunction sys) -> Some (Builtin.fundecl_of_syscall sys)
+  | Member (_, _, HLLFunction (lib, fn)) -> Jaf.find_hll_function ctx lib fn
+  | Member (recv, _, BuiltinMethod b) -> (
+      try Some (Builtin.fundecl_of_builtin ctx b (strip_ref recv.ty) None)
+      with _ -> None)
+  | _ -> (
+      (* Funcptr / functype / delegate value: fall back on the expression's
+         resolved type. *)
+      match strip_ref e.ty with
+      | FuncType (Some (name, _)) -> Hashtbl.find ctx.functypes name
+      | Delegate (Some (name, _)) -> Hashtbl.find ctx.delegates name
+      | _ -> None)
+
+(* `assert` is a keyword in the JAF grammar (it's a statement form, not a
+   regular function call) and the parser auto-supplies three trailing
+   arguments (stringified expression, file, line). The user only ever
+   types the condition, so synthesize a one-parameter signature directly
+   instead of going through the parse / type-analysis path - which can't
+   parse `assert` as an expression anyway. *)
+let assert_fundecl : Jaf.fundecl =
+  let int_param : Jaf.variable =
+    {
+      name = "condition";
+      location = Jaf.dummy_location;
+      array_dim = [];
+      is_const = false;
+      is_private = false;
+      kind = Parameter;
+      type_spec = { ty = Int; location = Jaf.dummy_location };
+      initval = None;
+      index = Some 0;
+    }
+  in
+  {
+    name = "assert";
+    loc = Jaf.dummy_location;
+    return = { ty = Void; location = Jaf.dummy_location };
+    params = [ int_param ];
+    body = None;
+    is_label = false;
+    is_lambda = false;
+    is_private = false;
+    index = None;
+    class_name = None;
+    class_index = None;
+  }
+
+let signature_help_response f arg_index =
+  Lsp.Types.SignatureHelp.create
+    ~signatures:[ format_signature f ]
+    ~activeSignature:0 ~activeParameter:(Some arg_index) ()
+
+let get_signature_help ctx ~text ~scope (pos : Lsp.Types.Position.t) =
+  let line_start = line_start_byte text pos.line in
+  let cursor = byte_offset_of_utf16 text line_start pos.character in
+  match scan_back_for_call_site text cursor with
+  | None -> None
+  | Some (open_paren_idx, arg_index) -> (
+      let callee_line_start = line_start_of_byte text open_paren_idx in
+      match extract_receiver text callee_line_start open_paren_idx with
+      | None -> None
+      | Some (s, e) -> (
+          let callee_text = Stdlib.Bytes.sub_string text s (e - s) in
+          if String.equal callee_text "assert" then
+            Some (signature_help_response assert_fundecl arg_index)
+          else
+            let snap =
+              match scope with
+              | None -> empty_snapshot
+              | Some (toplevel, scope_text) ->
+                  collect_scope ctx scope_text pos toplevel
+            in
+            match type_analyze_receiver ctx snap callee_text with
+            | None -> None
+            | Some expr ->
+                Option.map (fundecl_of_callee ctx expr) ~f:(fun f ->
+                    signature_help_response f arg_index)))

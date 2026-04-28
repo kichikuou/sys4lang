@@ -1,0 +1,2 @@
+int Add(int a, int b);
+void Greet(string name);

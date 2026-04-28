@@ -67,6 +67,10 @@ class lsp_server ~sw ~fs ~domain_mgr =
         c with
         typeDefinitionProvider = Some (`Bool true);
         referencesProvider = Some (`Bool true);
+        signatureHelpProvider =
+          Some
+            (Lsp.Types.SignatureHelpOptions.create
+               ~triggerCharacters:[ "("; "," ] ~retriggerCharacters:[ ")" ] ());
       }
 
     method! config_completion =
@@ -94,6 +98,14 @@ class lsp_server ~sw ~fs ~domain_mgr =
             let path = Lsp.Types.DocumentUri.to_path textDocument.uri in
             get_references project ~path position
               ~include_declaration:context.includeDeclaration
+        | Lsp.Client_request.SignatureHelp { textDocument; position; _ } ->
+            let path = Lsp.Types.DocumentUri.to_path textDocument.uri in
+            (* The LSP `SignatureHelp` response is non-optional in
+               lsp-ocaml; we use an empty signatures list to mean
+               "no help". *)
+            Option.value
+              (get_signature_help project ~path position)
+              ~default:(Lsp.Types.SignatureHelp.create ~signatures:[] ())
         | r -> super#on_request_unhandled ~notify_back ~id r
 
     method! on_req_initialize ~notify_back i =
