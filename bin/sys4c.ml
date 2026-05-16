@@ -36,7 +36,16 @@ let handle_errors f get_content =
       Stdio.print_endline msg;
       Stdlib.exit 1
 
-let do_compile sources output major minor import_as input_encoding =
+let time_step ~time name f =
+  if not time then f ()
+  else
+    let t0 = Stdlib.Sys.time () in
+    let r = f () in
+    let dt = Stdlib.Sys.time () -. t0 in
+    Stdio.eprintf "  %-14s %7.3f s\n%!" name dt;
+    r
+
+let do_compile sources output major minor import_as input_encoding time =
   let import_as =
     List.map import_as ~f:(fun s ->
         match String.split s ~on:'=' with
@@ -65,11 +74,11 @@ let do_compile sources output major minor import_as input_encoding =
         source
       in
       let debug_info = DebugInfo.create () in
-      Compile.compile ctx sources debug_info read_file;
-      Ain.write_file ctx.ain output)
+      Compile.compile ~time ctx sources debug_info read_file;
+      time_step ~time "write_ain" (fun () -> Ain.write_file ctx.ain output))
     (fun file -> Hashtbl.find files file)
 
-let do_build pje_file output_dir_override =
+let do_build pje_file output_dir_override time =
   let pje =
     handle_errors
       (fun () -> PjeLoader.load read_text_file pje_file)
@@ -90,9 +99,11 @@ let do_build pje_file output_dir_override =
       in
       let sources = Pje.collect_sources pje in
       let debug_info = DebugInfo.create () in
-      Compile.compile ctx sources debug_info read_file;
-      Ain.write_file ctx.ain (Pje.ain_path ?output_dir_override pje);
-      DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
+      Compile.compile ~time ctx sources debug_info read_file;
+      time_step ~time "write_ain" (fun () ->
+          Ain.write_file ctx.ain (Pje.ain_path ?output_dir_override pje));
+      time_step ~time "write_debug" (fun () ->
+          DebugInfo.write_to_file debug_info (Pje.debug_info_path pje)))
     (fun file -> Hashtbl.find files file)
 
 let encoding_conv =
@@ -142,16 +153,20 @@ let cmd_compile_jaf =
     let doc = "Testing." in
     Arg.(value & opt (some string) None & info [ "test" ] ~docv:"TEST" ~doc)
   in
-  let compile sources output major minor import_as input_encoding test =
+  let time =
+    let doc = "Print elapsed time of each compiler phase to stderr." in
+    Arg.(value & flag & info [ "time" ] ~doc)
+  in
+  let compile sources output major minor import_as input_encoding test time =
     if Option.is_some test then
       let ain = Ain.load (Option.value_exn test) in
       Ain.write_file ain output
-    else do_compile sources output major minor import_as input_encoding
+    else do_compile sources output major minor import_as input_encoding time
   in
   Cmd.v info
     Term.(
       const compile $ sources $ output $ major $ minor $ import_as
-      $ input_encoding $ test)
+      $ input_encoding $ test $ time)
 
 let cmd_build_pje =
   let doc = "Build a System 4 project from a .pje file." in
@@ -167,7 +182,11 @@ let cmd_build_pje =
       & opt (some string) None
       & info [ "output-dir" ] ~docv:"OUTPUT_DIR" ~doc)
   in
-  Cmd.v info Term.(const do_build $ project $ output_dir)
+  let time =
+    let doc = "Print elapsed time of each compiler phase to stderr." in
+    Arg.(value & flag & info [ "time" ] ~doc)
+  in
+  Cmd.v info Term.(const do_build $ project $ output_dir $ time)
 
 let cmd =
   let doc = "System 4 Compiler" in

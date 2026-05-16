@@ -24,6 +24,15 @@ type source =
 
 type program = source list
 
+let time_pass ~time name f =
+  if not time then f ()
+  else
+    let t0 = Stdlib.Sys.time () in
+    let r = f () in
+    let dt = Stdlib.Sys.time () -. t0 in
+    Stdio.eprintf "  %-14s %7.3f s\n%!" name dt;
+    r
+
 let parse_file lexer parser file read_file =
   let source = read_file file in
   let lexbuf = Lexing.from_string source in
@@ -78,8 +87,12 @@ let codegen_pass ctx program debug_info =
         Codegen.compile ctx jaf_name jaf debug_info
     | Hll _ -> ())
 
-let compile ctx sources debug_info read_file =
-  let program = parse_pass ctx sources read_file in
-  let program = type_resolve_pass ctx program in
-  type_check_pass ctx program;
-  codegen_pass ctx program debug_info
+let compile ?(time = false) ctx sources debug_info read_file =
+  let program =
+    time_pass ~time "parse" (fun () -> parse_pass ctx sources read_file)
+  in
+  let program =
+    time_pass ~time "type_resolve" (fun () -> type_resolve_pass ctx program)
+  in
+  time_pass ~time "type_check" (fun () -> type_check_pass ctx program);
+  time_pass ~time "codegen" (fun () -> codegen_pass ctx program debug_info)
