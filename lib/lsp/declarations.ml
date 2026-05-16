@@ -274,7 +274,10 @@ let define_library ctx decls hll_name import_name =
     | None -> Ain.add_library ctx.ain hll_name
   in
   Ain.write_library ctx.ain
-    { lib with functions = List.map ~f:jaf_to_ain_hll_function functions };
+    {
+      lib with
+      functions = Array.of_list_map functions ~f:jaf_to_ain_hll_function;
+    };
   let functions =
     Hashtbl.create_with_key_exn
       (module String)

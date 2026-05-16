@@ -1059,7 +1059,7 @@ let context_from_ain ?(constants : variable list = []) ain =
       Hashtbl.add_exn delegates ~key:f.name ~data:(ain_to_jaf_functype f));
   Ain.library_iter ain ~f:(fun (l : Ain.Library.t) ->
       let functions = Hashtbl.create (module String) in
-      List.iter l.functions ~f:(fun (f : Ain.Library.Function.t) ->
+      Array.iter l.functions ~f:(fun (f : Ain.Library.Function.t) ->
           let func =
             {
               name = f.name;

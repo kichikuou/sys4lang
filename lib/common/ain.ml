@@ -386,7 +386,7 @@ module Library = struct
       { index = -1; lib_no = -1; name; return_type; arguments }
   end
 
-  type t = { index : int; name : string; functions : Function.t list }
+  type t = { index : int; name : string; functions : Function.t array }
 end
 
 module Switch = struct
@@ -745,22 +745,21 @@ let read_libraries buf count =
     else List.rev result
   in
   let rec read_libraries' count lib_no result =
-    let rec read_library_functions count fno result =
-      if count > 0 then
-        let name = read_cstring buf in
-        let return_type = read_library_type buf in
-        let nr_arguments = read_int buf in
-        let arguments = read_library_arguments nr_arguments [] in
-        let (f : Library.Function.t) =
-          { index = fno; lib_no; name; return_type; arguments }
-        in
-        read_library_functions (count - 1) (fno + 1) (f :: result)
-      else List.rev result
+    let read_library_functions count =
+      Array.init count ~f:(fun fno ->
+          let name = read_cstring buf in
+          let return_type = read_library_type buf in
+          let nr_arguments = read_int buf in
+          let arguments = read_library_arguments nr_arguments [] in
+          let (f : Library.Function.t) =
+            { index = fno; lib_no; name; return_type; arguments }
+          in
+          f)
     in
     if count > 0 then
       let name = read_cstring buf in
       let nr_functions = read_int buf in
-      let functions = read_library_functions nr_functions 0 [] in
+      let functions = read_library_functions nr_functions in
       let (lib : Library.t) = { index = lib_no; name; functions } in
       read_libraries' (count - 1) (lib_no + 1) (lib :: result)
     else List.rev result
@@ -1104,8 +1103,8 @@ let write_library buf ain (lib : Library.t) =
     List.iter f.arguments ~f:write_library_argument
   in
   BB.add_cstring buf lib.name;
-  BB.add_int buf (List.length lib.functions);
-  List.iter lib.functions ~f:write_library_function
+  BB.add_int buf (Array.length lib.functions);
+  Array.iter lib.functions ~f:write_library_function
 
 let write_switch buf (sw : Switch.t) =
   let module BB = BinBuffer in
@@ -1384,12 +1383,9 @@ let get_enum ain name =
 let get_library_index ain name = Hashtbl.find ain.library_by_name name
 
 let get_library_function_index ain lib_no name =
-  match
-    List.findi (Dynarray.get ain.libraries lib_no).functions ~f:(fun _ f ->
-        String.equal f.name name)
-  with
-  | Some (i, _) -> Some i
-  | None -> None
+  Array.findi (Dynarray.get ain.libraries lib_no).functions ~f:(fun _ f ->
+      String.equal f.name name)
+  |> Option.map ~f:fst
 
 let get_library_by_index ain no = Dynarray.get ain.libraries no
 
@@ -1404,14 +1400,12 @@ let write_new_library ain (lib : Library.t) =
   index
 
 let add_library ain name =
-  let lib : Library.t = { index = -1; name; functions = [] } in
+  let lib : Library.t = { index = -1; name; functions = [||] } in
   let no = write_new_library ain lib in
   Dynarray.get ain.libraries no
 
 let function_of_hll_function_index ain lib_no fun_no : Function.t =
-  let lib_fun =
-    List.nth_exn (Dynarray.get ain.libraries lib_no).functions fun_no
-  in
+  let lib_fun = (Dynarray.get ain.libraries lib_no).functions.(fun_no) in
   let var_of_hll_arg index (arg : Library.Argument.t) : Variable.t =
     {
       index;

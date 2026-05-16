@@ -112,7 +112,7 @@ module Library : sig
     val create : string -> Type.t -> Argument.t list -> t
   end
 
-  type t = { index : int; name : string; functions : Function.t list }
+  type t = { index : int; name : string; functions : Function.t array }
 end
 
 module Switch : sig
