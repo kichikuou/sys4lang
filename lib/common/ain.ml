@@ -435,54 +435,72 @@ type t = {
   mutable major_version : int;
   mutable minor_version : int;
   mutable keyc : int32;
-  mutable code : bytes;
-  mutable functions : Function.t array;
-  mutable globals : Global.t array;
-  mutable structures : Struct.t array;
+  code : Buffer.t;
+  mutable functions : Function.t Dynarray.t;
+  mutable globals : Global.t Dynarray.t;
+  mutable structures : Struct.t Dynarray.t;
   mutable messages : string Dynarray.t;
   mutable msg1_uk : int32;
   mutable main : int;
   mutable msgf : int;
-  mutable libraries : Library.t array;
-  mutable switches : Switch.t array;
+  mutable libraries : Library.t Dynarray.t;
+  mutable switches : Switch.t Dynarray.t;
   mutable game_version : int;
   (* TODO: scenario labels *)
   mutable strings : string Dynarray.t;
-  mutable filenames : string array;
+  mutable filenames : string Dynarray.t;
   mutable ojmp : int;
-  mutable function_types : FunctionType.t array;
-  mutable delegates : FunctionType.t array;
-  mutable global_group_names : string array;
+  mutable function_types : FunctionType.t Dynarray.t;
+  mutable delegates : FunctionType.t Dynarray.t;
+  mutable global_group_names : string Dynarray.t;
   mutable enums : Enum.t array;
   string_table : (string, int) Hashtbl.t;
+  function_by_name : (string, int) Hashtbl.t;
+  global_by_name : (string, int) Hashtbl.t;
+  struct_by_name : (string, int) Hashtbl.t;
+  library_by_name : (string, int) Hashtbl.t;
+  functype_by_name : (string, int) Hashtbl.t;
+  delegate_by_name : (string, int) Hashtbl.t;
 }
+
+let try_add_name_index tbl name index =
+  Hashtbl.add tbl ~key:name ~data:index |> ignore
 
 let create ?is_ain2 ?(keyc = 0l) ?(game_version = 0) major_version minor_version
     =
+  let functions = Dynarray.of_list [ Function.create ~index:0 "NULL" ] in
+  let function_by_name = Hashtbl.create (module String) in
+  try_add_name_index function_by_name "NULL" 0;
   {
     is_ain2 = Option.value is_ain2 ~default:(major_version >= 5);
     major_version;
     minor_version;
     keyc;
-    code = Bytes.of_string "";
-    functions = [| Function.create ~index:0 "NULL" |];
-    globals = [||];
-    structures = [||];
+    code = Buffer.create 4096;
+    functions;
+    globals = Dynarray.create ();
+    structures = Dynarray.create ();
     messages = Dynarray.make 1 "";
     msg1_uk = 0l;
     main = 0;
     msgf = 0;
-    libraries = [||];
-    switches = [||];
+    libraries = Dynarray.create ();
+    switches = Dynarray.create ();
     game_version;
     strings = Dynarray.make 1 "";
-    filenames = [||];
+    filenames = Dynarray.create ();
     ojmp = -1;
-    function_types = [||];
-    delegates = [||];
-    global_group_names = [||];
+    function_types = Dynarray.create ();
+    delegates = Dynarray.create ();
+    global_group_names = Dynarray.create ();
     enums = [||];
     string_table = Hashtbl.create (module String);
+    function_by_name;
+    global_by_name = Hashtbl.create (module String);
+    struct_by_name = Hashtbl.create (module String);
+    library_by_name = Hashtbl.create (module String);
+    functype_by_name = Hashtbl.create (module String);
+    delegate_by_name = Hashtbl.create (module String);
   }
 
 let version ain = ain.major_version
@@ -642,8 +660,8 @@ let read_global_initvals buf count =
     if count > 0 then (
       let index = read_int buf in
       let initval = Some (read_initval (read_int buf)) in
-      let g = buf.ain.globals.(index) in
-      Array.set buf.ain.globals index
+      let g = Dynarray.get buf.ain.globals index in
+      Dynarray.set buf.ain.globals index
         { g with variable = { g.variable with initval } };
       read_global_initvals' (count - 1))
     else ()
@@ -811,20 +829,21 @@ let load filename =
     | "KEYC" -> buf.ain.keyc <- read_int32 buf
     | "CODE" ->
         let len = read_int buf in
-        buf.ain.code <- Bytes.sub buf.data ~pos:buf.pos ~len;
+        Buffer.clear buf.ain.code;
+        Buffer.add_subbytes buf.ain.code buf.data ~pos:buf.pos ~len;
         buf.pos <- buf.pos + len
     | "FUNC" ->
         let count = read_int buf in
-        buf.ain.functions <- Array.of_list (read_functions buf count)
+        buf.ain.functions <- Dynarray.of_list (read_functions buf count)
     | "GLOB" ->
         let count = read_int buf in
-        buf.ain.globals <- Array.of_list (read_globals buf count)
+        buf.ain.globals <- Dynarray.of_list (read_globals buf count)
     | "GSET" ->
         let count = read_int buf in
         read_global_initvals buf count
     | "STRT" ->
         let count = read_int buf in
-        buf.ain.structures <- Array.of_list (read_structures buf count)
+        buf.ain.structures <- Dynarray.of_list (read_structures buf count)
     | "MSG0" ->
         let count = read_int buf in
         buf.ain.messages <- Dynarray.of_list (read_cstrings buf count)
@@ -838,34 +857,35 @@ let load filename =
     | "MSGF" -> buf.ain.msgf <- read_int buf
     | "HLL0" ->
         let count = read_int buf in
-        buf.ain.libraries <- Array.of_list (read_libraries buf count)
+        buf.ain.libraries <- Dynarray.of_list (read_libraries buf count)
     | "SWI0" ->
         let count = read_int buf in
-        buf.ain.switches <- Array.of_list (read_switches buf count)
+        buf.ain.switches <- Dynarray.of_list (read_switches buf count)
     | "SLBL" -> failwith "scenario labels not implemented"
     | "STR0" ->
         let count = read_int buf in
         buf.ain.strings <- Dynarray.of_list (read_cstrings buf count)
     | "FNAM" ->
         let count = read_int buf in
-        buf.ain.filenames <- Array.of_list (read_cstrings buf count)
+        buf.ain.filenames <- Dynarray.of_list (read_cstrings buf count)
     | "OJMP" -> buf.ain.ojmp <- read_int buf
     | "GVER" -> buf.ain.game_version <- read_int buf
     | "FNCT" ->
         let (_ : int32) = read_int32 buf in
         (* section size *)
         let count = read_int buf in
-        buf.ain.function_types <- Array.of_list (read_function_types buf count)
+        buf.ain.function_types <-
+          Dynarray.of_list (read_function_types buf count)
     | "DELG" ->
         let (_ : int32) = read_int32 buf in
         (* section size *)
         let count = read_int buf in
-        buf.ain.delegates <- Array.of_list (read_function_types buf count);
+        buf.ain.delegates <- Dynarray.of_list (read_function_types buf count);
         if buf.ain.major_version = 6 && buf.ain.minor_version < 10 then
           buf.ain.minor_version <- 10
     | "OBJG" ->
         let count = read_int buf in
-        buf.ain.global_group_names <- Array.of_list (read_cstrings buf count)
+        buf.ain.global_group_names <- Dynarray.of_list (read_cstrings buf count)
     | "ENUM" ->
         let count = read_int buf in
         buf.ain.enums <- Array.of_list (read_enums buf count)
@@ -875,6 +895,36 @@ let load filename =
     read_section buf;
     if buf.pos >= Stdlib.Bytes.length buf.data then buf.ain
     else read_sections buf
+  in
+  let populate_by_name ain =
+    Hashtbl.clear ain.function_by_name;
+    Hashtbl.clear ain.global_by_name;
+    Hashtbl.clear ain.struct_by_name;
+    Hashtbl.clear ain.library_by_name;
+    Hashtbl.clear ain.functype_by_name;
+    Hashtbl.clear ain.delegate_by_name;
+    Dynarray.iteri
+      (fun i (f : Function.t) ->
+        try_add_name_index ain.function_by_name f.name i)
+      ain.functions;
+    Dynarray.iteri
+      (fun i (g : Global.t) ->
+        try_add_name_index ain.global_by_name g.variable.name i)
+      ain.globals;
+    Dynarray.iteri
+      (fun i (s : Struct.t) -> try_add_name_index ain.struct_by_name s.name i)
+      ain.structures;
+    Dynarray.iteri
+      (fun i (l : Library.t) -> try_add_name_index ain.library_by_name l.name i)
+      ain.libraries;
+    Dynarray.iteri
+      (fun i (ft : FunctionType.t) ->
+        try_add_name_index ain.functype_by_name ft.name i)
+      ain.function_types;
+    Dynarray.iteri
+      (fun i (dg : FunctionType.t) ->
+        try_add_name_index ain.delegate_by_name dg.name i)
+      ain.delegates
   in
   let load' file =
     let ain = create 4 0 in
@@ -918,7 +968,9 @@ let load filename =
         read_sections buf
     | _ -> failwith "unrecognized .ain format"
   in
-  In_channel.with_file filename ~f:load'
+  let ain = In_channel.with_file filename ~f:load' in
+  populate_by_name ain;
+  ain
 
 module BinBuffer = struct
   include Buffer
@@ -1076,16 +1128,18 @@ let write_functype buf ain (ft : FunctionType.t) =
 
 let to_buffer ain =
   let global_initvals =
-    let f i acc (g : Global.t) =
-      match g.variable.initval with
-      | Some initval ->
-          let data_type =
-            Type.int_of_data_type ain.major_version g.variable.value_type
-          in
-          (i, data_type, initval) :: acc
-      | None -> acc
-    in
-    List.rev (Array.foldi ain.globals ~init:[] ~f)
+    let acc = ref [] in
+    Dynarray.iteri
+      (fun i (g : Global.t) ->
+        match g.variable.initval with
+        | Some initval ->
+            let data_type =
+              Type.int_of_data_type ain.major_version g.variable.value_type
+            in
+            acc := (i, data_type, initval) :: !acc
+        | None -> ())
+      ain.globals;
+    List.rev !acc
   in
   let buf = BinBuffer.create 1024 in
   let module BB = BinBuffer in
@@ -1095,21 +1149,21 @@ let to_buffer ain =
     BB.add_string buf "KEYC";
     BB.add_int32 buf ain.keyc);
   BB.add_string buf "CODE";
-  BB.add_int buf (Bytes.length ain.code);
-  BB.add_bytes buf ain.code;
+  BB.add_int buf (Buffer.length ain.code);
+  Buffer.add_buffer buf ain.code;
   BB.add_string buf "FUNC";
-  BB.add_int buf (Array.length ain.functions);
-  Array.iter ain.functions ~f:(write_function buf ain);
+  BB.add_int buf (Dynarray.length ain.functions);
+  Dynarray.iter (write_function buf ain) ain.functions;
   BB.add_string buf "GLOB";
-  BB.add_int buf (Array.length ain.globals);
-  Array.iter ain.globals ~f:(write_global buf ain);
+  BB.add_int buf (Dynarray.length ain.globals);
+  Dynarray.iter (write_global buf ain) ain.globals;
   if ain.major_version < 12 then (
     BB.add_string buf "GSET";
     BB.add_int buf (List.length global_initvals);
     List.iter global_initvals ~f:(write_initval buf));
   BB.add_string buf "STRT";
-  BB.add_int buf (Array.length ain.structures);
-  Array.iter ain.structures ~f:(write_structure buf ain);
+  BB.add_int buf (Dynarray.length ain.structures);
+  Dynarray.iter (write_structure buf ain) ain.structures;
   if version_lt ain (6, 20) then (
     BB.add_string buf "MSG0";
     BB.add_int buf (Dynarray.length ain.messages);
@@ -1125,11 +1179,11 @@ let to_buffer ain =
     BB.add_string buf "MSGF";
     BB.add_int buf ain.msgf);
   BB.add_string buf "HLL0";
-  BB.add_int buf (Array.length ain.libraries);
-  Array.iter ain.libraries ~f:(write_library buf ain);
+  BB.add_int buf (Dynarray.length ain.libraries);
+  Dynarray.iter (write_library buf ain) ain.libraries;
   BB.add_string buf "SWI0";
-  BB.add_int buf (Array.length ain.switches);
-  Array.iter ain.switches ~f:(write_switch buf);
+  BB.add_int buf (Dynarray.length ain.switches);
+  Dynarray.iter (write_switch buf) ain.switches;
   BB.add_string buf "GVER";
   BB.add_int buf ain.game_version;
   (* TODO: scenario labels *)
@@ -1138,29 +1192,29 @@ let to_buffer ain =
   Dynarray.iter (BB.add_cstring buf) ain.strings;
   if ain.major_version < 12 then (
     BB.add_string buf "FNAM";
-    BB.add_int buf (Array.length ain.filenames);
-    Array.iter ain.filenames ~f:(BB.add_cstring buf));
+    BB.add_int buf (Dynarray.length ain.filenames);
+    Dynarray.iter (BB.add_cstring buf) ain.filenames);
   if ain.major_version < 7 then (
     BB.add_string buf "OJMP";
     BB.add_int buf ain.ojmp);
   (* XXX: section disappears in Rance IX (mid v6) *)
-  if Array.length ain.function_types > 0 then (
+  if Dynarray.length ain.function_types > 0 then (
     BB.add_string buf "FNCT";
     BB.add_int buf 0;
     (* FIXME: section size *)
-    BB.add_int buf (Array.length ain.function_types);
-    Array.iter ain.function_types ~f:(write_functype buf ain));
+    BB.add_int buf (Dynarray.length ain.function_types);
+    Dynarray.iter (write_functype buf ain) ain.function_types);
   (* XXX: section first appears in Oyako Rankan (mid v6) *)
-  if Array.length ain.delegates > 0 then (
+  if Dynarray.length ain.delegates > 0 then (
     BB.add_string buf "DELG";
     BB.add_int buf 0;
     (* FIXME: section size *)
-    BB.add_int buf (Array.length ain.delegates);
-    Array.iter ain.delegates ~f:(write_functype buf ain));
+    BB.add_int buf (Dynarray.length ain.delegates);
+    Dynarray.iter (write_functype buf ain) ain.delegates);
   if version_gte ain (5, 0) then (
     BB.add_string buf "OBJG";
-    BB.add_int buf (Array.length ain.global_group_names);
-    Array.iter ain.global_group_names ~f:(BB.add_cstring buf));
+    BB.add_int buf (Dynarray.length ain.global_group_names);
+    Dynarray.iter (BB.add_cstring buf) ain.global_group_names);
   if version_gte ain (12, 0) then (
     BB.add_string buf "ENUM";
     BB.add_int buf (Array.length ain.enums);
@@ -1213,148 +1267,151 @@ let write_file ain file = Out_channel.with_file file ~f:(write ain) ~binary:true
 (* globals *)
 
 let get_global ain name =
-  Array.find ain.globals ~f:(fun g -> String.equal g.variable.name name)
-  |> Option.map ~f:(fun (g : Global.t) -> g.variable)
+  Hashtbl.find ain.global_by_name name
+  |> Option.map ~f:(fun i -> (Dynarray.get ain.globals i).variable)
 
-let get_globali ain name =
-  Array.findi ain.globals ~f:(fun _ g -> String.equal g.variable.name name)
-
-let get_global_by_index ain no = ain.globals.(no).variable
+let get_global_by_index ain no = (Dynarray.get ain.globals no).variable
 
 let set_global_type ain name t =
-  match get_globali ain name with
-  | Some (i, g) ->
-      Array.set ain.globals i
+  match Hashtbl.find ain.global_by_name name with
+  | Some i ->
+      let g = Dynarray.get ain.globals i in
+      Dynarray.set ain.globals i
         { g with variable = { g.variable with value_type = t } }
   | None -> failwith (sprintf "No global named '%s' in ain object" name)
 
 let set_global_initval ain name initval =
-  match get_globali ain name with
-  | Some (i, g) ->
-      Array.set ain.globals i
+  match Hashtbl.find ain.global_by_name name with
+  | Some i ->
+      let g = Dynarray.get ain.globals i in
+      Dynarray.set ain.globals i
         { g with variable = { g.variable with initval = Some initval } }
   | None -> failwith (sprintf "No global named '%s' in ain object" name)
 
-(* FIXME: this sucks *)
-(*        keep a list of added globals/etc. and append to array only when lookup is OOB *)
-(* FIXME? should probably create copy of `g` so that mutations don't alter original *)
 let write_new_global ain (v : Variable.t) =
-  let index = Array.length ain.globals in
+  let index = Dynarray.length ain.globals in
   let g : Global.t = { variable = { v with index }; group_index = 0 } in
-  ain.globals <- Array.append ain.globals [| g |];
+  Dynarray.add_last ain.globals g;
+  try_add_name_index ain.global_by_name v.name index;
   index
 
 let add_global ain name group_index =
-  let index = Array.length ain.globals in
+  let index = Dynarray.length ain.globals in
   let variable = Variable.make ~index name Void in
   let g = Global.create variable group_index in
-  ain.globals <- Array.append ain.globals [| g |];
+  Dynarray.add_last ain.globals g;
+  try_add_name_index ain.global_by_name name index;
   index
 
 let add_global_group ain name =
+  let exception Found of int in
   match
-    Array.findi ain.global_group_names ~f:(fun _ n -> String.equal n name)
+    Dynarray.iteri
+      (fun i n -> if String.equal n name then Stdlib.raise_notrace (Found i))
+      ain.global_group_names
   with
-  | Some (i, _) -> i
-  | None ->
-      let index = Array.length ain.global_group_names in
-      ain.global_group_names <- Array.append ain.global_group_names [| name |];
+  | () ->
+      let index = Dynarray.length ain.global_group_names in
+      Dynarray.add_last ain.global_group_names name;
       index
+  | exception Found i -> i
 
 (* functions *)
 
 let get_function ain name =
-  Array.find ain.functions ~f:(fun f -> String.equal f.name name)
+  Hashtbl.find ain.function_by_name name
+  |> Option.map ~f:(Dynarray.get ain.functions)
 
-let[@warning "-32"] get_function_index ain name =
-  match Array.findi ain.functions ~f:(fun _ f -> String.equal f.name name) with
-  | Some (i, _) -> Some i
-  | None -> None
+let get_function_by_index ain no = Dynarray.get ain.functions no
+let write_function ain (f : Function.t) = Dynarray.set ain.functions f.index f
 
-let get_function_by_index ain no = ain.functions.(no)
-let write_function ain (f : Function.t) = Array.set ain.functions f.index f
-
-let write_new_function ain f =
-  let index = Array.length ain.functions in
-  ain.functions <- Array.append ain.functions [| { f with index } |];
+let write_new_function ain (f : Function.t) =
+  let index = Dynarray.length ain.functions in
+  let f = { f with index } in
+  Dynarray.add_last ain.functions f;
+  try_add_name_index ain.function_by_name f.name index;
   index
 
 let add_function ain name =
   let no = Function.create name |> write_new_function ain in
-  ain.functions.(no)
+  Dynarray.get ain.functions no
 
 (* structures *)
 
 let get_struct ain name =
-  Array.find ain.structures ~f:(fun s -> String.equal s.name name)
+  Hashtbl.find ain.struct_by_name name
+  |> Option.map ~f:(Dynarray.get ain.structures)
 
-let get_struct_index ain name =
-  match Array.findi ain.structures ~f:(fun _ s -> String.equal s.name name) with
-  | Some (i, _) -> Some i
-  | None -> None
+let get_struct_index ain name = Hashtbl.find ain.struct_by_name name
+let get_struct_by_index ain no = Dynarray.get ain.structures no
+let write_struct ain (s : Struct.t) = Dynarray.set ain.structures s.index s
 
-let get_struct_by_index ain no = ain.structures.(no)
-let write_struct ain (s : Struct.t) = Array.set ain.structures s.index s
-
-let write_new_struct ain s =
-  let index = Array.length ain.structures in
-  ain.structures <- Array.append ain.structures [| { s with index } |];
+let write_new_struct ain (s : Struct.t) =
+  let index = Dynarray.length ain.structures in
+  let s = { s with index } in
+  Dynarray.add_last ain.structures s;
+  try_add_name_index ain.struct_by_name s.name index;
   index
 
 let add_struct ain name =
   let no = Struct.create name |> write_new_struct ain in
-  ain.structures.(no)
+  Dynarray.get ain.structures no
 
 (* switches *)
 
 let write_switch ain (switch : Switch.t) =
-  Array.set ain.switches switch.index switch
+  Dynarray.set ain.switches switch.index switch
 
 let add_switch ain case_type =
-  let index = Array.length ain.switches in
+  let index = Dynarray.length ain.switches in
   let s : Switch.t = { index; case_type; default_address = -1; cases = [] } in
-  ain.switches <- Array.append ain.switches [| s |];
+  Dynarray.add_last ain.switches s;
   s
 
 (* enums *)
 
 let get_enum ain name =
-  match Array.findi ain.enums ~f:(fun _ e -> String.equal e.name name) with
-  | Some (i, _) -> Some i
-  | None -> None
+  let exception Found of int in
+  match
+    Array.iteri ain.enums ~f:(fun i e ->
+        if String.equal e.name name then Stdlib.raise_notrace (Found i))
+  with
+  | () -> None
+  | exception Found i -> Some i
 
 (* libraries *)
 
-let get_library_index ain name =
-  match
-    Array.findi ain.libraries ~f:(fun _ lib -> String.equal lib.name name)
-  with
-  | Some (i, _) -> Some i
-  | None -> None
+let get_library_index ain name = Hashtbl.find ain.library_by_name name
 
 let get_library_function_index ain lib_no name =
   match
-    List.findi ain.libraries.(lib_no).functions ~f:(fun _ f ->
+    List.findi (Dynarray.get ain.libraries lib_no).functions ~f:(fun _ f ->
         String.equal f.name name)
   with
   | Some (i, _) -> Some i
   | None -> None
 
-let get_library_by_index ain no = ain.libraries.(no)
-let write_library ain (lib : Library.t) = Array.set ain.libraries lib.index lib
+let get_library_by_index ain no = Dynarray.get ain.libraries no
 
-let write_new_library ain lib =
-  let index = Array.length ain.libraries in
-  ain.libraries <- Array.append ain.libraries [| { lib with index } |];
+let write_library ain (lib : Library.t) =
+  Dynarray.set ain.libraries lib.index lib
+
+let write_new_library ain (lib : Library.t) =
+  let index = Dynarray.length ain.libraries in
+  let lib = { lib with index } in
+  Dynarray.add_last ain.libraries lib;
+  try_add_name_index ain.library_by_name lib.name index;
   index
 
 let add_library ain name =
   let lib : Library.t = { index = -1; name; functions = [] } in
   let no = write_new_library ain lib in
-  ain.libraries.(no)
+  Dynarray.get ain.libraries no
 
 let function_of_hll_function_index ain lib_no fun_no : Function.t =
-  let lib_fun = List.nth_exn ain.libraries.(lib_no).functions fun_no in
+  let lib_fun =
+    List.nth_exn (Dynarray.get ain.libraries lib_no).functions fun_no
+  in
   let var_of_hll_arg index (arg : Library.Argument.t) : Variable.t =
     {
       index;
@@ -1381,28 +1438,25 @@ let function_of_hll_function_index ain lib_no fun_no : Function.t =
 (* function types *)
 
 let get_functype ain name =
-  Array.find ain.function_types ~f:(fun ft -> String.equal ft.name name)
+  Hashtbl.find ain.functype_by_name name
+  |> Option.map ~f:(Dynarray.get ain.function_types)
 
-let get_functype_index ain name =
-  match
-    Array.findi ain.function_types ~f:(fun _ ft -> String.equal ft.name name)
-  with
-  | Some (i, _) -> Some i
-  | None -> None
-
-let get_functype_by_index ain no = ain.function_types.(no)
+let get_functype_index ain name = Hashtbl.find ain.functype_by_name name
+let get_functype_by_index ain no = Dynarray.get ain.function_types no
 
 let write_functype ain (ft : FunctionType.t) =
-  Array.set ain.function_types ft.index ft
+  Dynarray.set ain.function_types ft.index ft
 
-let write_new_functype ain ft =
-  let index = Array.length ain.function_types in
-  ain.function_types <- Array.append ain.function_types [| { ft with index } |];
+let write_new_functype ain (ft : FunctionType.t) =
+  let index = Dynarray.length ain.function_types in
+  let ft = { ft with index } in
+  Dynarray.add_last ain.function_types ft;
+  try_add_name_index ain.functype_by_name ft.name index;
   index
 
 let add_functype ain name =
   let no = FunctionType.create name |> write_new_functype ain in
-  ain.function_types.(no)
+  Dynarray.get ain.function_types no
 
 (* TODO: should be FunctionType.to_function *)
 let function_of_functype (ft : FunctionType.t) no : Function.t =
@@ -1421,36 +1475,33 @@ let function_of_functype (ft : FunctionType.t) no : Function.t =
   }
 
 let function_of_functype_index ain no =
-  function_of_functype ain.function_types.(no) no
+  function_of_functype (Dynarray.get ain.function_types no) no
 
 (* delegates *)
 
 let get_delegate ain name =
-  Array.find ain.delegates ~f:(fun dg -> String.equal dg.name name)
+  Hashtbl.find ain.delegate_by_name name
+  |> Option.map ~f:(Dynarray.get ain.delegates)
 
-let get_delegate_index ain name =
-  match
-    Array.findi ain.delegates ~f:(fun _ dg -> String.equal dg.name name)
-  with
-  | Some (i, _) -> Some i
-  | None -> None
-
-let get_delegate_by_index ain no = ain.delegates.(no)
+let get_delegate_index ain name = Hashtbl.find ain.delegate_by_name name
+let get_delegate_by_index ain no = Dynarray.get ain.delegates no
 
 let write_delegate ain (dg : FunctionType.t) =
-  Array.set ain.delegates dg.index dg
+  Dynarray.set ain.delegates dg.index dg
 
-let write_new_delegate ain dg =
-  let index = Array.length ain.delegates in
-  ain.delegates <- Array.append ain.delegates [| { dg with index } |];
+let write_new_delegate ain (dg : FunctionType.t) =
+  let index = Dynarray.length ain.delegates in
+  let dg = { dg with index } in
+  Dynarray.add_last ain.delegates dg;
+  try_add_name_index ain.delegate_by_name dg.name index;
   index
 
 let add_delegate ain name =
   let no = FunctionType.create name |> write_new_delegate ain in
-  ain.delegates.(no)
+  Dynarray.get ain.delegates no
 
 let function_of_delegate_index ain no =
-  function_of_functype ain.delegates.(no) no
+  function_of_functype (Dynarray.get ain.delegates no) no
 
 (* strings, messages, files *)
 
@@ -1493,47 +1544,43 @@ let add_message ain str =
   index
 
 let get_file ain no =
-  if no >= Array.length ain.filenames then None else Some ain.filenames.(no)
+  if no >= Dynarray.length ain.filenames then None
+  else Some (Dynarray.get ain.filenames no)
 
 let add_file ain name =
-  let index = Array.length ain.filenames in
-  ain.filenames <- Array.append ain.filenames [| name |];
+  let index = Dynarray.length ain.filenames in
+  Dynarray.add_last ain.filenames name;
   index
 
 (* code *)
 
-let get_code ain = ain.code
+let get_code ain = Buffer.contents_bytes ain.code
 
-(* FIXME: should keep a list of bytes objects and defer concatenation *)
 let append_bytecode ain (buf : CBuffer.t) =
-  let cur_len = Bytes.length ain.code in
-  let code = Bytes.create (cur_len + buf.pos) in
-  Bytes.blit ~src:ain.code ~src_pos:0 ~dst:code ~dst_pos:0 ~len:cur_len;
-  Bytes.blit ~src:buf.buf ~src_pos:0 ~dst:code ~dst_pos:cur_len ~len:buf.pos;
-  ain.code <- code
+  Buffer.add_subbytes ain.code buf.buf ~pos:0 ~len:buf.pos
 
-let code_size ain = Bytes.length ain.code
+let code_size ain = Buffer.length ain.code
 let set_main_function ain no = ain.main <- no
 let set_message_function ain no = ain.msgf <- no
-let nr_globals ain = Array.length ain.globals
-let nr_functions ain = Array.length ain.functions
-let nr_structs ain = Array.length ain.structures
-let nr_functypes ain = Array.length ain.function_types
-let nr_delegates ain = Array.length ain.delegates
-let nr_libraries ain = Array.length ain.libraries
+let nr_globals ain = Dynarray.length ain.globals
+let nr_functions ain = Dynarray.length ain.functions
+let nr_structs ain = Dynarray.length ain.structures
+let nr_functypes ain = Dynarray.length ain.function_types
+let nr_delegates ain = Dynarray.length ain.delegates
+let nr_libraries ain = Dynarray.length ain.libraries
 
-let array_iter ?(from = 0) a ~f =
-  let finish = Array.length a - 1 in
+let dynarray_iter ?(from = 0) a ~f =
+  let finish = Dynarray.length a - 1 in
   for i = from to finish do
-    f a.(i)
+    f (Dynarray.get a i)
   done
 
-let global_iter ?(from = 0) ~f ain = array_iter ~from ain.globals ~f
-let function_iter ?(from = 0) ~f ain = array_iter ~from ain.functions ~f
-let struct_iter ?(from = 0) ~f ain = array_iter ~from ain.structures ~f
-let functype_iter ?(from = 0) ~f ain = array_iter ~from ain.function_types ~f
-let delegate_iter ?(from = 0) ~f ain = array_iter ~from ain.delegates ~f
-let library_iter ?(from = 0) ~f ain = array_iter ~from ain.libraries ~f
+let global_iter ?(from = 0) ~f ain = dynarray_iter ~from ain.globals ~f
+let function_iter ?(from = 0) ~f ain = dynarray_iter ~from ain.functions ~f
+let struct_iter ?(from = 0) ~f ain = dynarray_iter ~from ain.structures ~f
+let functype_iter ?(from = 0) ~f ain = dynarray_iter ~from ain.function_types ~f
+let delegate_iter ?(from = 0) ~f ain = dynarray_iter ~from ain.delegates ~f
+let library_iter ?(from = 0) ~f ain = dynarray_iter ~from ain.libraries ~f
 
 exception File_error
 exception Unrecognized_format

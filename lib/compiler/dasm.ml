@@ -4,22 +4,22 @@ open Base
 type instruction = { op_i : int; args : Bytecode.argtype list }
 
 type t = {
-  ain : Ain.t;
+  code : bytes;
   mutable addr : int;
   mutable instruction : instruction option;
   mutable current_func : int option;
 }
 
-let create ain = { ain; addr = 0; instruction = None; current_func = None }
+let create ain =
+  { code = Ain.get_code ain; addr = 0; instruction = None; current_func = None }
 
-let arg dasm i =
-  Stdlib.Bytes.get_int32_le (Ain.get_code dasm.ain) (dasm.addr + (2 + (i * 4)))
+let arg dasm i = Stdlib.Bytes.get_int32_le dasm.code (dasm.addr + (2 + (i * 4)))
 
 let get_instruction dasm =
   match dasm.instruction with
   | Some instruction -> instruction
   | None ->
-      let op_i = Stdlib.Bytes.get_int16_le (Ain.get_code dasm.ain) dasm.addr in
+      let op_i = Stdlib.Bytes.get_int16_le dasm.code dasm.addr in
       let opcode = Bytecode.opcode_of_int op_i in
       let args = Bytecode.args_of_opcode opcode in
       let instr = { op_i; args } in
@@ -32,7 +32,7 @@ let get_instruction dasm =
       instr
 
 let instruction_size instr = 2 + (List.length instr.args * 4)
-let eof dasm = dasm.addr >= Bytes.length (Ain.get_code dasm.ain)
+let eof dasm = dasm.addr >= Bytes.length dasm.code
 let addr dasm = dasm.addr
 let current_func dasm = dasm.current_func
 
@@ -47,11 +47,11 @@ let next dasm =
 
 let peek dasm =
   let size = instruction_size (get_instruction dasm) in
-  if dasm.addr + size >= Bytes.length (Ain.get_code dasm.ain) then None
+  if dasm.addr + size >= Bytes.length dasm.code then None
   else
     Some
       (Bytecode.opcode_of_int
-         (Stdlib.Bytes.get_int16_le (Ain.get_code dasm.ain) (dasm.addr + size)))
+         (Stdlib.Bytes.get_int16_le dasm.code (dasm.addr + size)))
 
 let opcode dasm = (get_instruction dasm).op_i
 let nr_args dasm = List.length (get_instruction dasm).args
