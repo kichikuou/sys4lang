@@ -65,7 +65,7 @@ and expr =
   | Option of expr
   | New of { struc : int; func : int; args : expr list }
   | ArrayLiteral of expr list
-  | DerefStruct of int * expr
+  | CopyStruct of int * expr
   | UnaryOp of Instructions.instruction * expr
   | BinaryOp of Instructions.instruction * expr * expr
   | AssignOp of Instructions.instruction * lvalue * expr
@@ -224,7 +224,7 @@ let subst expr e1 e2 =
       | RvalueRef (v, e) -> RvalueRef (v, rec_expr e)
       | Option e -> Option (rec_expr e)
       | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es)
-      | DerefStruct (n, e) -> DerefStruct (n, rec_expr e)
+      | CopyStruct (n, e) -> CopyStruct (n, rec_expr e)
       | UnaryOp (inst, e) -> UnaryOp (inst, rec_expr e)
       | BinaryOp (inst, lhs, rhs) -> BinaryOp (inst, rec_expr lhs, rec_expr rhs)
       | AssignOp (inst, l, e) -> AssignOp (inst, rec_lvalue l, rec_expr e)
@@ -278,7 +278,7 @@ let map_expr stmt ~f =
     | Option expr -> Option (rec_expr expr) |> f
     | New r -> New { r with args = List.map ~f:rec_expr r.args } |> f
     | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es) |> f
-    | DerefStruct (n, expr) -> DerefStruct (n, rec_expr expr) |> f
+    | CopyStruct (n, expr) -> CopyStruct (n, rec_expr expr) |> f
     | UnaryOp (inst, expr) -> UnaryOp (inst, rec_expr expr) |> f
     | BinaryOp (inst, lhs, rhs) ->
         BinaryOp (inst, rec_expr lhs, rec_expr rhs) |> f
@@ -371,7 +371,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | Option expr -> rec_expr expr
     | New r -> List.iter ~f:rec_expr r.args
     | ArrayLiteral es -> List.iter ~f:rec_expr es
-    | DerefStruct (_, expr) -> rec_expr expr
+    | CopyStruct (_, expr) -> rec_expr expr
     | UnaryOp (_, expr) -> rec_expr expr
     | BinaryOp (_, lhs, rhs) ->
         rec_expr lhs;

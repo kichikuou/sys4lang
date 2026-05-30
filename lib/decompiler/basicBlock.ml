@@ -236,6 +236,15 @@ let varref ctx page n =
 
 let pageref ctx page n = PageRef (page, varref ctx page n)
 
+(* The SH_*_A_PUSHBACK_LOCAL_STRUCT shortcuts push a copy of a local struct. *)
+let sh_local_struct_arg ctx local =
+  let e = Deref (pageref ctx LocalPage local) in
+  match (varref ctx LocalPage local).type_ with
+  | Struct s | Ref (Struct s) -> CopyStruct (s, e)
+  | t ->
+      Printf.failwithf "sh_local_struct_arg: expected struct local, got %s"
+        (Type.show_ain_type t) ()
+
 let lvalue ctx page slot =
   match (page, slot) with
   | Number -1l, Number 0l -> NullRef
@@ -311,12 +320,12 @@ let refref ctx =
 let sr_ref ctx n =
   update_stack ctx (function
     | slot :: page :: stack ->
-        DerefStruct (n, deref (lvalue ctx page slot)) :: stack
+        CopyStruct (n, deref (lvalue ctx page slot)) :: stack
     | stack -> unexpected_stack "sr_ref" stack)
 
 let sr_ref2 ctx n =
   update_stack ctx (function
-    | expr :: stack -> DerefStruct (n, expr) :: stack
+    | expr :: stack -> CopyStruct (n, expr) :: stack
     | stack -> unexpected_stack "sr_ref2" stack)
 
 let unary_op ctx op =
@@ -1138,17 +1147,17 @@ let analyze ctx =
         emit_expression ctx
           (Call
              ( Builtin (A_PUSHBACK, pageref ctx StructPage memb),
-               [ Deref (pageref ctx LocalPage local) ] ))
+               [ sh_local_struct_arg ctx local ] ))
     | SH_GLOBAL_A_PUSHBACK_LOCAL_STRUCT (glob, local) ->
         emit_expression ctx
           (Call
              ( Builtin (A_PUSHBACK, pageref ctx GlobalPage glob),
-               [ Deref (pageref ctx LocalPage local) ] ))
+               [ sh_local_struct_arg ctx local ] ))
     | SH_LOCAL_A_PUSHBACK_LOCAL_STRUCT (arrayvar, structvar) ->
         emit_expression ctx
           (Call
              ( Builtin (A_PUSHBACK, pageref ctx LocalPage arrayvar),
-               [ Deref (pageref ctx LocalPage structvar) ] ))
+               [ sh_local_struct_arg ctx structvar ] ))
     | SH_S_ASSIGN_REF -> (
         match take_stack ctx with
         | [ slot; page; Deref lval ] ->
@@ -1196,7 +1205,7 @@ let analyze ctx =
                pageref ctx StructPage memb,
                UnaryOp (ITOB, Deref (pageref ctx LocalPage local)) ))
     | SH_STRUCT_SR_REF (memb, struc) ->
-        push ctx (DerefStruct (struc, Deref (pageref ctx StructPage memb)))
+        push ctx (CopyStruct (struc, Deref (pageref ctx StructPage memb)))
     | SH_STRUCT_S_REF slot -> push ctx (Deref (pageref ctx StructPage slot))
     | S_REF2 slot ->
         push ctx (Number slot);

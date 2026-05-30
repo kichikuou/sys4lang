@@ -359,7 +359,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           bprintf out "new %s(%a)" Ain.ain.strt.(struc).name self#pr_arg_list
             args
       | ArrayLiteral es -> bprintf out "[%a]" self#pr_arg_list es
-      | DerefStruct (_, expr) -> self#pr_expr prec out expr
+      | CopyStruct (_, expr) -> self#pr_expr prec out expr
       | Page StructPage -> print_string out "this"
       | Null -> print_string out "NULL"
       | Void -> print_string out "<void>" (* FIXME *)
