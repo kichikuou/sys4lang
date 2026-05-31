@@ -610,6 +610,82 @@ let%expect_test "local ref int assign" =
       114: EOF
   |}]
 
+(* The `<-` reassignment operator derives the SP_INC page from the source
+   lvalue. This matches the SDK compiler. *)
+let%expect_test "local ref int reassign" =
+  compile_test
+    {|
+      int f(ref int a, ref int b) {
+        a <- b;
+        return a;
+      }
+    |};
+  [%expect
+    {|
+      000: FUNC f
+      006: CALLSYS LockPeek
+      012: POP
+      014: PUSHLOCALPAGE
+      016: PUSH 0
+      022: DUP2
+      024: REFREF
+      026: POP
+      028: DELETE
+      030: PUSHLOCALPAGE
+      032: PUSH 2
+      038: REFREF
+      040: DUP_U2
+      042: SP_INC
+      044: R_ASSIGN
+      046: POP
+      048: POP
+      050: CALLSYS UnlockPeek
+      056: POP
+      058: PUSHLOCALPAGE
+      060: PUSH 0
+      066: REFREF
+      068: REF
+      070: RETURN
+      072: PUSH 0
+      078: RETURN
+      080: ENDFUNC f
+      086: EOF test.jaf
+      092: FUNC NULL
+      098: EOF
+    |}]
+
+let%expect_test "ref struct reassign" =
+  compile_test
+    {|
+      struct S {};
+      void f(ref S a, ref S b) {
+        a <- b;
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: CALLSYS LockPeek
+    012: POP
+    014: PUSHLOCALPAGE
+    016: PUSH 0
+    022: DUP2
+    024: REF
+    026: DELETE
+    028: SH_LOCALREF b
+    034: DUP
+    036: SP_INC
+    038: ASSIGN
+    040: POP
+    042: CALLSYS UnlockPeek
+    048: POP
+    050: RETURN
+    052: ENDFUNC f
+    058: EOF test.jaf
+    064: FUNC NULL
+    070: EOF
+    |}]
+
 let%expect_test "struct ref int assign" =
   compile_test
     {|
