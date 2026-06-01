@@ -344,7 +344,8 @@ class jaf_compiler ctx debug_info =
       let compile_lvalue_after (t : Ain.Type.t) =
         match t with
         | Ref (Int | Float | Bool | LongInt) -> self#write_instruction0 REFREF
-        | Ref (String | Array _ | Struct _) -> self#write_instruction0 REF
+        | Ref (String | Array _ | Struct _ | Delegate _) ->
+            self#write_instruction0 REF
         | String | Array _ | Struct _ | Delegate _ ->
             self#write_instruction0 REF
         | _ -> ()
@@ -354,7 +355,8 @@ class jaf_compiler ctx debug_info =
           match self#get_local i with
           | {
            value_type =
-             String | Array _ | Struct _ | Ref (String | Array _ | Struct _);
+             ( String | Array _ | Struct _
+             | Ref (String | Array _ | Struct _ | Delegate _) );
            _;
           }
             when ctx.version < 630 ->
@@ -366,7 +368,8 @@ class jaf_compiler ctx debug_info =
           match Ain.get_global_by_index ctx.ain i with
           | {
            value_type =
-             String | Array _ | Struct _ | Ref (String | Array _ | Struct _);
+             ( String | Array _ | Struct _
+             | Ref (String | Array _ | Struct _ | Delegate _) );
            _;
           }
             when ctx.version < 630 ->
@@ -377,7 +380,7 @@ class jaf_compiler ctx debug_info =
       | Member (obj, _, ClassVariable member_no) -> (
           match (obj.node, e.ty) with
           | ( This,
-              ( Ref (String | Array _ | Struct _)
+              ( Ref (String | Array _ | Struct _ | Delegate _)
               | String | Array _ | Struct _ | Delegate _ ) )
             when ctx.version < 630 ->
               self#write_instruction1 SH_STRUCTREF member_no

@@ -1179,6 +1179,31 @@ let%expect_test "dg_set_string" =
     094: EOF
     |}]
 
+let%expect_test "ref delegate string assign" =
+  compile_test
+    {|
+      delegate void dg();
+      void f(ref dg d) {
+        d = "f";
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC f
+    006: SH_LOCALREF d
+    012: S_PUSH "f"
+    018: PUSH -1
+    024: SWAP
+    026: PUSH 0
+    032: DG_STR_TO_METHOD
+    034: DG_SET
+    036: RETURN
+    038: ENDFUNC f
+    044: EOF test.jaf
+    050: FUNC NULL
+    056: EOF
+    |}]
+
 let%expect_test "dg_add_string" =
   compile_test
     {|
