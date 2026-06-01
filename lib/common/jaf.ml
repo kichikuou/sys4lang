@@ -516,8 +516,9 @@ class ivisitor ctx =
           self#visit_statement body;
           self#visit_expression test
       | For (init, test, inc, body) ->
-          self#env#push;
+          (* The for-init declaration is in the enclosing scope. *)
           self#visit_statement init;
+          self#env#push;
           Option.iter test ~f:self#visit_expression;
           Option.iter inc ~f:self#visit_expression;
           self#visit_statement body;

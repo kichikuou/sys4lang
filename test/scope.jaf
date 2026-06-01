@@ -6,5 +6,11 @@ int main()
 		assert(i == 2);
 	}
 	assert(i == 1);
+
+	// A variable declared in a for-init clause stays in scope after the loop.
+	for (int j = 0; j < 5; j++)
+		;
+	assert(j == 5);
+
 	return 0;
 }
