@@ -151,14 +151,8 @@ module Type = struct
 
   let rec int_of_struct_type ?(var = false) version o =
     match o with
-    | Struct no
-    | FuncType no
-    | Delegate no
-    | Enum2 no
-    | Enum no
-    | IFace no
-    | IFaceWrap no ->
-        no
+    | Struct no | Enum2 no | Enum no | IFace no | IFaceWrap no -> no
+    | Delegate no | FuncType no -> if version < 11 then -1 else no
     | Array t -> (
         (* XXX: preserve quirk with enum struct type in ain v12 (Rance 10) *)
         match t with
