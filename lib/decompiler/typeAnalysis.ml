@@ -558,7 +558,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               Switch (id, expr', self#analyze_statement stmt)
           | For (init, cond, inc, body) ->
               For
-                ( self#analyze_expr_opt Any init,
+                ( Option.map ~f:self#analyze_statement init,
                   self#analyze_expr_opt Bool cond,
                   self#analyze_expr_opt Any inc,
                   self#analyze_statement body )

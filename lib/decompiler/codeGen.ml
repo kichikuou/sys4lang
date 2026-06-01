@@ -641,7 +641,17 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
         | For (init, cond, inc, body) ->
             self#addr_and_indent stmt.addr;
             print_string out "for (";
-            (match init with None -> () | Some e -> self#pr_expr 0 out e);
+            (match init with
+            | None -> ()
+            | Some { txt = Expression e; _ } -> self#pr_expr 0 out e
+            | Some { txt = VarDecl (var, Some (insn, e)); _ } ->
+                let op = operator insn in
+                bprintf out "%a = %a" self#pr_vardecl var
+                  (self#pr_expr ~parent_op:op op.rprec)
+                  e
+            | Some { txt; _ } ->
+                Printf.failwithf "unexpected for-init statement: %s"
+                  (show_statement txt) ());
             print_string out "; ";
             (match cond with None -> () | Some e -> self#pr_expr 0 out e);
             print_string out "; ";

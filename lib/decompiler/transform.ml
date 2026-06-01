@@ -87,8 +87,8 @@ let expand_else_scope stmt =
         let body = rec_stmt body in
         return @@ DoWhile (body, cond)
     | For (init, cond, inc, body) ->
+        let init = Option.map ~f:rec_stmt init in
         let body = rec_stmt body in
-        process_expr_opt init;
         process_expr_opt cond;
         process_expr_opt inc;
         return @@ For (init, cond, inc, body)
@@ -165,28 +165,12 @@ let recover_loop_initializer stmt =
     | s1 :: ({ txt = For (None, None, None, _); _ } as s2) :: right ->
         (* Do not transform loops where both cond and inc are empty. *)
         reduce (s2 :: s1 :: left) right
-    | { txt = Expression (AssignOp _ as init); addr; _ }
+    | ({ txt = Expression (AssignOp _) | VarDecl (_, Some _); addr; _ } as init)
       :: { txt = For (None, cond, inc, body); end_addr; _ }
       :: right ->
+        (* Move the preceding assignment or declaration into the for-init clause. *)
         reduce
           ({ txt = For (Some init, cond, inc, body); addr; end_addr } :: left)
-          right
-    | { txt = VarDecl (var, Some (inst, expr)); addr; _ }
-      :: { txt = For (None, cond, inc, body); end_addr; _ }
-      :: right ->
-        reduce
-          ({
-             txt =
-               For
-                 ( Some (AssignOp (inst, PageRef (LocalPage, var), expr)),
-                   cond,
-                   inc,
-                   body );
-             addr;
-             end_addr;
-           }
-          :: { txt = VarDecl (var, None); addr; end_addr = addr }
-          :: left)
           right
     | stmt :: right -> reduce (stmt :: left) right
   in

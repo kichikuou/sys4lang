@@ -101,7 +101,7 @@ type statement =
   | DoWhile of statement loc * expr loc (* (block, cond) *)
   | Switch of int * expr * statement loc (* (switch_id, expr, body) *)
   | For of
-      expr option
+      statement loc option
       * expr option
       * expr option
       * statement loc (* init, cond, inc, body *)
@@ -327,7 +327,7 @@ let map_expr stmt ~f =
           DoWhile (rec_stmt body, { cond with txt = rec_expr cond.txt })
       | For (init, cond, inc, body) ->
           For
-            ( Option.map ~f:rec_expr init,
+            ( Option.map ~f:rec_stmt init,
               Option.map ~f:rec_expr cond,
               Option.map ~f:rec_expr inc,
               rec_stmt body )
@@ -446,7 +446,7 @@ let walk ?(stmt_cb = fun _ -> ()) ?(expr_cb = fun _ -> ())
         rec_stmt body;
         rec_expr cond
     | For (init, cond, inc, body) ->
-        Option.iter ~f:rec_expr init;
+        Option.iter ~f:rec_stmt init;
         Option.iter ~f:rec_expr cond;
         Option.iter ~f:rec_expr inc;
         rec_stmt body
