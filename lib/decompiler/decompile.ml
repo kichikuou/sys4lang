@@ -236,6 +236,85 @@ let process_generated_constructors (structs : CodeGen.struct_t array)
           (fname, funcs));
   }
 
+(* Ain v1 scenario labels (SLBL section) are not recorded in the FUNC table.
+   Each label points to bare code that is a single `CALLFUNC <func>` (no args),
+   and the decompiler drops that bare code as junk. Here we synthesize a
+   `#name() { Func(); }` label function directly from the SLBL entry and the one
+   instruction it points to, then place it right before the called function in
+   the same source file. *)
+let synthesize_scenario_labels code srcs =
+  if Array.is_empty Ain.ain.slbl then srcs
+  else begin
+    let addr_to_insn = Hashtbl.create (module Int) in
+    List.iter code ~f:(fun (insn : Instructions.instruction loc) ->
+        Hashtbl.set addr_to_insn ~key:insn.addr ~data:insn.txt);
+    let labels_by_func = Hashtbl.create (module Int) in
+    Array.iter Ain.ain.slbl ~f:(fun (sl : Ain.ScenarioLabel.t) ->
+        let addr = Int32.to_int_exn sl.address in
+        let func_id =
+          match Hashtbl.find addr_to_insn addr with
+          | Some (Instructions.CALLFUNC n) -> n
+          | _ ->
+              Printf.failwithf
+                "scenario label \"%s\" at 0x%x is not a single CALLFUNC" sl.name
+                addr ()
+        in
+        let called = Ain.ain.func.(func_id) in
+        if called.nr_args <> 0 then
+          Printf.failwithf
+            "scenario label \"%s\" calls %s, which takes arguments" sl.name
+            called.name ();
+        let label_func : Ain.Function.t =
+          {
+            id = -1;
+            address = addr;
+            name = sl.name;
+            kind = Label;
+            capture = false;
+            return_type = Void;
+            vars = [||];
+            nr_args = 0;
+            crc = 0l;
+          }
+        in
+        let call =
+          {
+            txt = Ast.Expression (Call (Function called, []));
+            addr;
+            end_addr = addr;
+          }
+        in
+        let body = { txt = Ast.Block [ call ]; addr; end_addr = addr } in
+        let f =
+          CodeGen.
+            {
+              func = label_func;
+              struc = None;
+              name = sl.name;
+              body;
+              lambdas = [];
+            }
+        in
+        Hashtbl.add_multi labels_by_func ~key:func_id ~data:f);
+    let srcs =
+      List.map srcs ~f:(fun (fname, funcs) ->
+          let funcs =
+            List.concat_map funcs ~f:(fun (func : CodeGen.function_t) ->
+                match Hashtbl.find labels_by_func func.func.id with
+                | Some labels ->
+                    Hashtbl.remove labels_by_func func.func.id;
+                    labels @ [ func ]
+                | None -> [ func ])
+          in
+          (fname, funcs))
+    in
+    Hashtbl.iter_keys labels_by_func ~f:(fun func_id ->
+        Stdio.eprintf
+          "Warning: scenario label target function %s not found in output\n"
+          Ain.ain.func.(func_id).name);
+    srcs
+  end
+
 let decompile ~move_to_original_file ~continue_on_error =
   let code = Instructions.decode Ain.ain.code in
   let code = CodeSection.preprocess_ain_v0 code in
@@ -304,6 +383,7 @@ let decompile ~move_to_original_file ~continue_on_error =
         List.iter funcs ~f:process_func;
         (fname, List.rev !decompiled_funcs))
   in
+  let srcs = synthesize_scenario_labels code srcs in
   Array.iter structs ~f:(fun s -> s.methods <- List.rev s.methods);
   let ain_minor_version = determine_ain_minor_version code in
   {
