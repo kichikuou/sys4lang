@@ -820,8 +820,8 @@ class type_analyze_visitor ctx =
                   | Void -> ()
                   | _ -> type_error f.return.ty None (ASTStatement stmt)))
           | Jump name -> (
-              match self#env#resolve name with
-              | ResolvedFunction f when f.is_label -> ()
+              match Hashtbl.find ctx.functions name with
+              | Some f when f.is_label -> ()
               | _ ->
                   compile_error
                     (name ^ " is not a scenario function")
