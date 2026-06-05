@@ -33,6 +33,7 @@ let rec decompile_function ~lambdas (f : CodeSection.function_t) =
     BasicBlock.create f
     |> BasicBlock.generate_var_decls f.func
     |> ControlFlow.analyze
+    |> BasicBlock.prepend_var_decls f.func
     |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
     |> Transform.apply_all_transforms
   in
@@ -50,6 +51,7 @@ let rec inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   bbs)
   |> BasicBlock.generate_var_decls f.func
   |> ControlFlow.analyze
+  |> BasicBlock.prepend_var_decls f.func
   |> (fun stmt ->
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)

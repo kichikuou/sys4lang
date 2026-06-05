@@ -1818,58 +1818,77 @@ let create (f : CodeSection.function_t) =
   | _ -> from_instructions f f.code
 
 let generate_var_decls (func : Ain.Function.t) bbs =
-  let uninitialized_vars =
-    ref (List.drop (Array.to_list func.vars) func.nr_args)
-  in
-  let mark_use var =
-    uninitialized_vars :=
-      List.filter !uninitialized_vars ~f:(fun v -> not (phys_equal v var))
-  in
-  let is_uninitialized var =
-    if Stdlib.List.memq var !uninitialized_vars then (
-      mark_use var;
-      true)
-    else false
-  in
-  let replace_stmt = function
-    | VarDecl (var, None) as stmt ->
+  if Ain.ain.vers <= 1 then
+    (* For ain v0/v1, we declare all locals at the top instead. *)
+    bbs
+  else
+    let uninitialized_vars =
+      ref (List.drop (Array.to_list func.vars) func.nr_args)
+    in
+    let mark_use var =
+      uninitialized_vars :=
+        List.filter !uninitialized_vars ~f:(fun v -> not (phys_equal v var))
+    in
+    let is_uninitialized var =
+      if Stdlib.List.memq var !uninitialized_vars then (
         mark_use var;
-        stmt
-    | Expression (AssignOp (insn, PageRef (LocalPage, var), expr))
-      when is_uninitialized var ->
-        VarDecl (var, Some (insn, expr))
-    | Expression (Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), _) as expr)
-      when is_uninitialized var ->
-        VarDecl (var, Some (ASSIGN, expr))
-    | Expression
-        (Call
-           ( HllFunc ("Array", { name = "Alloc"; _ }),
-             Deref (PageRef (_, var)) :: dims ))
-      when is_uninitialized var ->
-        let dims =
-          List.take_while dims ~f:(function Number -1l -> false | _ -> true)
+        true)
+      else false
+    in
+    let replace_stmt = function
+      | VarDecl (var, None) as stmt ->
+          mark_use var;
+          stmt
+      | Expression (AssignOp (insn, PageRef (LocalPage, var), expr))
+        when is_uninitialized var ->
+          VarDecl (var, Some (insn, expr))
+      | Expression
+          (Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), _) as expr)
+        when is_uninitialized var ->
+          VarDecl (var, Some (ASSIGN, expr))
+      | Expression
+          (Call
+             ( HllFunc ("Array", { name = "Alloc"; _ }),
+               Deref (PageRef (_, var)) :: dims ))
+        when is_uninitialized var ->
+          let dims =
+            List.take_while dims ~f:(function Number -1l -> false | _ -> true)
+          in
+          VarDecl
+            ( var,
+              Some
+                ( ASSIGN,
+                  Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), dims) ) )
+      | Expression
+          ( Call (Builtin (A_FREE, PageRef (LocalPage, var)), [])
+          | Call
+              ( HllFunc ("Array", { name = "Free"; _ }),
+                [ Deref (PageRef (_, var)) ] ) )
+        when is_uninitialized var && not (Ain.Variable.is_dummy var) ->
+          VarDecl (var, None)
+      | Expression
+          (Call (Builtin2 (DG_CLEAR, Deref (PageRef (LocalPage, var))), []))
+        when is_uninitialized var ->
+          VarDecl (var, None)
+      | stmt -> stmt
+    in
+    List.map bbs ~f:(function { code = terminator, stmts; _ } as bb ->
+        let stmts' =
+          List.rev_map (List.rev stmts) ~f:(fun stmt ->
+              { stmt with txt = replace_stmt stmt.txt })
         in
-        VarDecl
-          ( var,
-            Some
-              (ASSIGN, Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), dims))
-          )
-    | Expression
-        ( Call (Builtin (A_FREE, PageRef (LocalPage, var)), [])
-        | Call
-            ( HllFunc ("Array", { name = "Free"; _ }),
-              [ Deref (PageRef (_, var)) ] ) )
-      when is_uninitialized var && not (Ain.Variable.is_dummy var) ->
-        VarDecl (var, None)
-    | Expression
-        (Call (Builtin2 (DG_CLEAR, Deref (PageRef (LocalPage, var))), []))
-      when is_uninitialized var ->
-        VarDecl (var, None)
-    | stmt -> stmt
-  in
-  List.map bbs ~f:(function { code = terminator, stmts; _ } as bb ->
-      let stmts' =
-        List.rev_map (List.rev stmts) ~f:(fun stmt ->
-            { stmt with txt = replace_stmt stmt.txt })
-      in
-      { bb with code = (terminator, stmts') })
+        { bb with code = (terminator, stmts') })
+
+(* Ain v0/v1: declare every local at the top of the function body. *)
+let prepend_var_decls (func : Ain.Function.t) (body : Ast.statement loc) =
+  if Ain.ain.vers > 1 then body
+  else
+    let decls =
+      List.drop (Array.to_list func.vars) func.nr_args
+      |> List.filter ~f:(fun v -> not (Ain.Variable.is_dummy v))
+      |> List.map ~f:(fun v ->
+          { txt = VarDecl (v, None); addr = body.addr; end_addr = body.addr })
+    in
+    match body.txt with
+    | Block stmts -> { body with txt = Block (stmts @ List.rev decls) }
+    | _ -> { body with txt = Block (body :: List.rev decls) }

@@ -46,3 +46,6 @@ val create : CodeSection.function_t -> t list
 
 (* Replace the first occurence of each local variable with the variable declaration. *)
 val generate_var_decls : Ain.Function.t -> t list -> t list
+
+(* For ain v0/v1: declare every local at the top of the function body. *)
+val prepend_var_decls : Ain.Function.t -> Ast.statement loc -> Ast.statement loc

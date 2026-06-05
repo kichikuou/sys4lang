@@ -1225,6 +1225,11 @@ class jaf_compiler ctx debug_info =
         variable. Otherwise a default value is assigned. *)
     method compile_variable_declaration (decl : variable) =
       if decl.is_const then ()
+      else if
+        Ain.version ctx.ain <= 1
+        && Option.is_none decl.initval
+        && List.is_empty decl.array_dim
+      then ()
       else
         let v = self#get_local (Option.value_exn decl.index) in
         self#scope_add_var v;
