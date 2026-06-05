@@ -1356,7 +1356,7 @@ class jaf_compiler ctx debug_info =
       labels <- Hashtbl.create (module String);
       self#write_instruction1 FUNC index;
       self#compile_block (Option.value_exn decl.body);
-      if not func.is_label then (
+      if not (func.is_label || String.equal func.name "NULL") then (
         self#compile_default_return func.return_type
           (ASTDeclaration (Function decl));
         self#write_instruction0 RETURN);

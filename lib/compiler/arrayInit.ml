@@ -111,8 +111,7 @@ class visitor ctx =
             return = { ty = Void; location = dummy_location };
             params = [];
             body = Some [];
-            (* not to generate default return *)
-            is_label = true;
+            is_label = false;
             is_lambda = false;
             is_private = false;
             index = Some 0;
