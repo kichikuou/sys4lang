@@ -1379,12 +1379,29 @@ class jaf_compiler ctx debug_info =
       cflow_stmts <- prev_cflow_stmts;
       labels <- prev_labels
 
+    (** Emit the code for an ain v1 scenario label. *)
+    method compile_scenario_label (decl : fundecl) =
+      Ain.add_scenario_label ctx.ain decl.name current_address;
+      let body = Option.value_exn decl.body in
+      match body with
+      | [ { node = Expression { node = Call (_, [], FunctionCall _); _ }; _ } ]
+        ->
+          self#compile_block body
+      | _ ->
+          compile_error
+            "ain v1 scenario label body must be a single argument-less \
+             function call"
+            (ASTDeclaration (Function decl))
+
     (** Compile a list of declarations. *)
     method compile jaf_name (decls : declaration list) =
       start_address <- Ain.code_size ctx.ain;
       current_address <- start_address;
       let compile_decl = function
-        | Jaf.Function f -> self#compile_function f
+        | Jaf.Function f ->
+            if f.is_label && Ain.version ctx.ain = 1 then
+              self#compile_scenario_label f
+            else self#compile_function f
         | Global _ | GlobalGroup _ | FuncTypeDef _ | DelegateDef _ -> ()
         | StructDef d ->
             let compile_struct_decl (d : struct_declaration) =

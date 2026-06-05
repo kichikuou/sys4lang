@@ -36,7 +36,10 @@ class type_declare_visitor ctx =
         decl.class_name <-
           (Option.value_exn self#env#current_function).class_name);
       let name = mangled_name decl in
-      if Option.is_some decl.body then
+      (* ain v1 scenario labels are not recorded in the FUNC table. Keep them in
+         ctx.functions (so `jump` resolves) but leave their FUNC index unset. *)
+      let is_v1_scenario_label = decl.is_label && Ain.version ctx.ain = 1 in
+      if Option.is_some decl.body && not is_v1_scenario_label then
         decl.index <- Some (Ain.add_function ctx.ain name).index;
       Hashtbl.update ctx.functions name ~f:(function
         | Some prev_decl ->
@@ -269,10 +272,12 @@ class type_define_visitor ctx =
           List.iter gg.vardecls ~f:(fun ds ->
               self#visit_declaration (Global ds))
       | Function f ->
-          let obj =
-            Ain.get_function_by_index ctx.ain (Option.value_exn f.index)
-          in
-          obj |> jaf_to_ain_function f |> Ain.write_function ctx.ain
+          (* v1 scenario labels have no FUNC table entry to define. *)
+          if not (f.is_label && Ain.version ctx.ain = 1) then
+            let obj =
+              Ain.get_function_by_index ctx.ain (Option.value_exn f.index)
+            in
+            obj |> jaf_to_ain_function f |> Ain.write_function ctx.ain
       | FuncTypeDef f -> jaf_to_ain_functype f |> Ain.write_functype ctx.ain
       | DelegateDef f -> jaf_to_ain_functype f |> Ain.write_delegate ctx.ain
       | StructDef s -> (

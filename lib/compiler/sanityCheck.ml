@@ -54,8 +54,10 @@ class sanity_check_visitor ctx =
     method! visit_fundecl f =
       if Option.is_some f.body then (
         super#visit_fundecl f;
+        (* ain v1 scenario labels intentionally have no FUNC index. *)
         match f.index with
         | Some _ -> ()
+        | None when f.is_label && Ain.version ctx.ain = 1 -> ()
         | None ->
             compiler_bug "function index not set"
               (Some (ASTDeclaration (Function f))))

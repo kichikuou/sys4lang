@@ -440,7 +440,7 @@ type t = {
   mutable libraries : Library.t Dynarray.t;
   mutable switches : Switch.t Dynarray.t;
   mutable game_version : int;
-  (* TODO: scenario labels *)
+  mutable scenario_labels : (string * int) Dynarray.t;
   mutable strings : string Dynarray.t;
   mutable filenames : string Dynarray.t;
   mutable ojmp : int;
@@ -481,6 +481,7 @@ let create ?is_ain2 ?(keyc = 0l) ?(game_version = 0) major_version minor_version
     libraries = Dynarray.create ();
     switches = Dynarray.create ();
     game_version;
+    scenario_labels = Dynarray.create ();
     strings = Dynarray.make 1 "";
     filenames = Dynarray.create ();
     ojmp = -1;
@@ -703,6 +704,16 @@ let read_cstrings buf count =
   in
   read_cstrings' count []
 
+let read_scenario_labels buf count =
+  let rec read_scenario_labels' count result =
+    if count > 0 then
+      let name = read_cstring buf in
+      let address = read_int buf in
+      read_scenario_labels' (count - 1) ((name, address) :: result)
+    else List.rev result
+  in
+  read_scenario_labels' count []
+
 let read_msg1_strings buf count =
   let read_msg1_string () =
     let len = read_int buf in
@@ -854,7 +865,10 @@ let load filename =
     | "SWI0" ->
         let count = read_int buf in
         buf.ain.switches <- Dynarray.of_list (read_switches buf count)
-    | "SLBL" -> failwith "scenario labels not implemented"
+    | "SLBL" ->
+        let count = read_int buf in
+        buf.ain.scenario_labels <-
+          Dynarray.of_list (read_scenario_labels buf count)
     | "STR0" ->
         let count = read_int buf in
         buf.ain.strings <- Dynarray.of_list (read_cstrings buf count)
@@ -1100,6 +1114,19 @@ let write_library buf ain (lib : Library.t) =
   BB.add_int buf (Array.length lib.functions);
   Array.iter lib.functions ~f:write_library_function
 
+let write_scenario_label buf (name, address) =
+  let module BB = BinBuffer in
+  BB.add_cstring buf name;
+  BB.add_int buf address
+
+let write_scenario_labels buf labels =
+  BinBuffer.add_int buf (Dynarray.length labels);
+  (* The section is sorted by name in Shift_JIS byte order. *)
+  Dynarray.to_list labels
+  |> List.sort ~compare:(fun (a, _) (b, _) ->
+      String.compare (Sjis.from_utf8 a) (Sjis.from_utf8 b))
+  |> List.iter ~f:(write_scenario_label buf)
+
 let write_switch buf (sw : Switch.t) =
   let module BB = BinBuffer in
   let write_switch_case (value, addr) =
@@ -1138,7 +1165,7 @@ let to_buffer ain =
   let module BB = BinBuffer in
   BB.add_string buf "VERS";
   BB.add_int buf ain.major_version;
-  if ain.major_version < 12 then (
+  if ain.major_version > 1 && ain.major_version < 12 then (
     BB.add_string buf "KEYC";
     BB.add_int32 buf ain.keyc);
   BB.add_string buf "CODE";
@@ -1179,7 +1206,9 @@ let to_buffer ain =
   Dynarray.iter (write_switch buf) ain.switches;
   BB.add_string buf "GVER";
   BB.add_int buf ain.game_version;
-  (* TODO: scenario labels *)
+  if ain.major_version = 1 then (
+    BB.add_string buf "SLBL";
+    write_scenario_labels buf ain.scenario_labels);
   BB.add_string buf "STR0";
   BB.add_int buf (Dynarray.length ain.strings);
   Dynarray.iter (BB.add_cstring buf) ain.strings;
@@ -1328,6 +1357,11 @@ let write_new_function ain (f : Function.t) =
 let add_function ain name =
   let no = Function.create name |> write_new_function ain in
   Dynarray.get ain.functions no
+
+(* scenario labels (ain v1 only) *)
+
+let add_scenario_label ain name address =
+  Dynarray.add_last ain.scenario_labels (name, address)
 
 (* structures *)
 
