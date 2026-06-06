@@ -1,4 +1,5 @@
 open Base
+open Cmdliner
 open System4_lsp
 open Types
 open Project
@@ -160,7 +161,8 @@ class lsp_server ~sw ~fs ~domain_mgr ~default_pje_path =
       else super#on_unknown_request ~notify_back ~server_request ~id meth params
   end
 
-let run ~default_pje_path () =
+let run default_pje_path =
+  let default_pje_path = Option.value default_pje_path ~default:"" in
   Common.TypeAnalysis.loose_functype_check := true;
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -179,21 +181,38 @@ let run ~default_pje_path () =
       Stdio.eprintf "error: %s\n%!" e;
       Stdlib.exit 1
 
-let print_version () =
-  Stdio.printf "system4-lsp %s\n"
-    (match Build_info.V1.version () with
-    | None -> "n/a"
-    | Some v -> Build_info.V1.Version.to_string v)
+let cmd =
+  let version =
+    Option.map (Build_info.V1.version ()) ~f:Build_info.V1.Version.to_string
+  in
+  let doc = "Language server for the System 4 language" in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "sys4lsp is a Language Server Protocol server for the AliceSoft's \
+         System 4 programming language. It is normally launched by an LSP \
+         client (such as an editor), which configures the project via the \
+         $(b,initializationOptions) field of the $(b,initialize) request.";
+      `S "INITIALIZATION OPTIONS";
+      `P
+        "The client may pass the following fields in the \
+         $(b,initializationOptions) object of the $(b,initialize) request:";
+      `I
+        ( "$(b,pjePath)",
+          "Path to the .pje project file to load. When omitted, the \
+           $(i,PJE_FILE) command-line argument is used instead." );
+    ]
+  in
+  let info = Cmd.info "sys4lsp" ?version ~doc ~man in
+  let pje_file =
+    let doc =
+      "The .pje project file to load. Used as a fallback when the client does \
+       not specify pjePath via initializationOptions."
+    in
+    let docv = "PJE_FILE" in
+    Cmdliner.Arg.(value & pos 0 (some string) None & info [] ~docv ~doc)
+  in
+  Cmd.v info Term.(const run $ pje_file)
 
-let usage () =
-  Stdio.eprintf "Usage: %s [--version] [PJE_FILE]\n" (Sys.get_argv ()).(0);
-  Stdlib.exit 1
-
-let () =
-  let argv = Sys.get_argv () in
-  match Array.to_list argv with
-  | [ _; "--version" ] -> print_version ()
-  | [ _; pje ] when not (String.is_prefix pje ~prefix:"-") ->
-      run ~default_pje_path:pje ()
-  | _ :: [] -> run ~default_pje_path:"" ()
-  | _ -> usage ()
+let () = Stdlib.exit (Cmd.eval cmd)
