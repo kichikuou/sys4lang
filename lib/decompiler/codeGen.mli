@@ -16,6 +16,9 @@
 
 open Loc
 
+val format_float : float -> string
+val escape_dq : string -> string
+
 type variable = {
   v : Ain.Variable.t;
   dims : Ast.expr list;
