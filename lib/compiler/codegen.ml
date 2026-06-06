@@ -293,7 +293,9 @@ class jaf_compiler ctx debug_info =
       | String | Ref String -> self#write_instruction0 S_REF
       | Array _ | Ref (Array _) ->
           self#write_instruction0 REF;
-          self#write_instruction0 A_REF
+          (* ain v0/v1 has no A_REF; array rvalues are passed by reference
+             without a deep copy. *)
+          if ctx.version > 100 then self#write_instruction0 A_REF
       | Struct no | Ref (Struct no) -> self#write_instruction1 SR_REF no
       | Delegate _ | Ref (Delegate _) ->
           self#write_instruction0 REF;
@@ -733,7 +735,9 @@ class jaf_compiler ctx debug_info =
                   self#write_instruction1 PUSH dg_i;
                   self#write_instruction0 DG_STR_TO_METHOD;
                   self#write_instruction0 DG_ADD
-              | String -> self#write_instruction0 S_PLUSA2
+              | String ->
+                  self#write_instruction0
+                    (if ctx.version <= 100 then S_PLUSA else S_PLUSA2)
               | _ ->
                   compiler_bug "invalid string assignment"
                     (Some (ASTExpression expr)))
@@ -744,7 +748,8 @@ class jaf_compiler ctx debug_info =
           | MinusAssign, TyMethod _ -> self#write_instruction0 DG_ERASE
           | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
           | EqAssign, Struct (_, sno) | EqAssign, Ref (Struct (_, sno)) ->
-              self#write_instruction1 PUSH sno;
+              if not (Ain.version ctx.ain <= 1 || Ain.version ctx.ain >= 11)
+              then self#write_instruction1 PUSH sno;
               self#write_instruction0 SR_ASSIGN
           | _, _ ->
               compiler_bug "invalid assignment" (Some (ASTExpression expr)))
@@ -993,13 +998,13 @@ class jaf_compiler ctx debug_info =
           ( EqAssign,
             { node = Ident (_, LocalVariable (i, _)); _ },
             { node = ConstInt n; _ } )
-        when ctx.version < 630
+        when ctx.version > 100 && ctx.version < 630
              && not (Ain.Type.is_ref (self#get_local i).value_type) ->
           self#write_instruction2 SH_LOCALASSIGN i n
       | Unary
           ( ((PreInc | PostInc | PreDec | PostDec) as op),
             { node = Ident (_, LocalVariable (i, _)); _ } )
-        when ctx.version < 630
+        when ctx.version > 100 && ctx.version < 630
              && (not (Ain.Type.is_ref (self#get_local i).value_type))
              && Poly.(expr.ty <> LongInt) ->
           self#write_instruction1
@@ -1289,7 +1294,8 @@ class jaf_compiler ctx debug_info =
                     loc = decl.location;
                   };
                 self#compile_expression e;
-                self#write_instruction1 PUSH sno;
+                if not (Ain.version ctx.ain <= 1 || Ain.version ctx.ain >= 11)
+                then self#write_instruction1 PUSH sno;
                 self#write_instruction0 SR_ASSIGN;
                 self#compile_pop decl.type_spec.ty (ASTVariable decl)
             | None -> ())
@@ -1366,8 +1372,9 @@ class jaf_compiler ctx debug_info =
           (ASTDeclaration (Function decl));
         self#write_instruction0 RETURN);
       (* ENDFUNC is not generated for the "NULL" function and methods except
-         auto-generated array initializers. *)
+         auto-generated array initializers. ain v0/v1 does not have ENDFUNC. *)
       (match decl with
+      | _ when ctx.version <= 100 -> ()
       | { name = "NULL"; _ } -> ()
       | { class_name = None; _ } | { name = "2"; _ } | { is_lambda = true; _ }
         ->
