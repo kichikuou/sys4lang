@@ -29,7 +29,7 @@ let () =
     | Sys_error msg -> Some msg
     | _ -> None)
 
-class lsp_server ~sw ~fs ~domain_mgr =
+class lsp_server ~sw ~fs ~domain_mgr ~default_pje_path =
   object (self)
     inherit Linol_eio.Jsonrpc2.server as super
 
@@ -113,6 +113,13 @@ class lsp_server ~sw ~fs ~domain_mgr =
         InitializationOptions.t_of_yojson
           (Option.value i.initializationOptions ~default:(`Assoc []))
       in
+      (* Fall back to the pje path given on the command line when the client
+         did not specify one via initializationOptions. *)
+      let options =
+        if String.is_empty options.pjePath then
+          { options with pjePath = default_pje_path }
+        else options
+      in
       (try
          Project.initialize project options;
          Eio.Fiber.fork ~sw (fun () ->
@@ -153,13 +160,13 @@ class lsp_server ~sw ~fs ~domain_mgr =
       else super#on_unknown_request ~notify_back ~server_request ~id meth params
   end
 
-let run () =
+let run ~default_pje_path () =
   Common.TypeAnalysis.loose_functype_check := true;
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let fs = Eio.Stdenv.fs env in
   let domain_mgr = Eio.Stdenv.domain_mgr env in
-  let s = new lsp_server ~sw ~fs ~domain_mgr in
+  let s = new lsp_server ~sw ~fs ~domain_mgr ~default_pje_path in
   let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
   let task () =
     let shutdown () = Poly.(s#get_status = `ReceivedExit) in
@@ -178,8 +185,15 @@ let print_version () =
     | None -> "n/a"
     | Some v -> Build_info.V1.Version.to_string v)
 
+let usage () =
+  Stdio.eprintf "Usage: %s [--version] [PJE_FILE]\n" (Sys.get_argv ()).(0);
+  Stdlib.exit 1
+
 let () =
   let argv = Sys.get_argv () in
-  if Array.length argv = 2 && String.equal argv.(1) "--version" then
-    print_version ()
-  else run ()
+  match Array.to_list argv with
+  | [ _; "--version" ] -> print_version ()
+  | [ _; pje ] when not (String.is_prefix pje ~prefix:"-") ->
+      run ~default_pje_path:pje ()
+  | _ :: [] -> run ~default_pje_path:"" ()
+  | _ -> usage ()
