@@ -212,8 +212,13 @@ class jaf_compiler ctx debug_info =
       current_address <- current_address + 2
 
     method write_instruction1 op arg0 =
-      match (Ain.version_lt ctx.ain (11, 0), op) with
-      | true, S_MOD ->
+      match op with
+      | SH_STRUCTREF when Ain.version_lt ctx.ain (1, 0) ->
+          (* ain v0 encodes SH_STRUCTREF as 0x62 (which is EOF from v1 on). *)
+          CBuffer.write_int16 buffer 0x62;
+          CBuffer.write_int32 buffer arg0;
+          current_address <- current_address + 6
+      | S_MOD when Ain.version_lt ctx.ain (11, 0) ->
           self#write_instruction1 PUSH arg0;
           self#write_instruction0 S_MOD
       | _ ->
@@ -506,7 +511,10 @@ class jaf_compiler ctx debug_info =
                 compile_error "Invalid character constant" (ASTExpression expr))
           )
       | ConstString s ->
-          let no = Ain.add_string ctx.ain s in
+          let no =
+            if Ain.version_lt ctx.ain (1, 0) then Ain.add_message ctx.ain s
+            else Ain.add_string ctx.ain s
+          in
           self#write_instruction1 S_PUSH no
       | Ident (_, LocalVariable (i, _)) -> (
           match (self#get_local i).value_type with
@@ -1424,8 +1432,9 @@ class jaf_compiler ctx debug_info =
             compile_error "Enums not implemented" (ASTDeclaration (Enum e))
       in
       List.iter decls ~f:compile_decl;
-      let jaf_name = String.tr ~target:'/' ~replacement:'\\' jaf_name in
-      self#write_instruction1 EOF (Ain.add_file ctx.ain jaf_name);
+      (if Ain.version_gte ctx.ain (1, 0) then
+         let jaf_name = String.tr ~target:'/' ~replacement:'\\' jaf_name in
+         self#write_instruction1 EOF (Ain.add_file ctx.ain jaf_name));
       self#write_buffer
   end
 

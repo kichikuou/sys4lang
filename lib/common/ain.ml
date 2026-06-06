@@ -1209,14 +1209,15 @@ let to_buffer ain =
   if ain.major_version = 1 then (
     BB.add_string buf "SLBL";
     write_scenario_labels buf ain.scenario_labels);
-  BB.add_string buf "STR0";
-  BB.add_int buf (Dynarray.length ain.strings);
-  Dynarray.iter (BB.add_cstring buf) ain.strings;
-  if ain.major_version < 12 then (
+  if ain.major_version >= 1 then (
+    BB.add_string buf "STR0";
+    BB.add_int buf (Dynarray.length ain.strings);
+    Dynarray.iter (BB.add_cstring buf) ain.strings);
+  if ain.major_version >= 1 && ain.major_version < 12 then (
     BB.add_string buf "FNAM";
     BB.add_int buf (Dynarray.length ain.filenames);
     Dynarray.iter (BB.add_cstring buf) ain.filenames);
-  if ain.major_version < 7 then (
+  if ain.major_version >= 1 && ain.major_version < 7 then (
     BB.add_string buf "OJMP";
     BB.add_int buf ain.ojmp);
   (* XXX: section disappears in Rance IX (mid v6) *)
