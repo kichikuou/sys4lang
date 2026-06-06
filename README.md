@@ -2,7 +2,7 @@
 
 This repository contains a collection of tools for AliceSoft's System 4 game engine. It integrates a compiler (`sys4c`), a decompiler (`sys4dc`), and a language server (`sys4lsp`).
 
-Games released between 2003 (Daibanchou) and early 2017 (Heartful Maman) are currently supported.
+Games up to Heartful Maman (early 2017) are currently supported. Games from Beat Valkyrie Ixseal onwards are not yet supported.
 
 ## Components
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 - 2026-06-06
+- Compiler: **Scoping rule change for variable declarations in `for` loops.** A variable declared in the initializer of a `for` loop (e.g. `for (int i = 0; ...)`) is now placed in the enclosing scope, so it remains visible after the loop. Previously sys4c scoped the variable to the loop body (as C/Java do).
+- Compiler, Decompiler: Added support for ain v0 (DALK gaiden) and v1 (Mamanyonyo).
+- Compiler: Compilation speed improved by more than 3x for large projects such as Rance 9.
+- Compiler: Fixed incorrect bytecode for `ref`-delegate operations.
+- Decompiler: A variable declaration immediately before a `for` loop is now folded into the loop's initializer, e.g. `for (int i = 0; ...)` instead of `int i; for (i = 0; ...)`.
+
 ## 0.8.0 - 2026-04-29
 - LSP: Added code completion for identifiers, member access (`.`), and built-in methods.
 - LSP: Added function signature help -- when you type a function call, parameter names are shown and the current parameter is highlighted.
