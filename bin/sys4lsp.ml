@@ -169,7 +169,14 @@ let run default_pje_path =
   let fs = Eio.Stdenv.fs env in
   let domain_mgr = Eio.Stdenv.domain_mgr env in
   let s = new lsp_server ~sw ~fs ~domain_mgr ~default_pje_path in
-  let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
+  (* linol-eio's create_stdio caps the JSON-RPC read buffer at 1MB, which
+     crashes the server when a large .jaf file is opened (the didOpen message
+     exceeds the limit). Build the reader ourselves with a larger limit. *)
+  let ic =
+    Eio.Buf_read.of_flow ~max_size:(8 * 1024 * 1024) (Eio.Stdenv.stdin env)
+  in
+  let oc = Linol_eio.stdout env in
+  let server = Linol_eio.Jsonrpc2.create ~ic ~oc s in
   let task () =
     let shutdown () = Poly.(s#get_status = `ReceivedExit) in
     Linol_eio.Jsonrpc2.run ~shutdown server
