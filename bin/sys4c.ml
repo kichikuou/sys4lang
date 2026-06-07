@@ -138,20 +138,10 @@ let cmd_compile_jaf =
       value & opt encoding_conv Pje.UTF8
       & info [ "input-encoding" ] ~docv:"ENCODING" ~doc)
   in
-  let test =
-    let doc = "Testing." in
-    Arg.(value & opt (some string) None & info [ "test" ] ~docv:"TEST" ~doc)
-  in
-  let compile sources output major minor import_as input_encoding test =
-    if Option.is_some test then
-      let ain = Ain.load (Option.value_exn test) in
-      Ain.write_file ain output
-    else do_compile sources output major minor import_as input_encoding
-  in
   Cmd.v info
     Term.(
-      const compile $ sources $ output $ major $ minor $ import_as
-      $ input_encoding $ test)
+      const do_compile $ sources $ output $ major $ minor $ import_as
+      $ input_encoding)
 
 let cmd_build_pje =
   let doc = "Build a System 4 project from a .pje file." in
