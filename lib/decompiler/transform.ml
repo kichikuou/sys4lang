@@ -34,7 +34,7 @@ let expand_else_scope stmt =
   let live_vars = ref Set.Poly.empty in
   let process_expr =
     walk_expr ~lvalue_cb:(function
-      | PageRef (LocalPage, v) -> live_vars := Set.Poly.add !live_vars v
+      | Var (LocalPage, v) -> live_vars := Set.Poly.add !live_vars v
       | _ -> ())
   in
   let process_expr_opt = Option.iter ~f:process_expr in
@@ -201,10 +201,10 @@ let remove_implicit_array_free stmt =
         | {
             txt =
               Expression
-                ( Call (Builtin (A_FREE, PageRef (LocalPage, v)), [])
+                ( Call (Builtin (A_FREE, Var (LocalPage, v)), [])
                 | Call
                     ( HllFunc ("Array", { name = "Free"; _ }),
-                      [ Deref (PageRef (_, v)) ] ) );
+                      [ Load (Var (_, v)) ] ) );
             _;
           } ->
             List.exists vars ~f:(fun var -> phys_equal var v)
@@ -244,7 +244,7 @@ let remove_array_free_for_dead_arrays stmt =
     in
     let rec remove_free = function
       | {
-          txt = Expression (Call (Builtin (A_FREE, PageRef (LocalPage, v)), []));
+          txt = Expression (Call (Builtin (A_FREE, Var (LocalPage, v)), []));
           _;
         }
         :: stmts
@@ -273,7 +273,7 @@ let remove_array_free_for_temporary_arrays stmt =
               Expression
                 (Call
                    ( HllFunc ("Array", { name = "Free"; _ }),
-                     [ Deref (PageRef (_, v)) ] ));
+                     [ Load (Var (_, v)) ] ));
             _;
           } ->
             not (String.is_prefix v.name ~prefix:"<dummy : new array")
@@ -292,7 +292,7 @@ let remove_generated_initializer_call = function
 
 let remove_dummy_variable_assignment stmt =
   let strip_dummy_assignment = function
-    | AssignOp (_, PageRef (LocalPage, v), expr) when Ain.Variable.is_dummy v ->
+    | AssignOp (_, Var (LocalPage, v), expr) when Ain.Variable.is_dummy v ->
         expr
     | expr -> expr
   in
@@ -324,7 +324,7 @@ let remove_vardecl_default_rhs stmt =
   map_stmt stmt ~f:(function
     | VarDecl
         ( v,
-          Some (_, (Null | DerefRef NullRef | Number 0l | Float 0.0 | String ""))
+          Some (_, (Null | RefTo NullPlace | Number 0l | Float 0.0 | String ""))
         ) ->
         VarDecl (v, None)
     | s -> s)
@@ -392,16 +392,16 @@ let recognize_foreach stmt =
         | ( Number -1l,
             BinaryOp
               ( LT,
-                Deref (IncDec (Prefix, Increment, PageRef (LocalPage, i_var'))),
+                Load (IncDec (Prefix, Increment, Var (LocalPage, i_var'))),
                 Call
                   ( HllFunc ("Array", { name = "Numof"; _ }),
-                    [ Deref (PageRef (LocalPage, arr_var)) ] ) ) )
+                    [ Load (Var (LocalPage, arr_var)) ] ) ) )
         | ( Call
               ( HllFunc ("Array", { name = "Numof"; _ }),
-                [ Deref (PageRef (LocalPage, arr_var)) ] ),
+                [ Load (Var (LocalPage, arr_var)) ] ),
             BinaryOp
               ( GTE,
-                Deref (IncDec (Prefix, Decrement, PageRef (LocalPage, i_var'))),
+                Load (IncDec (Prefix, Decrement, Var (LocalPage, i_var'))),
                 Number 0l ) )
           when phys_equal i_var i_var'
                && phys_equal arr_dummy arr_var
@@ -418,10 +418,10 @@ let recognize_foreach stmt =
                     ( loop_var,
                       Some
                         ( R_ASSIGN,
-                          DerefRef
-                            (ArrayRef
-                               ( Deref (PageRef (LocalPage, arr_var'')),
-                                 Deref (PageRef (LocalPage, i_var'')) )) ) );
+                          RefTo
+                            (Elem
+                               ( Load (Var (LocalPage, arr_var'')),
+                                 Load (Var (LocalPage, i_var'')) )) ) );
                 _;
               }
               :: body_rest ->
@@ -505,13 +505,12 @@ let simplify_null_coalescing stmt =
       | BinaryOp (PSEUDO_NULL_COALESCE, Option e1, e2) ->
           BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
       (* Same, with the option marker inside the deref of a nullable *)
-      | BinaryOp (PSEUDO_NULL_COALESCE, Deref (RefValue (Option e1)), e2) ->
-          BinaryOp (PSEUDO_NULL_COALESCE, Deref (RefValue e1), e2)
+      | BinaryOp (PSEUDO_NULL_COALESCE, Load (Pointee (Option e1)), e2) ->
+          BinaryOp (PSEUDO_NULL_COALESCE, Load (Pointee e1), e2)
       (* SceneTitle@0 and SceneLoad@0 in Rance10. Conversion from option<enum> to ref<enum> *)
       | BinaryOp
-          ( PSEUDO_NULL_COALESCE,
-            DerefRef (RefValue (RvalueRef (_, Option e1))),
-            e2 ) ->
+          (PSEUDO_NULL_COALESCE, RefTo (Pointee (TempRef (_, Option e1))), e2)
+        ->
           BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
       | expr -> expr)
 

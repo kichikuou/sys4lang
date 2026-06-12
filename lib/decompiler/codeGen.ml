@@ -33,8 +33,7 @@ let from_ain_variable (v : Ain.Variable.t) =
       | Ain.Variable.Int n -> (
           match v.type_ with
           | Bool -> UnaryOp (ITOB, Number n)
-          | Ref _ ->
-              Deref (PageRef (GlobalPage, Ain.ain.glob.(Int32.to_int_exn n)))
+          | Ref _ -> Load (Var (GlobalPage, Ain.ain.glob.(Int32.to_int_exn n)))
           | _ -> Number n)
       | String s -> String s
       | Float f -> Float f)
@@ -294,19 +293,18 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
 
     method private pr_lvalue prec out lval =
       match lval with
-      | NullRef -> print_string out "NULL"
-      | PageRef (StructPage, var) -> bprintf out "this.%s" var.name
-      | PageRef (_, var) -> print_string out var.name
-      | RefRef lval -> self#pr_lvalue prec out lval
-      | ArrayRef (array, index) ->
+      | NullPlace -> print_string out "NULL"
+      | Var (StructPage, var) -> bprintf out "this.%s" var.name
+      | Var (_, var) -> print_string out var.name
+      | Elem (array, index) ->
           bprintf out "%a[%a]"
             (self#pr_expr (prec_value PREC_DOT))
             array (self#pr_expr 0) index
-      | MemberRef (obj, memb) ->
+      | Member (obj, memb) ->
           bprintf out "%a.%s" (self#pr_expr (prec_value PREC_DOT)) obj memb.name
-      | RefValue e -> self#pr_expr (prec_value PREC_DOT) out e
-      | ObjRef _ as lval ->
-          failwith ("pr_lvalue: unresolved ObjRef " ^ show_lvalue lval)
+      | Pointee e -> self#pr_expr (prec_value PREC_DOT) out e
+      | Slot _ as lval ->
+          failwith ("pr_lvalue: unresolved Slot " ^ show_lvalue lval)
       | IncDec (fix, op, lval) ->
           let op = incdec_op op in
           open_paren prec op.prec out;
@@ -350,9 +348,9 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           bprintf out "%a.%s"
             (self#pr_expr (prec_value PREC_DOT))
             expr method_name
-      | Deref lval -> self#pr_lvalue prec out lval
-      | DerefRef lval -> self#pr_lvalue prec out lval
-      | RvalueRef (_, e) -> self#pr_expr ?parent_op prec out e
+      | Load lval -> self#pr_lvalue prec out lval
+      | RefTo lval -> self#pr_lvalue prec out lval
+      | TempRef (_, e) -> self#pr_expr ?parent_op prec out e
       | New { struc; func = -1; args = [] } ->
           bprintf out "new %s" Ain.ain.strt.(struc).name
       | New { struc; args; _ } ->
@@ -384,11 +382,12 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           self#pr_binary_op parent_op prec op lhs rhs
       | AssignOp (insn, lval, rhs) ->
           let op = operator insn in
-          self#pr_binary_op parent_op prec op (Deref lval) rhs
+          self#pr_binary_op parent_op prec op (Load lval) rhs
       | TernaryOp
           ( expr1,
-            (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr2),
-            (Deref (RefRef (PageRef (_, { type_ = Ref Int; _ }))) as expr3) ) ->
+            (Load (Pointee (Load (Var (_, { type_ = Ref Int; _ })))) as expr2),
+            (Load (Pointee (Load (Var (_, { type_ = Ref Int; _ })))) as expr3)
+          ) ->
           (* For Rance 9: ref_int = bool ? ref_int : ref_int
              Add casts so that the right hand side of the assignment is an int
              instead of a ref int *)

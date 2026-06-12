@@ -89,8 +89,7 @@ let analyze_initializer_function stmt vars =
   List.iter stmts ~f:(function
     | {
         txt =
-          Expression
-            (Call (Builtin (Instructions.A_ALLOC, PageRef (_, v)), dims));
+          Expression (Call (Builtin (Instructions.A_ALLOC, Var (_, v)), dims));
         _;
       } ->
         Stdlib.Hashtbl.add h_dims v dims
@@ -99,7 +98,7 @@ let analyze_initializer_function stmt vars =
           Expression
             (Call
                ( HllFunc ("Array", { name = "Alloc"; _ }),
-                 Deref (PageRef (_, v)) :: dims ));
+                 Load (Var (_, v)) :: dims ));
         _;
       } -> (
         let dims =
@@ -113,9 +112,7 @@ let analyze_initializer_function stmt vars =
         txt =
           Expression
             (AssignOp
-               ( ASSIGN,
-                 ArrayRef (Deref (PageRef (StructPage, v)), Number i),
-                 Number m ));
+               (ASSIGN, Elem (Load (Var (StructPage, v)), Number i), Number m));
         _;
       }
       when String.equal v.name "<vtable>" ->
@@ -123,10 +120,9 @@ let analyze_initializer_function stmt vars =
     | {
         txt =
           Expression
-            ( AssignOp (_, PageRef ((StructPage | GlobalPage), v), e)
+            ( AssignOp (_, Var ((StructPage | GlobalPage), v), e)
             | Call
-                ( Builtin2
-                    (X_SET, Deref (PageRef ((StructPage | GlobalPage), v))),
+                ( Builtin2 (X_SET, Load (Var ((StructPage | GlobalPage), v))),
                   [ e ] ) );
         _;
       }
@@ -198,7 +194,7 @@ let is_rance7_bad_function (f : CodeGen.function_t) =
   | {
       struc = Some {name = "tagBusho"; _};
       name = "getSp";
-      body = { txt = (Block [{txt = Return (Some (Deref (PageRef (StructPage, {name = "m_sName"; _ })))); _ }]); _ }; _
+      body = { txt = (Block [{txt = Return (Some (Load (Var (StructPage, {name = "m_sName"; _ })))); _ }]); _ }; _
     } -> true
   | _ -> false
 [@@ocamlformat "disable"]

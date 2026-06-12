@@ -35,15 +35,14 @@ type callable =
 [@@deriving show { with_path = false }]
 
 and lvalue =
-  | NullRef
-  | PageRef of page_value * Ain.Variable.t
-  | RefRef of lvalue
+  | NullPlace
+  | Var of page_value * Ain.Variable.t
   | IncDec of incdec_fix * incdec_op * lvalue
-  (* ObjRefs will be converted to ArrayRef or MemberRef in type analysis phase *)
-  | ObjRef of expr * expr
-  | ArrayRef of expr * expr
-  | MemberRef of expr * Ain.Variable.t
-  | RefValue of expr
+  (* Slots will be resolved to Elem or Member in type analysis phase *)
+  | Slot of expr * expr
+  | Elem of expr * expr
+  | Member of expr * Ain.Variable.t
+  | Pointee of expr
 [@@deriving show { with_path = false }]
 
 and expr =
@@ -57,9 +56,9 @@ and expr =
   | FuncAddr of Ain.Function.t
   | MemberPointer of int * int (* struct, slot *)
   | BoundMethod of expr * Ain.Function.t
-  | Deref of lvalue
-  | DerefRef of lvalue
-  | RvalueRef of Ain.Variable.t * expr
+  | Load of lvalue
+  | RefTo of lvalue
+  | TempRef of Ain.Variable.t * expr
   | Null
   | Void
   | Option of expr
@@ -219,9 +218,9 @@ let subst expr e1 e2 =
       | String _ | FuncAddr _ | MemberPointer _ | Null | Void | New _ ->
           expr
       | BoundMethod (e, m) -> BoundMethod (rec_expr e, m)
-      | Deref l -> Deref (rec_lvalue l)
-      | DerefRef l -> DerefRef (rec_lvalue l)
-      | RvalueRef (v, e) -> RvalueRef (v, rec_expr e)
+      | Load l -> Load (rec_lvalue l)
+      | RefTo l -> RefTo (rec_lvalue l)
+      | TempRef (v, e) -> TempRef (v, rec_expr e)
       | Option e -> Option (rec_expr e)
       | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es)
       | CopyStruct (n, e) -> CopyStruct (n, rec_expr e)
@@ -238,14 +237,13 @@ let subst expr e1 e2 =
           PropertySet { r with obj = rec_expr r.obj; rhs = rec_expr r.rhs }
       | InterfaceCast (struc, e) -> InterfaceCast (struc, rec_expr e)
   and rec_lvalue = function
-    | NullRef -> NullRef
-    | PageRef _ as lval -> lval
-    | RefRef l -> RefRef (rec_lvalue l)
+    | NullPlace -> NullPlace
+    | Var _ as lval -> lval
     | IncDec (fix, op, l) -> IncDec (fix, op, rec_lvalue l)
-    | ObjRef (e1, e2) -> ObjRef (rec_expr e1, rec_expr e2)
-    | ArrayRef (e1, e2) -> ArrayRef (rec_expr e1, rec_expr e2)
-    | MemberRef (e, v) -> MemberRef (rec_expr e, v)
-    | RefValue e -> RefValue (rec_expr e)
+    | Slot (e1, e2) -> Slot (rec_expr e1, rec_expr e2)
+    | Elem (e1, e2) -> Elem (rec_expr e1, rec_expr e2)
+    | Member (e, v) -> Member (rec_expr e, v)
+    | Pointee e -> Pointee (rec_expr e)
   and rec_callable = function
     | Function _ as f -> f
     | FuncPtr (t, e) -> FuncPtr (t, rec_expr e)
@@ -270,9 +268,9 @@ let map_expr stmt ~f =
     | FuncAddr _ as expr -> f expr
     | MemberPointer _ as expr -> f expr
     | BoundMethod (expr, m) -> BoundMethod (rec_expr expr, m) |> f
-    | Deref lval -> Deref (rec_lvalue lval) |> f
-    | DerefRef lval -> DerefRef (rec_lvalue lval) |> f
-    | RvalueRef (v, e) -> RvalueRef (v, rec_expr e) |> f
+    | Load lval -> Load (rec_lvalue lval) |> f
+    | RefTo lval -> RefTo (rec_lvalue lval) |> f
+    | TempRef (v, e) -> TempRef (v, rec_expr e) |> f
     | Null -> f Null
     | Void -> f Void
     | Option expr -> Option (rec_expr expr) |> f
@@ -295,14 +293,13 @@ let map_expr stmt ~f =
         PropertySet { r with obj = rec_expr r.obj; rhs = rec_expr r.rhs } |> f
     | InterfaceCast (struc, e) -> InterfaceCast (struc, rec_expr e) |> f
   and rec_lvalue = function
-    | NullRef -> NullRef
-    | PageRef _ as lval -> lval
-    | RefRef lval -> RefRef (rec_lvalue lval)
+    | NullPlace -> NullPlace
+    | Var _ as lval -> lval
     | IncDec (fix, op, lval) -> IncDec (fix, op, rec_lvalue lval)
-    | ObjRef (e1, e2) -> ObjRef (rec_expr e1, rec_expr e2)
-    | ArrayRef (e1, e2) -> ArrayRef (rec_expr e1, rec_expr e2)
-    | MemberRef (e, v) -> MemberRef (rec_expr e, v)
-    | RefValue e -> RefValue (rec_expr e)
+    | Slot (e1, e2) -> Slot (rec_expr e1, rec_expr e2)
+    | Elem (e1, e2) -> Elem (rec_expr e1, rec_expr e2)
+    | Member (e, v) -> Member (rec_expr e, v)
+    | Pointee e -> Pointee (rec_expr e)
   and rec_callable = function
     | Function _ as f -> f
     | FuncPtr (t, expr) -> FuncPtr (t, rec_expr expr)
@@ -363,9 +360,9 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | FuncAddr _ -> ()
     | MemberPointer _ -> ()
     | BoundMethod (expr, _) -> rec_expr expr
-    | Deref lval -> rec_lvalue lval
-    | DerefRef lval -> rec_lvalue lval
-    | RvalueRef (_, e) -> rec_expr e
+    | Load lval -> rec_lvalue lval
+    | RefTo lval -> rec_lvalue lval
+    | TempRef (_, e) -> rec_expr e
     | Null -> ()
     | Void -> ()
     | Option expr -> rec_expr expr
@@ -401,18 +398,17 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
   and rec_lvalue lval =
     lvalue_cb lval;
     match lval with
-    | NullRef -> ()
-    | PageRef _ -> ()
-    | RefRef lval -> rec_lvalue lval
+    | NullPlace -> ()
+    | Var _ -> ()
     | IncDec (_, _, lval) -> rec_lvalue lval
-    | ObjRef (e1, e2) ->
+    | Slot (e1, e2) ->
         rec_expr e1;
         rec_expr e2
-    | ArrayRef (e1, e2) ->
+    | Elem (e1, e2) ->
         rec_expr e1;
         rec_expr e2
-    | MemberRef (e, _) -> rec_expr e
-    | RefValue e -> rec_expr e
+    | Member (e, _) -> rec_expr e
+    | Pointee e -> rec_expr e
   and rec_callable = function
     | Function _ -> ()
     | FuncPtr (_, expr) -> rec_expr expr
@@ -480,12 +476,10 @@ let contains_interface_expr expr iface =
   ||
   (* Interfaces are NULL-checked with REF, but their values are referenced
      with REFREF. *)
-  match iface with
-  | Deref obj' -> contains_expr expr (DerefRef obj')
-  | _ -> false
+  match iface with Load obj' -> contains_expr expr (RefTo obj') | _ -> false
 
 let insert_option expr obj =
   let expr = subst expr obj (Option obj) in
   match obj with
-  | Deref lval -> subst expr (DerefRef lval) (Option (DerefRef lval))
+  | Load lval -> subst expr (RefTo lval) (Option (RefTo lval))
   | _ -> expr

@@ -291,7 +291,7 @@ let has_escaping_vars cfg block_begin block_end =
               { term with txt = Expression e } :: stmts)
         |> make_block
         |> Ast.walk ~lvalue_cb:(function
-          | PageRef (_, v) when Stdlib.List.memq v !vars -> result := true
+          | Var (_, v) when Stdlib.List.memq v !vars -> result := true
           | _ -> ()));
     !result
 

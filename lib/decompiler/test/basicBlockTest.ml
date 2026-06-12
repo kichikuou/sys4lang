@@ -368,22 +368,22 @@ let%expect_test "return var1 ?? var2;" =
               (Some (TernaryOp (
                        (UnaryOp (NOT,
                           (BinaryOp (EQUALE,
-                             (Deref
-                                (PageRef (LocalPage,
+                             (Load
+                                (Var (LocalPage,
                                    { Ain.Variable.name = "var0"; name2 = "";
                                      type_ = (Type.Ref Type.String);
                                      init_val = None; group_index = 0 }
                                    ))),
                              (Number -1l)))
                           )),
-                       (Deref
-                          (PageRef (LocalPage,
+                       (Load
+                          (Var (LocalPage,
                              { Ain.Variable.name = "var0"; name2 = "";
                                type_ = (Type.Ref Type.String); init_val = None;
                                group_index = 0 }
                              ))),
-                       (Deref
-                          (PageRef (LocalPage,
+                       (Load
+                          (Var (LocalPage,
                              { Ain.Variable.name = "var1"; name2 = "";
                                type_ = (Type.Ref Type.String); init_val = None;
                                group_index = 0 }
@@ -423,8 +423,8 @@ let%expect_test "var?.void_method();" =
                (Call (
                   (Method (
                      (Option
-                        (Deref
-                           (PageRef (LocalPage,
+                        (Load
+                           (Var (LocalPage,
                               { Ain.Variable.name = "var0"; name2 = "";
                                 type_ = (Type.Ref (Type.Struct 0));
                                 init_val = None; group_index = 0 }
@@ -476,8 +476,8 @@ let%expect_test "return var?.int_method() ?? 42;" =
                        (UnaryOp (NOT,
                           (BinaryOp (EQUALE,
                              (Option
-                                (Deref
-                                   (PageRef (LocalPage,
+                                (Load
+                                   (Var (LocalPage,
                                       { Ain.Variable.name = "var0"; name2 = "";
                                         type_ = (Type.Ref (Type.Struct 0));
                                         init_val = None; group_index = 0 }
@@ -486,8 +486,8 @@ let%expect_test "return var?.int_method() ?? 42;" =
                           )),
                        (Call (
                           (Method (
-                             (Deref
-                                (PageRef (LocalPage,
+                             (Load
+                                (Var (LocalPage,
                                    { Ain.Variable.name = "var0"; name2 = "";
                                      type_ = (Type.Ref (Type.Struct 0));
                                      init_val = None; group_index = 0 }

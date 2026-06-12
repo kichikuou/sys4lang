@@ -234,11 +234,11 @@ let varref ctx page n =
       in
       loop (Option.value_exn ctx.parent) level
 
-let pageref ctx page n = PageRef (page, varref ctx page n)
+let page_var ctx page n = Var (page, varref ctx page n)
 
 (* The SH_*_A_PUSHBACK_LOCAL_STRUCT shortcuts push a copy of a local struct. *)
 let sh_local_struct_arg ctx local =
-  let e = Deref (pageref ctx LocalPage local) in
+  let e = Load (page_var ctx LocalPage local) in
   match (varref ctx LocalPage local).type_ with
   | Struct s | Ref (Struct s) -> CopyStruct (s, e)
   | t ->
@@ -247,28 +247,28 @@ let sh_local_struct_arg ctx local =
 
 let lvalue ctx page slot =
   match (page, slot) with
-  | Number -1l, Number 0l -> NullRef
-  | Page page, Number n -> pageref ctx page (Int32.to_int_exn n)
-  | DerefRef lval, Void -> RefRef lval
-  | Deref lval, Void -> lval
-  | e, Void -> RefValue e
-  | _, _ -> ObjRef (page, slot)
+  | Number -1l, Number 0l -> NullPlace
+  | Page page, Number n -> page_var ctx page (Int32.to_int_exn n)
+  | RefTo lval, Void -> Pointee (Load lval)
+  | Load lval, Void -> lval
+  | e, Void -> Pointee e
+  | _, _ -> Slot (page, slot)
 
 (* Reassemble a reference value carried on the stack as a (page, slot) pair
    into a single reference-typed expression node. *)
 let ref_value ctx page slot =
   match (page, slot) with
-  | DerefRef lval, Void -> DerefRef (RefRef lval)
+  | RefTo lval, Void -> RefTo (Pointee (Load lval))
   | e, Void -> e
-  | _, _ -> DerefRef (lvalue ctx page slot)
+  | _, _ -> RefTo (lvalue ctx page slot)
 
 let rec interface_value obj vofs =
   match (obj, vofs) with
   | TernaryOp (c1, a1, b1), TernaryOp (c2, a2, b2) when c1 == c2 ->
       TernaryOp (c1, interface_value a1 a2, interface_value b1 b2)
-  | Number -1l, Number 0l -> DerefRef NullRef
-  | _, Void -> DerefRef (RefValue obj)
-  | _, _ -> DerefRef (ObjRef (obj, vofs))
+  | Number -1l, Number 0l -> RefTo NullPlace
+  | _, Void -> RefTo (Pointee obj)
+  | _, _ -> RefTo (Slot (obj, vofs))
 
 let resolve_method ctx obj index =
   let fid =
@@ -294,9 +294,8 @@ let delegate_value ctx obj func =
       BoundMethod (obj, Ain.ain.func.(Int32.to_int_exn func_no))
   | Number -1l, DelegateCast _ -> func
   | ( _,
-      Deref
-        (ObjRef
-           (Deref (ObjRef (obj', Number 0l)), BinaryOp (ADD, Void, Number index)))
+      Load
+        (Slot (Load (Slot (obj', Number 0l)), BinaryOp (ADD, Void, Number index)))
     )
     when obj == obj' ->
       BoundMethod (obj, resolve_method ctx obj (Int32.to_int_exn index))
@@ -313,20 +312,20 @@ let ref_ ctx =
   update_stack ctx (function
     | TernaryOp (cond, l12, l22) :: TernaryOp (cond', l11, l21) :: stack
       when cond == cond' ->
-        TernaryOp (cond, Deref (lvalue ctx l11 l12), Deref (lvalue ctx l21 l22))
+        TernaryOp (cond, Load (lvalue ctx l11 l12), Load (lvalue ctx l21 l22))
         :: stack
-    | slot :: page :: stack -> Deref (lvalue ctx page slot) :: stack
+    | slot :: page :: stack -> Load (lvalue ctx page slot) :: stack
     | stack -> unexpected_stack "ref" stack)
 
 let refref ctx =
   update_stack ctx (function
-    | slot :: page :: stack -> Void :: DerefRef (lvalue ctx page slot) :: stack
+    | slot :: page :: stack -> Void :: RefTo (lvalue ctx page slot) :: stack
     | stack -> unexpected_stack "refref" stack)
 
 let sr_ref ctx n =
   update_stack ctx (function
     | slot :: page :: stack ->
-        CopyStruct (n, Deref (lvalue ctx page slot)) :: stack
+        CopyStruct (n, Load (lvalue ctx page slot)) :: stack
     | stack -> unexpected_stack "sr_ref" stack)
 
 let sr_ref2 ctx n =
@@ -347,8 +346,8 @@ let binary_op ctx op =
 let lift_ternary_fatref ctx page slot =
   match (page, slot) with
   | TernaryOp (c, p1, p2), TernaryOp (c', s1, s2) when c == c' ->
-      TernaryOp (c, DerefRef (lvalue ctx p1 s1), DerefRef (lvalue ctx p2 s2))
-  | _ -> DerefRef (lvalue ctx page slot)
+      TernaryOp (c, RefTo (lvalue ctx p1 s1), RefTo (lvalue ctx p2 s2))
+  | _ -> RefTo (lvalue ctx page slot)
 
 let ref_binary_op ctx op =
   update_stack ctx (function
@@ -366,7 +365,7 @@ let assign_op ctx op =
         let lhs = lvalue ctx page slot in
         match (op, lhs, slot, ctx.instructions) with
         | ( (ASSIGN | F_ASSIGN),
-            PageRef (LocalPage, v),
+            Var (LocalPage, v),
             Number varno',
             { txt = POP; _ }
             :: { txt = PUSHLOCALPAGE; _ }
@@ -376,13 +375,13 @@ let assign_op ctx op =
                && Type.is_scalar v.type_
                && String.is_suffix v.name ~suffix:" : 右辺値参照化用>" ->
             ctx.instructions <- rest;
-            Void :: RvalueRef (v, value) :: stack
+            Void :: TempRef (v, value) :: stack
         | _ -> AssignOp (op, lhs, value) :: stack)
     | stack -> unexpected_stack (show_instruction op) stack)
 
 let assign_op2 ctx op =
   update_stack ctx (function
-    | value :: Deref lvalue :: stack -> AssignOp (op, lvalue, value) :: stack
+    | value :: Load lvalue :: stack -> AssignOp (op, lvalue, value) :: stack
     | stack -> unexpected_stack (show_instruction op) stack)
 
 let r_assign ctx =
@@ -392,7 +391,7 @@ let r_assign ctx =
         :: AssignOp
              ( R_ASSIGN,
                lvalue ctx dst_page dst_slot,
-               DerefRef (lvalue ctx src_page src_slot) )
+               RefTo (lvalue ctx src_page src_slot) )
         :: stack
     | stack -> unexpected_stack "R_ASSIGN" stack)
 
@@ -438,17 +437,15 @@ let c_assign ctx =
 let sr_assign ctx =
   if Ain.ain.vers <= 1 || Ain.ain.vers >= 11 then
     update_stack ctx (function
-      | value :: Deref lvalue :: stack ->
+      | value :: Load lvalue :: stack ->
           AssignOp (SR_ASSIGN, lvalue, value) :: stack
-      | value
-        :: (AssignOp (ASSIGN, PageRef (LocalPage, v), _) as assign)
-        :: stack
+      | value :: (AssignOp (ASSIGN, Var (LocalPage, v), _) as assign) :: stack
         when Ain.Variable.is_dummy v ->
-          AssignOp (SR_ASSIGN, RefValue assign, value) :: stack
+          AssignOp (SR_ASSIGN, Pointee assign, value) :: stack
       | stack -> unexpected_stack "SR_ASSIGN" stack)
   else
     update_stack ctx (function
-      | Number _struct_id :: value :: Deref lvalue :: stack ->
+      | Number _struct_id :: value :: Load lvalue :: stack ->
           AssignOp (SR_ASSIGN, lvalue, value) :: stack
       | stack -> unexpected_stack "SR_ASSIGN" stack)
 
@@ -468,16 +465,16 @@ let objswap ctx type_ =
     | [ slot2; page2; slot1; page1 ] ->
         BinaryOp
           ( OBJSWAP type_,
-            Deref (lvalue ctx page1 slot1),
-            Deref (lvalue ctx page2 slot2) )
+            Load (lvalue ctx page1 slot1),
+            Load (lvalue ctx page2 slot2) )
     | stack -> unexpected_stack "OBJSWAP" stack
   else
     match take_stack ctx with
     | [ Number type_; slot2; page2; slot1; page1 ] ->
         BinaryOp
           ( OBJSWAP (Int32.to_int_exn type_),
-            Deref (lvalue ctx page1 slot1),
-            Deref (lvalue ctx page2 slot2) )
+            Load (lvalue ctx page1 slot1),
+            Load (lvalue ctx page2 slot2) )
     | stack -> unexpected_stack "OBJSWAP" stack
 
 let incdec ctx op =
@@ -495,22 +492,22 @@ let incdec ctx op =
   update_stack ctx (function
     | slot :: page :: slot' :: page' :: stack'
       when phys_equal page page' && phys_equal slot slot' ->
-        Void :: Deref (IncDec (Prefix, op, lvalue ctx page slot)) :: stack'
+        Void :: Load (IncDec (Prefix, op, lvalue ctx page slot)) :: stack'
     (* Stack structure after the post-increment sequence (DUP2, REF, DUP_X2, POP, INC) *)
-    | Number slot :: Page page :: Deref (PageRef (_, var) as lval) :: stack'
+    | Number slot :: Page page :: Load (Var (_, var) as lval) :: stack'
       when phys_equal var (varref ctx page (Int32.to_int_exn slot)) ->
-        Deref (IncDec (Postfix, op, lval)) :: stack'
-    | slot1 :: obj1 :: Deref (ObjRef (obj2, slot2) as operand) :: stack'
+        Load (IncDec (Postfix, op, lval)) :: stack'
+    | slot1 :: obj1 :: Load (Slot (obj2, slot2) as operand) :: stack'
       when phys_equal obj1 obj2 && phys_equal slot1 slot2 ->
-        Deref (IncDec (Postfix, op, operand)) :: stack'
-    | Void :: DerefRef lval :: Deref (RefRef lval') :: stack'
+        Load (IncDec (Postfix, op, operand)) :: stack'
+    | Void :: RefTo lval :: Load (Pointee (Load lval')) :: stack'
       when phys_equal lval lval' ->
-        Deref (IncDec (Postfix, op, lval)) :: stack'
+        Load (IncDec (Postfix, op, lval)) :: stack'
     (* index variable of foreach statement. `.LOCALINC var; .LOCALREF var` *)
     | [ Number slot; Page LocalPage ] when consume_localref slot ->
         [
-          Deref
-            (IncDec (Prefix, op, pageref ctx LocalPage (Int32.to_int_exn slot)));
+          Load
+            (IncDec (Prefix, op, page_var ctx LocalPage (Int32.to_int_exn slot)));
         ]
     | stack -> unexpected_stack (show_incdec_op op) stack)
 
@@ -579,27 +576,24 @@ let determine_functype ctx = function
 
 let sh_apushback_localsref ctx page slot local =
   Call
-    ( Builtin (A_PUSHBACK, pageref ctx page slot),
-      [ Deref (pageref ctx LocalPage local) ] )
+    ( Builtin (A_PUSHBACK, page_var ctx page slot),
+      [ Load (page_var ctx LocalPage local) ] )
 
 let sh_sassign_sref ctx page slot =
   match take_stack ctx with
-  | [ Deref lval ] -> AssignOp (S_ASSIGN, lval, Deref (pageref ctx page slot))
+  | [ Load lval ] -> AssignOp (S_ASSIGN, lval, Load (page_var ctx page slot))
   | stack -> unexpected_stack "sh_sassign_sref" stack
 
 let sh_sref_ne_str0 ctx page slot strno =
   push ctx
     (BinaryOp
-       (S_NOTE, Deref (pageref ctx page slot), String Ain.ain.str0.(strno)))
+       (S_NOTE, Load (page_var ctx page slot), String Ain.ain.str0.(strno)))
 
 let is_null_in_this_branch ctx expr =
   List.exists ctx.condition ~f:(function
     | BinaryOp (EQUALE, (Option e | e), Number -1l) -> (
         contains_expr expr e
-        ||
-        match e with
-        | Deref l -> contains_expr expr (DerefRef l)
-        | _ -> false)
+        || match e with Load l -> contains_expr expr (RefTo l) | _ -> false)
     | _ -> false)
 
 let push_call_result ctx (return_type : Ain.type_t) e =
@@ -618,7 +612,7 @@ let array_literal expr =
   let rec unfold args = function
     | Call (HllFunc ("Array", { name = "PushBack"; _ }), [ e; arg ]) ->
         unfold (arg :: args) e
-    | Call (HllFunc ("Array", { name = "Free"; _ }), [ Deref lval ]) ->
+    | Call (HllFunc ("Array", { name = "Free"; _ }), [ Load lval ]) ->
         AssignOp (PSEUDO_ARRAY_ASSIGN, lval, ArrayLiteral args)
     | e ->
         Printf.failwithf "array_literal: unexpected expression %s" (show_expr e)
@@ -632,7 +626,7 @@ let ain11_callmethod ctx nr_args =
   let func =
     match func_expr with
     | Number fid -> Ain.ain.func.(Int32.to_int_exn fid)
-    | Deref (ObjRef (_, BinaryOp (ADD, (Number 0l | Void), Number index))) ->
+    | Load (Slot (_, BinaryOp (ADD, (Number 0l | Void), Number index))) ->
         resolve_method ctx obj (Int32.to_int_exn index)
     | _ -> unexpected_stack "CALLMETHOD" (func_expr :: obj :: ctx.stack)
   in
@@ -682,13 +676,13 @@ let analyze ctx =
         | Void | Number _ | Page _
         | BinaryOp (MUL, _, Number 2l) (* index to interface array *)
         | TernaryOp (_, (Void | Number _), (Void | Number _))
-        | Deref (PageRef _)
-        | DerefRef (PageRef _)
+        | Load (Var _)
+        | RefTo (Var _)
         | Option _ ->
             (* Can be discarded safely *) ()
         | AssignOp
             ( ASSIGN,
-              PageRef (LocalPage, { type_ = Struct _ | Ref _ | IFace _; _ }),
+              Var (LocalPage, { type_ = Struct _ | Ref _ | IFace _; _ }),
               Number -1l )
           when Ain.ain.vers >= 12 ->
             (* .LOCALDELETE, ignore *) ()
@@ -700,8 +694,8 @@ let analyze ctx =
         | e -> unexpected_stack "POP" (e :: ctx.stack))
     | DELETE -> (
         match pop ctx with
-        | Deref (PageRef _ | ObjRef _ | RefRef _)
-        | DerefRef (PageRef _ | ObjRef _ | RefRef _)
+        | Load (Var _ | Slot _ | Pointee _)
+        | RefTo (Var _ | Slot _ | Pointee _)
         | BoundMethod _ ->
             ()
         | e when is_null_in_this_branch ctx e -> ()
@@ -713,7 +707,7 @@ let analyze ctx =
         | _ -> () (* reference counting is implicit *))
     | CHECKUDO -> (
         match pop ctx with
-        | Deref (PageRef (LocalPage, _)) -> ()
+        | Load (Var (LocalPage, _)) -> ()
         | e -> unexpected_stack "CHECKUDO" (e :: ctx.stack))
     | F_PUSH f -> push ctx (Float f)
     | REF -> ref_ ctx
@@ -759,23 +753,20 @@ let analyze ctx =
         | Page LocalPage -> push ctx (Page (ParentPage 0))
         | e -> unexpected_stack "X_GETENV" (e :: ctx.stack))
     | (S_ASSIGN | DG_ASSIGN) as op -> assign_op2 ctx op
-    | SH_GLOBALREF n -> push ctx (Deref (pageref ctx GlobalPage n))
-    | SH_LOCALREF n -> push ctx (Deref (pageref ctx LocalPage n))
-    | SH_STRUCTREF n -> push ctx (Deref (pageref ctx StructPage n))
+    | SH_GLOBALREF n -> push ctx (Load (page_var ctx GlobalPage n))
+    | SH_LOCALREF n -> push ctx (Load (page_var ctx LocalPage n))
+    | SH_STRUCTREF n -> push ctx (Load (page_var ctx StructPage n))
     | SH_LOCALASSIGN (var, value) ->
         emit_expression ctx
-          (AssignOp
-             (ASSIGN, PageRef (LocalPage, ctx.func.vars.(var)), Number value))
+          (AssignOp (ASSIGN, Var (LocalPage, ctx.func.vars.(var)), Number value))
     | SH_LOCALINC var ->
         emit_expression ctx
-          (Deref
-             (IncDec
-                (Prefix, Increment, PageRef (LocalPage, ctx.func.vars.(var)))))
+          (Load
+             (IncDec (Prefix, Increment, Var (LocalPage, ctx.func.vars.(var)))))
     | SH_LOCALDEC var ->
         emit_expression ctx
-          (Deref
-             (IncDec
-                (Prefix, Decrement, PageRef (LocalPage, ctx.func.vars.(var)))))
+          (Load
+             (IncDec (Prefix, Decrement, Var (LocalPage, ctx.func.vars.(var)))))
     | SH_LOCALDELETE _slot -> (* ignore *) ()
     | SH_LOCALCREATE (var, _struct) ->
         assert_stack_empty ctx;
@@ -859,63 +850,63 @@ let analyze ctx =
     | IFNZ addr -> set_terminator (Branch (addr, negate (pop ctx)))
     | SH_IF_LOC_LT_IMM (local, imm, addr) ->
         let e =
-          BinaryOp (GTE, Deref (pageref ctx LocalPage local), Number imm)
+          BinaryOp (GTE, Load (page_var ctx LocalPage local), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_LOC_GT_IMM (local, imm, addr) ->
         let e =
-          BinaryOp (LTE, Deref (pageref ctx LocalPage local), Number imm)
+          BinaryOp (LTE, Load (page_var ctx LocalPage local), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_LOC_GE_IMM (local, imm, addr) ->
         let e =
-          BinaryOp (LT, Deref (pageref ctx LocalPage local), Number imm)
+          BinaryOp (LT, Load (page_var ctx LocalPage local), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_LOC_NE_IMM (local, imm, addr) ->
         let e =
-          BinaryOp (EQUALE, Deref (pageref ctx LocalPage local), Number imm)
+          BinaryOp (EQUALE, Load (page_var ctx LocalPage local), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_STRUCTREF_Z (memb, addr) ->
         let e =
-          BinaryOp (NOTE, Deref (pageref ctx StructPage memb), Number 0l)
+          BinaryOp (NOTE, Load (page_var ctx StructPage memb), Number 0l)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_STRUCT_A_NOT_EMPTY (memb, addr) ->
-        let e = Call (Builtin (A_EMPTY, pageref ctx StructPage memb), []) in
+        let e = Call (Builtin (A_EMPTY, page_var ctx StructPage memb), []) in
         set_terminator (Branch (addr, e))
     | SH_IF_SREF_NE_STR0 (strno, addr) ->
         update_stack ctx (function
           | slot :: page :: stack ->
               BinaryOp
                 ( S_EQUALE,
-                  Deref (lvalue ctx page slot),
+                  Load (lvalue ctx page slot),
                   String Ain.ain.str0.(strno) )
               :: stack
           | stack -> unexpected_stack "SH_IF_SREF_NE_STR0" stack);
         set_terminator (Branch (addr, pop ctx))
     | SH_IF_STRUCTREF_GT_IMM (memb, imm, addr) ->
         let e =
-          BinaryOp (LTE, Deref (pageref ctx StructPage memb), Number imm)
+          BinaryOp (LTE, Load (page_var ctx StructPage memb), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_STRUCTREF_NE_IMM (memb, imm, addr) ->
         let e =
-          BinaryOp (EQUALE, Deref (pageref ctx StructPage memb), Number imm)
+          BinaryOp (EQUALE, Load (page_var ctx StructPage memb), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_STRUCTREF_EQ_IMM (memb, imm, addr) ->
         let e =
-          BinaryOp (NOTE, Deref (pageref ctx StructPage memb), Number imm)
+          BinaryOp (NOTE, Load (page_var ctx StructPage memb), Number imm)
         in
         set_terminator (Branch (addr, e))
     | SH_IF_STRUCTREF_NE_LOCALREF (memb, local, addr) ->
         let e =
           BinaryOp
             ( EQUALE,
-              Deref (pageref ctx StructPage memb),
-              Deref (pageref ctx LocalPage local) )
+              Load (page_var ctx StructPage memb),
+              Load (page_var ctx LocalPage local) )
         in
         set_terminator (Branch (addr, e))
     | SWITCH id -> set_terminator (Switch0 (id, pop ctx))
@@ -1018,22 +1009,22 @@ let analyze ctx =
         emit_expression ctx (pop ctx)
     | SH_SR_ASSIGN -> (
         match take_stack ctx with
-        | [ slot; page; Deref lval ] ->
+        | [ slot; page; Load lval ] ->
             emit_expression ctx
-              (AssignOp (SR_ASSIGN, lval, Deref (lvalue ctx page slot)))
+              (AssignOp (SR_ASSIGN, lval, Load (lvalue ctx page slot)))
         | stack -> unexpected_stack "SH_SR_ASSIGN" stack)
     | SH_MEM_ASSIGN_LOCAL (memb, local) ->
         emit_expression ctx
           (AssignOp
              ( ASSIGN,
-               PageRef (StructPage, (Option.value_exn ctx.struc).members.(memb)),
-               Deref (pageref ctx LocalPage local) ))
+               Var (StructPage, (Option.value_exn ctx.struc).members.(memb)),
+               Load (page_var ctx LocalPage local) ))
     | A_NUMOF_GLOB_1 var ->
         push ctx
-          (Call (Builtin (A_NUMOF, pageref ctx GlobalPage var), [ Number 1l ]))
+          (Call (Builtin (A_NUMOF, page_var ctx GlobalPage var), [ Number 1l ]))
     | A_NUMOF_STRUCT_1 var ->
         push ctx
-          (Call (Builtin (A_NUMOF, pageref ctx StructPage var), [ Number 1l ]))
+          (Call (Builtin (A_NUMOF, page_var ctx StructPage var), [ Number 1l ]))
     | X_SET -> builtin2 ctx X_SET 1
     | DG_COPY -> ()
     | DG_NEW -> push ctx Null
@@ -1044,13 +1035,13 @@ let analyze ctx =
     | DG_NEW_FROM_METHOD -> convert_stack_top_to_delegate ctx
     | (DG_SET | DG_ADD) as op -> (
         match take_stack ctx with
-        | [ func; obj; Deref lvalue ] ->
+        | [ func; obj; Load lvalue ] ->
             emit_expression ctx
               (AssignOp (op, lvalue, delegate_value ctx obj func))
         | stack -> unexpected_stack (show_instruction op) stack)
     | DG_ERASE -> (
         match take_stack ctx with
-        | [ func; obj; Deref lvalue ] ->
+        | [ func; obj; Load lvalue ] ->
             emit_expression ctx
               (Call (Builtin (DG_ERASE, lvalue), [ delegate_value ctx obj func ]))
         | stack -> unexpected_stack "DG_ERASE" stack)
@@ -1076,20 +1067,20 @@ let analyze ctx =
         emit_expression ctx
           (AssignOp
              ( ASSIGN,
-               PageRef (StructPage, (Option.value_exn ctx.struc).members.(slot)),
+               Var (StructPage, (Option.value_exn ctx.struc).members.(slot)),
                Number value ))
     | SH_LOCALREFREF var ->
-        pushl ctx [ DerefRef (pageref ctx LocalPage var); Void ]
+        pushl ctx [ RefTo (page_var ctx LocalPage var); Void ]
     | SH_LOCALASSIGN_SUB_IMM (local, imm) ->
         emit_expression ctx
-          (AssignOp (MINUSA, pageref ctx LocalPage local, Number imm))
+          (AssignOp (MINUSA, page_var ctx LocalPage local, Number imm))
     | SH_LOCREF_ASSIGN_MEM (local, memb) ->
         assert_stack_empty ctx;
         emit_expression ctx
           (AssignOp
              ( ASSIGN,
-               RefRef (pageref ctx LocalPage local),
-               Deref (pageref ctx StructPage memb) ))
+               Pointee (Load (page_var ctx LocalPage local)),
+               Load (page_var ctx StructPage memb) ))
     | PAGE_REF slot ->
         push ctx (Number slot);
         ref_ ctx
@@ -1097,83 +1088,83 @@ let analyze ctx =
         emit_expression ctx
           (AssignOp
              ( ASSIGN,
-               pageref ctx GlobalPage glob,
-               Deref (pageref ctx LocalPage local) ))
+               page_var ctx GlobalPage glob,
+               Load (page_var ctx LocalPage local) ))
     | SH_LOCAL_ASSIGN_STRUCTREF (local, memb) ->
         emit_expression ctx
           (AssignOp
              ( ASSIGN,
-               pageref ctx LocalPage local,
-               Deref (pageref ctx StructPage memb) ))
+               page_var ctx LocalPage local,
+               Load (page_var ctx StructPage memb) ))
     | SH_STRUCTREF_CALLMETHOD_NO_PARAM (memb, func) ->
         let func = Ain.ain.func.(func) in
-        let e = Call (Method (Deref (pageref ctx StructPage memb), func), []) in
+        let e = Call (Method (Load (page_var ctx StructPage memb), func), []) in
         push_call_result ctx func.return_type e
     | SH_STRUCTREF2 (memb, slot) ->
         push ctx
-          (Deref
-             (lvalue ctx (Deref (pageref ctx StructPage memb)) (Number slot)))
+          (Load (lvalue ctx (Load (page_var ctx StructPage memb)) (Number slot)))
     | SH_REF_LOCAL_ASSIGN_STRUCTREF2 (memb, ref_local, slot) ->
         let rhs =
-          Deref (lvalue ctx (Deref (pageref ctx StructPage memb)) (Number slot))
+          Load (lvalue ctx (Load (page_var ctx StructPage memb)) (Number slot))
         in
         emit_expression ctx
-          (AssignOp (ASSIGN, RefRef (pageref ctx LocalPage ref_local), rhs))
+          (AssignOp
+             (ASSIGN, Pointee (Load (page_var ctx LocalPage ref_local)), rhs))
     | SH_REF_STRUCTREF2 (slot1, slot2) ->
         update_stack ctx (function
           | page :: stack' ->
-              let e = Deref (lvalue ctx page (Number slot1)) in
-              let e = Deref (lvalue ctx e (Number slot2)) in
+              let e = Load (lvalue ctx page (Number slot1)) in
+              let e = Load (lvalue ctx e (Number slot2)) in
               e :: stack'
           | stack -> unexpected_stack "SH_REF_STRUCTREF2" stack)
     | SH_STRUCTREF3 (memb, slot1, slot2) ->
-        let e = Deref (pageref ctx StructPage memb) in
-        let e = Deref (lvalue ctx e (Number slot1)) in
-        let e = Deref (lvalue ctx e (Number slot2)) in
+        let e = Load (page_var ctx StructPage memb) in
+        let e = Load (lvalue ctx e (Number slot1)) in
+        let e = Load (lvalue ctx e (Number slot2)) in
         push ctx e
     | SH_STRUCTREF2_CALLMETHOD_NO_PARAM (memb, slot, func) ->
         let func = Ain.ain.func.(func) in
         let lhs =
-          lvalue ctx (Deref (pageref ctx StructPage memb)) (Number slot)
+          lvalue ctx (Load (page_var ctx StructPage memb)) (Number slot)
         in
-        let e = Call (Method (Deref lhs, func), []) in
+        let e = Call (Method (Load lhs, func), []) in
         push_call_result ctx func.return_type e
     | THISCALLMETHOD_NOPARAM n ->
         let func = Ain.ain.func.(n) in
         let e = Call (Method (Page StructPage, func), []) in
         push_call_result ctx func.return_type e
     | SH_GLOBAL_ASSIGN_IMM (var, value) ->
-        let e = AssignOp (ASSIGN, pageref ctx GlobalPage var, Number value) in
+        let e = AssignOp (ASSIGN, page_var ctx GlobalPage var, Number value) in
         emit_expression ctx e
     | SH_LOCALSTRUCT_ASSIGN_IMM (local, slot, imm) ->
-        let e = Deref (pageref ctx LocalPage local) in
+        let e = Load (page_var ctx LocalPage local) in
         let e = AssignOp (ASSIGN, lvalue ctx e (Number slot), Number imm) in
         emit_expression ctx e
     | SH_STRUCT_A_PUSHBACK_LOCAL_STRUCT (memb, local) ->
         emit_expression ctx
           (Call
-             ( Builtin (A_PUSHBACK, pageref ctx StructPage memb),
+             ( Builtin (A_PUSHBACK, page_var ctx StructPage memb),
                [ sh_local_struct_arg ctx local ] ))
     | SH_GLOBAL_A_PUSHBACK_LOCAL_STRUCT (glob, local) ->
         emit_expression ctx
           (Call
-             ( Builtin (A_PUSHBACK, pageref ctx GlobalPage glob),
+             ( Builtin (A_PUSHBACK, page_var ctx GlobalPage glob),
                [ sh_local_struct_arg ctx local ] ))
     | SH_LOCAL_A_PUSHBACK_LOCAL_STRUCT (arrayvar, structvar) ->
         emit_expression ctx
           (Call
-             ( Builtin (A_PUSHBACK, pageref ctx LocalPage arrayvar),
+             ( Builtin (A_PUSHBACK, page_var ctx LocalPage arrayvar),
                [ sh_local_struct_arg ctx structvar ] ))
     | SH_S_ASSIGN_REF -> (
         match take_stack ctx with
-        | [ slot; page; Deref lval ] ->
-            let e = AssignOp (S_ASSIGN, lval, Deref (lvalue ctx page slot)) in
+        | [ slot; page; Load lval ] ->
+            let e = AssignOp (S_ASSIGN, lval, Load (lvalue ctx page slot)) in
             emit_expression ctx e
         | stack -> unexpected_stack "SH_S_ASSIGN_REF" stack)
     | SH_A_FIND_SREF ->
         update_stack ctx (function
           | slot :: page :: stack ->
-              Number 0l :: Deref (lvalue ctx page slot) :: stack
+              Number 0l :: Load (lvalue ctx page slot) :: stack
           | stack -> unexpected_stack "SH_A_FIND_SREF" stack);
         builtin ctx A_FIND 4
     | SH_SREF_EMPTY -> builtin ctx S_EMPTY 0
@@ -1181,19 +1172,19 @@ let analyze ctx =
         push ctx
           (BinaryOp
              ( S_EQUALE,
-               Deref (pageref ctx StructPage memb),
-               Deref (pageref ctx LocalPage local) ))
+               Load (page_var ctx StructPage memb),
+               Load (page_var ctx LocalPage local) ))
     | SH_STRUCTSREF_NE_LOCALSREF (memb, local) ->
         push ctx
           (BinaryOp
              ( S_NOTE,
-               Deref (pageref ctx StructPage memb),
-               Deref (pageref ctx LocalPage local) ))
+               Load (page_var ctx StructPage memb),
+               Load (page_var ctx LocalPage local) ))
     | SH_LOCALSREF_EQ_STR0 (local, strno) ->
         push ctx
           (BinaryOp
              ( S_EQUALE,
-               Deref (pageref ctx LocalPage local),
+               Load (page_var ctx LocalPage local),
                String Ain.ain.str0.(strno) ))
     | SH_LOCALSREF_NE_STR0 (local, strno) ->
         sh_sref_ne_str0 ctx LocalPage local strno
@@ -1203,27 +1194,27 @@ let analyze ctx =
         sh_sref_ne_str0 ctx GlobalPage glob strno
     | SH_STRUCTREF_GT_IMM (memb, imm) ->
         push ctx
-          (BinaryOp (GT, Deref (pageref ctx StructPage memb), Number imm))
+          (BinaryOp (GT, Load (page_var ctx StructPage memb), Number imm))
     | SH_STRUCT_ASSIGN_LOCALREF_ITOB (memb, local) ->
         emit_expression ctx
           (AssignOp
              ( ASSIGN,
-               pageref ctx StructPage memb,
-               UnaryOp (ITOB, Deref (pageref ctx LocalPage local)) ))
+               page_var ctx StructPage memb,
+               UnaryOp (ITOB, Load (page_var ctx LocalPage local)) ))
     | SH_STRUCT_SR_REF (memb, struc) ->
-        push ctx (CopyStruct (struc, Deref (pageref ctx StructPage memb)))
-    | SH_STRUCT_S_REF slot -> push ctx (Deref (pageref ctx StructPage slot))
+        push ctx (CopyStruct (struc, Load (page_var ctx StructPage memb)))
+    | SH_STRUCT_S_REF slot -> push ctx (Load (page_var ctx StructPage slot))
     | S_REF2 slot ->
         push ctx (Number slot);
         ref_ ctx
-    | SH_GLOBAL_S_REF var -> push ctx (Deref (pageref ctx GlobalPage var))
-    | SH_LOCAL_S_REF var -> push ctx (Deref (pageref ctx LocalPage var))
+    | SH_GLOBAL_S_REF var -> push ctx (Load (page_var ctx GlobalPage var))
+    | SH_LOCAL_S_REF var -> push ctx (Load (page_var ctx LocalPage var))
     | SH_LOCALREF_SASSIGN_LOCALSREF (lvar, rvar) ->
         emit_expression ctx
           (AssignOp
              ( S_ASSIGN,
-               pageref ctx LocalPage lvar,
-               Deref (pageref ctx LocalPage rvar) ))
+               page_var ctx LocalPage lvar,
+               Load (page_var ctx LocalPage rvar) ))
     | SH_LOCAL_APUSHBACK_LOCALSREF (arrayvar, strvar) ->
         emit_expression ctx
           (sh_apushback_localsref ctx LocalPage arrayvar strvar)
@@ -1233,13 +1224,13 @@ let analyze ctx =
         emit_expression ctx (sh_apushback_localsref ctx StructPage memb local)
     | SH_S_ASSIGN_CALLSYS19 -> (
         match take_stack ctx with
-        | [ expr; Deref lval ] ->
+        | [ expr; Load lval ] ->
             emit_expression ctx
               (AssignOp (S_ASSIGN, lval, Call (SysCall 19, [ expr ])))
         | stack -> unexpected_stack "SH_S_ASSIGN_CALLSYS19" stack)
     | SH_S_ASSIGN_STR0 n -> (
         match take_stack ctx with
-        | [ Deref lval ] ->
+        | [ Load lval ] ->
             emit_expression ctx
               (AssignOp (S_ASSIGN, lval, String Ain.ain.str0.(n)))
         | stack -> unexpected_stack "SH_S_ASSIGN_STR0" stack)
@@ -1253,19 +1244,19 @@ let analyze ctx =
         emit_expression ctx
           (AssignOp
              ( S_ASSIGN,
-               pageref ctx StructPage memb,
-               Deref (pageref ctx LocalPage local) ))
+               page_var ctx StructPage memb,
+               Load (page_var ctx LocalPage local) ))
     | SH_LOCALSREF_EMPTY var ->
         push ctx
-          (Call (Builtin2 (S_EMPTY, Deref (pageref ctx LocalPage var)), []))
+          (Call (Builtin2 (S_EMPTY, Load (page_var ctx LocalPage var)), []))
     | SH_STRUCTSREF_EMPTY memb ->
         push ctx
-          (Call (Builtin2 (S_EMPTY, Deref (pageref ctx StructPage memb)), []))
+          (Call (Builtin2 (S_EMPTY, Load (page_var ctx StructPage memb)), []))
     | SH_GLOBALSREF_EMPTY var ->
         push ctx
-          (Call (Builtin2 (S_EMPTY, Deref (pageref ctx GlobalPage var)), []))
+          (Call (Builtin2 (S_EMPTY, Load (page_var ctx GlobalPage var)), []))
     | SH_LOC_LT_IMM_OR_LOC_GE_IMM (local, imm1, imm2) ->
-        let v = Deref (pageref ctx LocalPage local) in
+        let v = Load (page_var ctx LocalPage local) in
         push ctx
           (BinaryOp
              ( PSEUDO_LOGOR,
@@ -1335,9 +1326,9 @@ let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
     when es1 == es2 ->
       Some { condition; stack = make_option obj :: n :: e :: es1; stmts }
   (* expr?.iface_expr *)
-  (* {Deref obj != -1} [e, Void, 0]
-     {Deref obj == -1} [-1, -1, -1]
-     => [e, Void, Option(DerefRef obj)] *)
+  (* {Load obj != -1} [e, Void, 0]
+     {Load obj == -1} [-1, -1, -1]
+     => [e, Void, Option(RefTo obj)] *)
   | ( { stack = Number 0l :: Void :: e :: es1; stmts; _ },
       {
         condition = BinaryOp (EQUALE, obj, Number -1l) :: condition;
@@ -1345,7 +1336,7 @@ let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
         _;
       } )
     when es1 == es2 ->
-      let obj = match obj with Deref o -> DerefRef o | _ -> obj in
+      let obj = match obj with Load o -> RefTo o | _ -> obj in
       Some { condition; stack = make_option obj :: Void :: e :: es1; stmts }
   (* obj?.void_method() *)
   (* {obj != -1} [e1] stmts=[stmt]
@@ -1454,10 +1445,7 @@ let merge_complemental_predecessors ctx (p1 : predecessor) (p2 : predecessor) =
   | ( {
         stack = Number slot :: Page LocalPage :: es1;
         stmts =
-          {
-            txt = Expression (AssignOp (ASSIGN, PageRef (LocalPage, v), obj));
-            _;
-          }
+          { txt = Expression (AssignOp (ASSIGN, Var (LocalPage, v), obj)); _ }
           :: stmts;
         _;
       },
@@ -1754,9 +1742,7 @@ let from_generated_constructor (s : Ain.Struct.t) (f : CodeSection.function_t) =
          String.(
            var.name = "<vtable>" && lib.name = "Array" && func.name = "Alloc")
     ->
-      let var =
-        Deref (PageRef (StructPage, s.members.(Int32.to_int_exn varno)))
-      in
+      let var = Load (Var (StructPage, s.members.(Int32.to_int_exn varno))) in
       let alloc =
         Expression
           (Call
@@ -1771,7 +1757,7 @@ let from_generated_constructor (s : Ain.Struct.t) (f : CodeSection.function_t) =
           :: { txt = POP; _ }
           :: rest ->
             parse_vtable_initializer
-              (Expression (AssignOp (ASSIGN, ObjRef (var, Number i), Number m))
+              (Expression (AssignOp (ASSIGN, Slot (var, Number i), Number m))
               :: acc)
               rest
         | { txt = POP; _ } :: rest -> (acc, rest)
@@ -1793,9 +1779,7 @@ let from_generated_constructor (s : Ain.Struct.t) (f : CodeSection.function_t) =
 let from_enum_stringifier (f : CodeSection.function_t) =
   match List.map ~f:(fun i -> i.txt) f.code with
   | PUSHLOCALPAGE :: PUSH varno :: REF :: code ->
-      let var =
-        Deref (PageRef (LocalPage, f.func.vars.(Int32.to_int_exn varno)))
-      in
+      let var = Load (Var (LocalPage, f.func.vars.(Int32.to_int_exn varno))) in
       let rec parse = function
         | DUP :: PUSH n :: EQUALE :: IFZ _ :: POP :: S_PUSH s :: RETURN :: rest
           ->
@@ -1845,35 +1829,32 @@ let generate_var_decls (func : Ain.Function.t) bbs =
       | VarDecl (var, None) as stmt ->
           mark_use var;
           stmt
-      | Expression (AssignOp (insn, PageRef (LocalPage, var), expr))
+      | Expression (AssignOp (insn, Var (LocalPage, var), expr))
         when is_uninitialized var ->
           VarDecl (var, Some (insn, expr))
-      | Expression
-          (Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), _) as expr)
+      | Expression (Call (Builtin (A_ALLOC, Var (LocalPage, var)), _) as expr)
         when is_uninitialized var ->
           VarDecl (var, Some (ASSIGN, expr))
       | Expression
           (Call
              ( HllFunc ("Array", { name = "Alloc"; _ }),
-               Deref (PageRef (_, var)) :: dims ))
+               Load (Var (_, var)) :: dims ))
         when is_uninitialized var ->
           let dims =
             List.take_while dims ~f:(function Number -1l -> false | _ -> true)
           in
           VarDecl
             ( var,
-              Some
-                ( ASSIGN,
-                  Call (Builtin (A_ALLOC, PageRef (LocalPage, var)), dims) ) )
+              Some (ASSIGN, Call (Builtin (A_ALLOC, Var (LocalPage, var)), dims))
+            )
       | Expression
-          ( Call (Builtin (A_FREE, PageRef (LocalPage, var)), [])
+          ( Call (Builtin (A_FREE, Var (LocalPage, var)), [])
           | Call
-              ( HllFunc ("Array", { name = "Free"; _ }),
-                [ Deref (PageRef (_, var)) ] ) )
+              (HllFunc ("Array", { name = "Free"; _ }), [ Load (Var (_, var)) ])
+            )
         when is_uninitialized var && not (Ain.Variable.is_dummy var) ->
           VarDecl (var, None)
-      | Expression
-          (Call (Builtin2 (DG_CLEAR, Deref (PageRef (LocalPage, var))), []))
+      | Expression (Call (Builtin2 (DG_CLEAR, Load (Var (LocalPage, var))), []))
         when is_uninitialized var ->
           VarDecl (var, None)
       | stmt -> stmt
