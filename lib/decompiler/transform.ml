@@ -504,6 +504,9 @@ let simplify_null_coalescing stmt =
       (* expr1? ?? expr2 => expr1 ?? expr2 *)
       | BinaryOp (PSEUDO_NULL_COALESCE, Option e1, e2) ->
           BinaryOp (PSEUDO_NULL_COALESCE, e1, e2)
+      (* Same, with the option marker inside the deref of a nullable *)
+      | BinaryOp (PSEUDO_NULL_COALESCE, Deref (RefValue (Option e1)), e2) ->
+          BinaryOp (PSEUDO_NULL_COALESCE, Deref (RefValue e1), e2)
       (* SceneTitle@0 and SceneLoad@0 in Rance10. Conversion from option<enum> to ref<enum> *)
       | BinaryOp
           ( PSEUDO_NULL_COALESCE,

@@ -254,7 +254,13 @@ let lvalue ctx page slot =
   | e, Void -> RefValue e
   | _, _ -> ObjRef (page, slot)
 
-let deref = function RefValue e -> e | e -> Deref e
+(* Reassemble a reference value carried on the stack as a (page, slot) pair
+   into a single reference-typed expression node. *)
+let ref_value ctx page slot =
+  match (page, slot) with
+  | DerefRef lval, Void -> DerefRef (RefRef lval)
+  | e, Void -> e
+  | _, _ -> DerefRef (lvalue ctx page slot)
 
 let rec interface_value obj vofs =
   match (obj, vofs) with
@@ -307,9 +313,9 @@ let ref_ ctx =
   update_stack ctx (function
     | TernaryOp (cond, l12, l22) :: TernaryOp (cond', l11, l21) :: stack
       when cond == cond' ->
-        TernaryOp (cond, deref (lvalue ctx l11 l12), deref (lvalue ctx l21 l22))
+        TernaryOp (cond, Deref (lvalue ctx l11 l12), Deref (lvalue ctx l21 l22))
         :: stack
-    | slot :: page :: stack -> deref (lvalue ctx page slot) :: stack
+    | slot :: page :: stack -> Deref (lvalue ctx page slot) :: stack
     | stack -> unexpected_stack "ref" stack)
 
 let refref ctx =
@@ -320,7 +326,7 @@ let refref ctx =
 let sr_ref ctx n =
   update_stack ctx (function
     | slot :: page :: stack ->
-        CopyStruct (n, deref (lvalue ctx page slot)) :: stack
+        CopyStruct (n, Deref (lvalue ctx page slot)) :: stack
     | stack -> unexpected_stack "sr_ref" stack)
 
 let sr_ref2 ctx n =
@@ -462,16 +468,16 @@ let objswap ctx type_ =
     | [ slot2; page2; slot1; page1 ] ->
         BinaryOp
           ( OBJSWAP type_,
-            deref (lvalue ctx page1 slot1),
-            deref (lvalue ctx page2 slot2) )
+            Deref (lvalue ctx page1 slot1),
+            Deref (lvalue ctx page2 slot2) )
     | stack -> unexpected_stack "OBJSWAP" stack
   else
     match take_stack ctx with
     | [ Number type_; slot2; page2; slot1; page1 ] ->
         BinaryOp
           ( OBJSWAP (Int32.to_int_exn type_),
-            deref (lvalue ctx page1 slot1),
-            deref (lvalue ctx page2 slot2) )
+            Deref (lvalue ctx page1 slot1),
+            Deref (lvalue ctx page2 slot2) )
     | stack -> unexpected_stack "OBJSWAP" stack
 
 let incdec ctx op =
@@ -515,7 +521,7 @@ let pop_args ctx vartypes =
     | Void :: ts -> aux acc ts
     | t :: ts when Type.is_fat_reference t ->
         let page, slot = pop2 ctx in
-        aux (deref (lvalue ctx page slot) :: acc) ts
+        aux (ref_value ctx page slot :: acc) ts
     | IFace _ :: ts ->
         let obj, vofs = pop2 ctx in
         aux (interface_value obj vofs :: acc) ts
@@ -544,7 +550,7 @@ let rec reshape_args ctx (vartypes : Ain.type_t list) args =
   match (vartypes, args) with
   | [], [] -> []
   | _ :: Void :: ts, page :: slot :: args ->
-      deref (lvalue ctx page slot) :: reshape_args ctx ts args
+      ref_value ctx page slot :: reshape_args ctx ts args
   | _ :: ts, arg :: args -> arg :: reshape_args ctx ts args
   | _ -> failwith "reshape_args: argument count mismatch"
 
@@ -884,7 +890,7 @@ let analyze ctx =
           | slot :: page :: stack ->
               BinaryOp
                 ( S_EQUALE,
-                  deref (lvalue ctx page slot),
+                  Deref (lvalue ctx page slot),
                   String Ain.ain.str0.(strno) )
               :: stack
           | stack -> unexpected_stack "SH_IF_SREF_NE_STR0" stack);
@@ -1014,7 +1020,7 @@ let analyze ctx =
         match take_stack ctx with
         | [ slot; page; Deref lval ] ->
             emit_expression ctx
-              (AssignOp (SR_ASSIGN, lval, deref (lvalue ctx page slot)))
+              (AssignOp (SR_ASSIGN, lval, Deref (lvalue ctx page slot)))
         | stack -> unexpected_stack "SH_SR_ASSIGN" stack)
     | SH_MEM_ASSIGN_LOCAL (memb, local) ->
         emit_expression ctx
@@ -1116,14 +1122,14 @@ let analyze ctx =
     | SH_REF_STRUCTREF2 (slot1, slot2) ->
         update_stack ctx (function
           | page :: stack' ->
-              let e = deref (lvalue ctx page (Number slot1)) in
-              let e = deref (lvalue ctx e (Number slot2)) in
+              let e = Deref (lvalue ctx page (Number slot1)) in
+              let e = Deref (lvalue ctx e (Number slot2)) in
               e :: stack'
           | stack -> unexpected_stack "SH_REF_STRUCTREF2" stack)
     | SH_STRUCTREF3 (memb, slot1, slot2) ->
         let e = Deref (pageref ctx StructPage memb) in
-        let e = deref (lvalue ctx e (Number slot1)) in
-        let e = deref (lvalue ctx e (Number slot2)) in
+        let e = Deref (lvalue ctx e (Number slot1)) in
+        let e = Deref (lvalue ctx e (Number slot2)) in
         push ctx e
     | SH_STRUCTREF2_CALLMETHOD_NO_PARAM (memb, slot, func) ->
         let func = Ain.ain.func.(func) in
@@ -1161,13 +1167,13 @@ let analyze ctx =
     | SH_S_ASSIGN_REF -> (
         match take_stack ctx with
         | [ slot; page; Deref lval ] ->
-            let e = AssignOp (S_ASSIGN, lval, deref (lvalue ctx page slot)) in
+            let e = AssignOp (S_ASSIGN, lval, Deref (lvalue ctx page slot)) in
             emit_expression ctx e
         | stack -> unexpected_stack "SH_S_ASSIGN_REF" stack)
     | SH_A_FIND_SREF ->
         update_stack ctx (function
           | slot :: page :: stack ->
-              Number 0l :: deref (lvalue ctx page slot) :: stack
+              Number 0l :: Deref (lvalue ctx page slot) :: stack
           | stack -> unexpected_stack "SH_A_FIND_SREF" stack);
         builtin ctx A_FIND 4
     | SH_SREF_EMPTY -> builtin ctx S_EMPTY 0

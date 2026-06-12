@@ -156,9 +156,13 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | _ ->
               Printf.failwithf "lvalue: %s\n ot: %s" (show_lvalue lvalue)
                 (show_ain_type ot) ())
-      | RefValue expr ->
+      | RefValue expr -> (
           let expr', t = self#analyze_expr Any expr in
-          (RefValue expr', t)
+          (* Non-ref results (rvalue-reference dummies typed by their content,
+             interface objects, struct pages) denote the place itself. *)
+          match t with
+          | Ref t | FatRef t -> (RefValue expr', t)
+          | t -> (RefValue expr', t))
       | ArrayRef _ | MemberRef _ -> failwith "cannot happen"
 
     method private analyze_interface_value iface =
@@ -463,15 +467,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (BinaryOp (result_insn lt rt, lhs, rhs), result_type lt rt)
 
     method private analyze_assign_op insn lval rhs =
-      let lval', lt =
-        match self#analyze_lvalue lval with
-        | ( (RefValue (AssignOp (PSEUDO_REF_ASSIGN, PageRef (LocalPage, v), _))
-             as lval'),
-            Ref lt )
-          when String.is_prefix v.name ~prefix:"<dummy" ->
-            (lval', lt) (* allow `(<dummy> <- ref_expr) = value` *)
-        | lval', lt -> (lval', lt)
-      in
+      let lval', lt = self#analyze_lvalue lval in
       let rhs', rt = self#analyze_expr lt rhs in
       match (lt, rt, insn) with
       | FuncType ftl, FuncType ftr, _ ->
