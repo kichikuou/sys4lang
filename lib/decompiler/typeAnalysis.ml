@@ -150,11 +150,14 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
                 (show_ain_type ot) ())
       | Pointee expr -> (
           let expr', t = self#analyze_expr Any expr in
-          (* Non-ref results (rvalue-reference dummies typed by their content,
-             interface objects, struct pages) denote the place itself. *)
           match t with
           | Ref t | FatRef t -> (Pointee expr', t)
-          | t -> (Pointee expr', t))
+          (* An interface value is itself the reference entity but is typed
+             by its content type. *)
+          | IFace _ as t -> (Pointee expr', t)
+          | t ->
+              Printf.failwithf "Pointee: unexpected non-reference type %s in %s"
+                (show_ain_type t) (show_expr expr') ())
       | Elem _ | Member _ -> failwith "cannot happen"
 
     method private analyze_interface_value iface =
@@ -253,7 +256,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               (RefTo lval', Ref t))
       | TempRef (v, e) ->
           let e, _ = self#analyze_expr v.type_ e in
-          (TempRef (v, e), v.type_)
+          (TempRef (v, e), Ref v.type_)
       | Null -> (
           match expected with
           | Delegate _ -> (Null, expected)

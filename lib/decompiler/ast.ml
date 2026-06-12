@@ -36,12 +36,14 @@ type callable =
 
 and lvalue =
   | NullPlace
+  (* A variable's slot: Var (_, x) : decltype(x) place *)
   | Var of page_value * Ain.Variable.t
   | IncDec of incdec_fix * incdec_op * lvalue
   (* Slots will be resolved to Elem or Member in type analysis phase *)
   | Slot of expr * expr
   | Elem of expr * expr
   | Member of expr * Ain.Variable.t
+  (* The place a reference points to: e : Ref t  =>  Pointee e : t place *)
   | Pointee of expr
 [@@deriving show { with_path = false }]
 
@@ -56,8 +58,11 @@ and expr =
   | FuncAddr of Ain.Function.t
   | MemberPointer of int * int (* struct, slot *)
   | BoundMethod of expr * Ain.Function.t
+  (* Read the value stored at a place: l : t place  =>  Load l : t *)
   | Load of lvalue
+  (* Make a reference to a place: l : t place  =>  RefTo l : Ref t *)
   | RefTo of lvalue
+  (* Rvalue materialized in dummy scalar var: TempRef (v, e) : Ref decltype(v) *)
   | TempRef of Ain.Variable.t * expr
   | Null
   | Void
