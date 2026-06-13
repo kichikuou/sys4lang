@@ -169,7 +169,7 @@ let operator insn =
   | PSEUDO_COMMA -> make_op "," PREC_COMMA Left
   | OBJSWAP _ -> make_op "<=>" PREC_ASSIGN Left
   | ASSIGN | F_ASSIGN | LI_ASSIGN | S_ASSIGN | R_ASSIGN | SR_ASSIGN | DG_ASSIGN
-  | DG_SET | PSEUDO_FT_ASSIGNS _ | PSEUDO_ARRAY_ASSIGN ->
+  | DG_SET | PSEUDO_FT_ASSIGNS _ | PSEUDO_ARRAY_ASSIGN | X_SET ->
       make_op "=" PREC_ASSIGN Right
   | PSEUDO_REF_ASSIGN -> make_op "<-" PREC_ASSIGN Right
   | PLUSA | F_PLUSA | LI_PLUSA | S_PLUSA | S_PLUSA2 | DG_PLUSA | DG_ADD ->

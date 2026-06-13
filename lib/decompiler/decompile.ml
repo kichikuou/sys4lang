@@ -118,12 +118,7 @@ let analyze_initializer_function stmt vars =
       when String.equal v.name "<vtable>" ->
         !vtable.(Int32.to_int_exn i) <- Int32.to_int_exn m
     | {
-        txt =
-          Expression
-            ( AssignOp (_, Var ((StructPage | GlobalPage), v), e)
-            | Call
-                ( Builtin2 (X_SET, Load (Var ((StructPage | GlobalPage), v))),
-                  [ e ] ) );
+        txt = Expression (AssignOp (_, Var ((StructPage | GlobalPage), v), e));
         _;
       }
       when Ain.ain.vers >= 12 ->

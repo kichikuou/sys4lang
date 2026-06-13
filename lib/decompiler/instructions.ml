@@ -799,7 +799,6 @@ let builtin_method_name = function
   | A_SORT -> "Sort"
   | A_SORT_MEM -> "SortBy"
   | A_REVERSE -> "Reverse"
-  | X_SET -> "Set"
   | DG_CLEAR -> "Clear"
   | DG_EXIST -> "Exist"
   | FTOS -> "String"

@@ -56,7 +56,6 @@ let builtin_type receiver_type insn args =
             (show_ain_type receiver_type)
             ())
   | A_REVERSE -> (insn, Void, [])
-  | X_SET -> (insn, Void, [ receiver_type ])
   | S_EMPTY -> (insn, Bool, [])
   | S_LENGTH -> (insn, Int, [])
   | S_LENGTH2 -> (insn, Int, [])
@@ -493,6 +492,8 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | Ref (Struct sno), IFace ino, ASSIGN when sno = ino ->
           (AssignOp (insn, lval', rhs'), lt)
       | Array _, Array _, PSEUDO_ARRAY_ASSIGN ->
+          (AssignOp (insn, lval', rhs'), lt)
+      | (Array _ | Ref (Array _)), (Array _ | Ref (Array _)), X_SET ->
           (AssignOp (insn, lval', rhs'), lt)
       | _ ->
           Stdio.eprintf "left type:  %s\nright type: %s\nop: %s\nexpr: %s"

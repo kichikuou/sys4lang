@@ -1025,7 +1025,11 @@ let analyze ctx =
     | A_NUMOF_STRUCT_1 var ->
         push ctx
           (Call (Builtin (A_NUMOF, page_var ctx StructPage var), [ Number 1l ]))
-    | X_SET -> builtin2 ctx X_SET 1
+    | X_SET ->
+        let src = pop ctx in
+        update_stack ctx (function
+          | Load lval :: rest -> AssignOp (X_SET, lval, src) :: rest
+          | stack -> unexpected_stack "X_SET" (src :: stack))
     | DG_COPY -> ()
     | DG_NEW -> push ctx Null
     | DG_CLEAR ->
