@@ -69,7 +69,7 @@ let do_compile sources output major minor import_as input_encoding =
       Ain.write_file ctx.ain output)
     (fun file -> Hashtbl.find files file)
 
-let do_build pje_file output_dir_override =
+let do_build pje_file output_dir_override no_debug_info =
   let pje =
     handle_errors
       (fun () -> PjeLoader.load read_text_file pje_file)
@@ -92,7 +92,8 @@ let do_build pje_file output_dir_override =
       let debug_info = DebugInfo.create () in
       Compile.compile ctx sources debug_info read_file;
       Ain.write_file ctx.ain (Pje.ain_path ?output_dir_override pje);
-      DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
+      if not no_debug_info then
+        DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
     (fun file -> Hashtbl.find files file)
 
 let encoding_conv =
@@ -157,7 +158,11 @@ let cmd_build_pje =
       & opt (some string) None
       & info [ "output-dir" ] ~docv:"OUTPUT_DIR" ~doc)
   in
-  Cmd.v info Term.(const do_build $ project $ output_dir)
+  let no_debug_info =
+    let doc = "Do not write the debug_info.json file." in
+    Arg.(value & flag & info [ "no-debug-info" ] ~doc)
+  in
+  Cmd.v info Term.(const do_build $ project $ output_dir $ no_debug_info)
 
 let cmd =
   let doc = "System 4 Compiler" in

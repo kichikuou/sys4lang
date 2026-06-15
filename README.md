@@ -71,6 +71,7 @@ Options:
 | Option | Description |
 |--------|-------------|
 | `--output-dir OUTPUT_DIR` | Override the output directory specified in the `.pje` file. |
+| `--no-debug-info` | Do not write the `debug_info.json` file. |
 
 #### `sys4c compile SOURCES...`
 
