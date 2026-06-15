@@ -283,10 +283,17 @@ let remove_array_free_for_temporary_arrays stmt =
 
 let remove_generated_initializer_call = function
   | { txt = Block stmts; _ } as stmt -> (
-      match List.rev stmts with
+      (* The `<struct>@2();` call is the first statement of the constructor, but
+         in ain v0/v1 local variable declarations are hoisted ahead of it, so
+         skip any leading declarations before looking for the call. *)
+      let decls, rest =
+        List.split_while (List.rev stmts) ~f:(fun s ->
+            match s.txt with VarDecl _ -> true | _ -> false)
+      in
+      match rest with
       | { txt = Expression (Call (Method (Page StructPage, f), [])); _ } :: rest
         when String.is_suffix f.name ~suffix:"@2" ->
-          { stmt with txt = Block (List.rev rest) }
+          { stmt with txt = Block (List.rev (decls @ rest)) }
       | _ -> stmt)
   | stmt -> stmt
 
