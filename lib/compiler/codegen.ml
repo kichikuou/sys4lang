@@ -20,8 +20,16 @@ open Jaf
 open Bytecode
 open CompileError
 
-type cflow_type = CFlowLoop of int | CFlowSwitch of Ain.Switch.t
-type cflow_stmt = { kind : cflow_type; mutable break_addrs : int list }
+type cflow_type =
+  | CFlowLoop of { continue_addr : int (* -1 if it is not yet known *) }
+  | CFlowSwitch of Ain.Switch.t
+
+type cflow_stmt = {
+  kind : cflow_type;
+  mutable break_addrs : int list;
+  mutable continue_addrs : int list;
+}
+
 type scope = { mutable vars : Ain.Variable.t list }
 
 type label_data = {
@@ -114,8 +122,13 @@ class jaf_compiler ctx debug_info =
       Hashtbl.clear labels
 
     (** Begin a loop. *)
-    method start_loop addr =
-      Stack.push cflow_stmts { kind = CFlowLoop addr; break_addrs = [] }
+    method start_loop continue_addr =
+      Stack.push cflow_stmts
+        {
+          kind = CFlowLoop { continue_addr };
+          break_addrs = [];
+          continue_addrs = [];
+        }
 
     (** Begin a switch statement. *)
     method start_switch ty node =
@@ -126,7 +139,8 @@ class jaf_compiler ctx debug_info =
         | _ -> compiler_bug "invalid switch type" (Some node)
       in
       let switch = Ain.add_switch ctx.ain case_type in
-      Stack.push cflow_stmts { kind = CFlowSwitch switch; break_addrs = [] };
+      Stack.push cflow_stmts
+        { kind = CFlowSwitch switch; break_addrs = []; continue_addrs = [] };
       self#write_instruction1 op switch.index
 
     (** End the current control flow construct. Updates 'break' addresses. *)
@@ -172,19 +186,23 @@ class jaf_compiler ctx debug_info =
       let switch = self#current_switch node in
       switch.default_address <- current_address
 
-    (** Retrieves the continue address for the current loop (i.e. the address
-        that 'continue' statements should jump to). *)
-    method get_continue_addr node =
-      let rec get_first_continue = function
-        | { kind = CFlowLoop addr; _ } :: _ -> addr
-        | _ :: rest -> get_first_continue rest
-        | [] -> compile_error "'continue' statement outside of loop" node
+    (** Emit a 'continue' jump for the innermost enclosing loop. If the loop's
+        continue target is not yet known (do-while), the jump operand location
+        is recorded for later patching. *)
+    method add_continue node =
+      let nearest_loop =
+        Stack.find cflow_stmts ~f:(function
+          | { kind = CFlowLoop _; _ } -> true
+          | _ -> false)
       in
-      match Stack.top cflow_stmts with
-      | Some { kind = CFlowLoop addr; _ } -> addr
-      | Some { kind = CFlowSwitch _; _ } ->
-          get_first_continue (Stack.to_list cflow_stmts)
-      | _ -> compile_error "'continue' statement outside of loop" node
+      match nearest_loop with
+      | Some { kind = CFlowLoop { continue_addr }; _ } when continue_addr >= 0
+        ->
+          self#write_instruction1 JUMP continue_addr
+      | Some loop ->
+          loop.continue_addrs <- (current_address + 2) :: loop.continue_addrs;
+          self#write_instruction1 JUMP 0
+      | None -> compile_error "'continue' statement outside of loop" node
 
     (** Retrieves the index for the current switch statement. *)
     method current_switch node =
@@ -1120,21 +1138,16 @@ class jaf_compiler ctx debug_info =
           self#write_address_at break_addr current_address;
           self#end_loop
       | DoWhile (test, body) ->
-          (* skip loop test *)
-          let jump_addr = current_address + 2 in
-          self#write_instruction1 JUMP 0;
-          (* loop test *)
+          (* start the loop with an unknown continue address *)
           let loop_addr = current_address in
-          self#start_loop loop_addr;
-          self#compile_expression test;
-          let break_addr = current_address + 2 in
-          self#write_instruction1 IFZ 0;
-          (* loop body *)
-          self#write_address_at jump_addr current_address;
+          self#start_loop (-1);
           self#compile_statement body;
-          self#write_instruction1 JUMP loop_addr;
+          (* loop test ('continue' jumps here) *)
+          List.iter (Stack.top_exn cflow_stmts).continue_addrs ~f:(fun addr ->
+              self#write_address_at addr current_address);
+          self#compile_expression test;
+          self#write_instruction1 IFNZ loop_addr;
           (* loop end *)
-          self#write_address_at break_addr current_address;
           self#end_loop
       | For (decl, None, None, body) ->
           (* loop init *)
@@ -1176,9 +1189,7 @@ class jaf_compiler ctx debug_info =
       | Goto name ->
           self#add_goto name (current_address + 2) stmt;
           self#write_instruction1 JUMP 0
-      | Continue ->
-          self#write_instruction1 JUMP
-            (self#get_continue_addr (ASTStatement stmt))
+      | Continue -> self#add_continue (ASTStatement stmt)
       | Break ->
           self#push_break_addr (current_address + 2) (ASTStatement stmt);
           self#write_instruction1 JUMP 0
