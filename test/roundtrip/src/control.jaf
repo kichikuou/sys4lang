@@ -1,0 +1,38 @@
+int do_while_basic(int n)
+{
+	int i = 1;
+	int s;
+	do {
+		s += i;
+		++i;
+	} while (i <= n);
+	return s;
+}
+
+int do_while_break_continue(int n)
+{
+	int i;
+	do {
+		++i;
+		if (i == n) {
+			break;
+		}
+		if (i > 100) {
+			continue;
+		}
+	} while (i < 50);
+	return i;
+}
+
+void do_while_nested()
+{
+	int i;
+	do {
+		int j;
+		do {
+			++j;
+		} while (j < 3);
+		++i;
+	} while (i < 5);
+}
+

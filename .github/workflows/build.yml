@@ -59,6 +59,10 @@ jobs:
       - name: Unit tests
         run: opam exec -- dune runtest
 
+      - name: Roundtrip test
+        shell: bash
+        run: test/roundtrip/run.sh
+
       - name: Smoke tests
         shell: bash
         if: matrix.os == 'windows-latest'

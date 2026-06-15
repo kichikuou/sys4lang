@@ -1,0 +1,21 @@
+// Project Environment File
+Encoding = "UTF-8"
+ProjectName = "roundtrip"
+
+CodeName = "roundtrip.ain"
+
+#define _AINVERSION 4
+#define _KEYCODE 0x00000000
+#define _ISAI2FILE false
+
+GameVersion = 100
+
+// Settings for each directory
+SourceDir = "."
+HLLDir = "HLL"
+ObjDir = "OBJ"
+OutputDir = ".."
+
+Source = {
+	"main.inc",
+}
