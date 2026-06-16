@@ -7,3 +7,9 @@ float float_int_literal(float f)
 	return r;
 }
 
+int int_constant_arithmetic()
+{
+	int x = 5 + 580;
+	return x;
+}
+

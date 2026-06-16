@@ -79,7 +79,7 @@ let const_unary dst e int_op float_op =
 class const_eval_visitor ctx =
   object (self)
     inherit ivisitor ctx as super
-    val mutable in_initval = false
+    val mutable in_const_ctx = false
 
     method eval_expression (expr : expression) =
       match expr.node with
@@ -109,6 +109,7 @@ class const_eval_visitor ctx =
           | PreDec -> ()
           | PostInc -> ()
           | PostDec -> ())
+      | Binary _ when not in_const_ctx -> ()
       | Binary (op, a, b) -> (
           let mk_compare op a b = if op a b then 1 else 0 in
           let const_eq = mk_compare ( = ) in
@@ -132,7 +133,7 @@ class const_eval_visitor ctx =
           match op with
           | Plus ->
               const_binary expr a.node b.node (Some ( + )) (Some ( +. ))
-                (if in_initval then Some ( ^ ) else None)
+                (Some ( ^ ))
           | Minus ->
               const_binary expr a.node b.node (Some ( - )) (Some ( -. )) None
           | Times ->
@@ -159,6 +160,7 @@ class const_eval_visitor ctx =
           | RefEqual | RefNEqual -> ())
       | Assign (_, _, _) -> ()
       | Seq (_, _) -> ()
+      | Ternary _ when not in_const_ctx -> ()
       | Ternary (test, con, alt) -> (
           match test.node with
           | ConstInt 0 -> expr_replace expr alt
@@ -172,12 +174,12 @@ class const_eval_visitor ctx =
               | ConstFloat f -> const_replace expr (ConstInt (Int.of_float f))
               | ConstChar _ -> () (* TODO? *)
               | _ -> ())
-          | Bool when in_initval -> (
+          | Bool when in_const_ctx -> (
               match e.node with
               | ConstInt i ->
                   const_replace expr (ConstInt (if i = 0 then 0 else 1))
               | _ -> ())
-          | Float when in_initval -> (
+          | Float when in_const_ctx -> (
               match e.node with
               | ConstInt i -> const_replace expr (ConstFloat (Float.of_int i))
               | ConstFloat _ -> const_replace expr e.node
@@ -213,11 +215,20 @@ class const_eval_visitor ctx =
       super#visit_expression expr;
       self#eval_expression expr
 
+    method! visit_statement s =
+      match s.node with
+      | Case _ ->
+          let saved = in_const_ctx in
+          in_const_ctx <- true;
+          super#visit_statement s;
+          in_const_ctx <- saved
+      | _ -> super#visit_statement s
+
     method! visit_variable v =
-      in_initval <-
+      in_const_ctx <-
         Option.is_some v.initval && (Poly.(v.kind <> LocalVar) || v.is_const);
       super#visit_variable v;
-      in_initval <- false;
+      in_const_ctx <- false;
       if v.is_const then
         match v.initval with
         | Some e -> (
