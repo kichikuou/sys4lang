@@ -177,7 +177,7 @@ class const_eval_visitor ctx =
               | ConstInt i ->
                   const_replace expr (ConstInt (if i = 0 then 0 else 1))
               | _ -> ())
-          | Float -> (
+          | Float when in_initval -> (
               match e.node with
               | ConstInt i -> const_replace expr (ConstFloat (Float.of_int i))
               | ConstFloat _ -> const_replace expr e.node

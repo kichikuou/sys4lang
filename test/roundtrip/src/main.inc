@@ -5,4 +5,5 @@ Source = {
 	"HLL\hll.inc",
 	"main.jaf",
 	"control.jaf",
+	"arith.jaf",
 }
