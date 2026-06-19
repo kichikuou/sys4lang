@@ -855,8 +855,12 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       Stack.pop_exn current_function |> ignore
 
     method print_constants =
-      self#println "const int true = 1;";
-      self#println "const int false = 0;";
+      if Ain.ain.vers >= 6 then (
+        self#println "const bool true = 1;";
+        self#println "const bool false = 0;")
+      else (
+        self#println "const int true = 1;";
+        self#println "const int false = 0;");
       self#print_newline
 
     method private print_hll_function (func : Ain.HLL.function_t) =

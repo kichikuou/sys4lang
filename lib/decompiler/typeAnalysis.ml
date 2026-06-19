@@ -440,6 +440,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       let expected_arg_type =
         match insn with PSEUDO_LOGAND | PSEUDO_LOGOR -> Bool | _ -> Any
       in
+      let expected_literal_type other_ty =
+        match (insn, other_ty) with
+        | (LT | GT | LTE | GTE), Bool -> Int
+        | _ -> other_ty
+      in
       (* If either side is a numeric literal, match it to the other side's type. *)
       match (insn, lhs, rhs) with
       | (LSHIFT | RSHIFT), _, _ ->
@@ -448,11 +453,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (BinaryOp (result_insn lt rt, lhs', rhs'), result_type lt rt)
       | _, _, Number _ ->
           let lhs', lt = self#analyze_expr expected_arg_type lhs in
-          let rhs', rt = self#analyze_expr lt rhs in
+          let rhs', rt = self#analyze_expr (expected_literal_type lt) rhs in
           (BinaryOp (result_insn lt rt, lhs', rhs'), result_type lt rt)
       | _, Number _, _ ->
           let rhs', rt = self#analyze_expr expected_arg_type rhs in
-          let lhs', lt = self#analyze_expr rt lhs in
+          let lhs', lt = self#analyze_expr (expected_literal_type rt) lhs in
           (BinaryOp (result_insn lt rt, lhs', rhs'), result_type lt rt)
       | _, _, _ ->
           let lhs, lt = self#analyze_expr expected_arg_type lhs
