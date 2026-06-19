@@ -1,0 +1,16 @@
+void nested_if_break_free(int n)
+{
+	int c;
+	for (c = 0; c < n; ++c) {
+		array@int a;
+		a.PushBack(c);
+		if (a.Empty()) {
+			if (c == 0) {
+				return;
+			} else {
+				break;
+			}
+		}
+	}
+}
+

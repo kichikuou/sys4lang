@@ -6,4 +6,5 @@ Source = {
 	"main.jaf",
 	"control.jaf",
 	"arith.jaf",
+	"free.jaf",
 }

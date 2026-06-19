@@ -216,14 +216,21 @@ let remove_implicit_array_free stmt =
       | ({ txt = Goto _ | Break | Continue; _ } as stmt) :: stmts ->
           stmt :: walk vars (remove_free vars stmts)
       | ({ txt = IfElse (e, stmt1, stmt2); _ } as stmt) :: stmts ->
-          let walk_stmt = function
-            | { txt = Block stmts; _ } as stmt ->
-                { stmt with txt = Block (walk vars stmts) }
-            | stmt -> stmt
-          in
-          { stmt with txt = IfElse (e, walk_stmt stmt1, walk_stmt stmt2) }
+          {
+            stmt with
+            txt = IfElse (e, walk_stmt vars stmt1, walk_stmt vars stmt2);
+          }
           :: walk vars stmts
       | stmt :: stmts -> stmt :: walk vars stmts
+    and walk_stmt vars = function
+      | { txt = Block stmts; _ } as stmt ->
+          { stmt with txt = Block (walk vars stmts) }
+      | { txt = IfElse (e, stmt1, stmt2); _ } as stmt ->
+          {
+            stmt with
+            txt = IfElse (e, walk_stmt vars stmt1, walk_stmt vars stmt2);
+          }
+      | stmt -> stmt
     in
     if List.is_empty vars then stmts else walk vars (remove_free vars stmts)
   in
