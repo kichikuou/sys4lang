@@ -46,7 +46,11 @@ let builtin_type receiver_type insn args =
   | A_ERASE -> (insn, Int, [ Int ])
   | A_FILL -> (insn, Int, [ Int; Int; array_element_type receiver_type ])
   | A_COPY -> (insn, Int, [ Int; Ref receiver_type; Int; Int ])
-  | A_FIND -> (insn, Int, [ Int; Int; Any; array_callback_type () ])
+  | A_FIND ->
+      ( insn,
+        Int,
+        [ Int; Int; array_element_type receiver_type; array_callback_type () ]
+      )
   | A_SORT -> (insn, Void, [ array_callback_type () ])
   | A_SORT_MEM -> (
       match receiver_type with
