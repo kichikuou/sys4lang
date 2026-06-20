@@ -458,6 +458,9 @@ class jaf_compiler ctx debug_info =
           self#write_address_at ifz_addr current_address;
           self#compile_lvalue alt;
           self#write_address_at jump_addr current_address
+      | Seq (a, b) ->
+          self#compile_expr_and_pop a;
+          self#compile_lvalue b
       | _ ->
           compiler_bug
             ("invalid lvalue: " ^ expr_to_string e)

@@ -1362,3 +1362,69 @@ let%expect_test "HLL-implemented builtin methods" =
     074: FUNC NULL
     080: EOF
     |}]
+
+let%expect_test "comma operator in reference context" =
+  compile_test
+    {|
+      void g(ref int x) {}
+      void f() {
+        int i;
+        ref int ri;
+        g((i, ri));     // left operand evaluated and discarded, ri passed by reference
+        ri <- (i, ri);  // same, in a reference assignment
+      }
+    |};
+  [%expect
+    {|
+    000: FUNC g
+    006: RETURN
+    008: ENDFUNC g
+    014: FUNC f
+    020: SH_LOCALASSIGN i, 0
+    030: CALLSYS LockPeek
+    036: POP
+    038: PUSHLOCALPAGE
+    040: PUSH 1
+    046: DUP2
+    048: REFREF
+    050: POP
+    052: DELETE
+    054: PUSH -1
+    060: PUSH 0
+    066: R_ASSIGN
+    068: POP
+    070: POP
+    072: CALLSYS UnlockPeek
+    078: POP
+    080: SH_LOCALREF i
+    086: POP
+    088: PUSHLOCALPAGE
+    090: PUSH 1
+    096: REFREF
+    098: CALLFUNC g
+    104: CALLSYS LockPeek
+    110: POP
+    112: PUSHLOCALPAGE
+    114: PUSH 1
+    120: DUP2
+    122: REFREF
+    124: POP
+    126: DELETE
+    128: SH_LOCALREF i
+    134: POP
+    136: PUSHLOCALPAGE
+    138: PUSH 1
+    144: REFREF
+    146: DUP_U2
+    148: SP_INC
+    150: R_ASSIGN
+    152: POP
+    154: POP
+    156: CALLSYS UnlockPeek
+    162: POP
+    164: RETURN
+    166: ENDFUNC f
+    172: EOF test.jaf
+    178: FUNC NULL
+    184: EOF
+    |}]
