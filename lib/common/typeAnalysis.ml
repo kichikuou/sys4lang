@@ -37,10 +37,14 @@ let is_referenceable = function
   | { node = This; _ } -> true
   | e -> is_lvalue e
 
-(* Implicit dereference of variables and members. *)
-let maybe_deref (e : expression) =
+(* Implicit dereference of variables and members. The value of a comma
+   expression follows its right operand. *)
+let rec maybe_deref (e : expression) =
   match e with
   | { ty = Ref t; node = Ident _ | Member _; _ } -> e.ty <- t
+  | { node = Seq (_, e2); _ } ->
+      maybe_deref e2;
+      e.ty <- e2.ty
   | _ -> ()
 
 let insert_rvalue_ref e =

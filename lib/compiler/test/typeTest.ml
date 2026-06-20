@@ -171,6 +171,23 @@ let%expect_test "function call" =
                            ^^^^^^^
     |}]
 
+let%expect_test "comma operator dereferences ref" =
+  type_test
+    {|
+      void f_int(int x) {}
+      void f_float(float x) {}
+
+      void test() {
+        int i;
+        ref int ri;
+        f_int((i, ri));       // comma value is ref int -> deref to int: ok
+        f_float((i, ri));     // deref then coerce to float: ok
+        f_int((i, (i, ri)));  // nested comma: ok
+        int j = (i, ri);      // comma in initializer: ok
+      }
+    |};
+  [%expect {| ok |}]
+
 let%expect_test "default parameter" =
   type_test
     {|
