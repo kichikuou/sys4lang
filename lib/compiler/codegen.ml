@@ -71,6 +71,9 @@ class jaf_compiler ctx debug_info =
     (* Labels/gotos record for the current function. *)
     val mutable labels = Hashtbl.create (module String)
 
+    (* Running CRC-32 of the current function. *)
+    val mutable crc_state : Crc32.t = Crc32.Inactive
+
     (** Begin a scope. Variables created within a scope are deleted when the
         scope ends. *)
     method start_scope = Stack.push scopes { vars = [] }
@@ -225,8 +228,17 @@ class jaf_compiler ctx debug_info =
           | None -> compile_error "No HLL function found for built-in" parent)
       | None -> compile_error "No HLL library found for built-in" parent
 
+    (* Feed a 32-bit word into the running CRC. *)
+    method private crc_push_word n = crc_state <- Crc32.feed_word crc_state n
+
+    (* Hash a label/goto's qualified name "FuncName::labelName" into the CRC. *)
+    method private crc_push_label_name label =
+      let name = (Option.value_exn current_function).name ^ "::" ^ label in
+      crc_state <- Crc32.feed_string crc_state name
+
     method write_instruction0 op =
       CBuffer.write_int16 buffer (int_of_opcode op);
+      self#crc_push_word (int_of_opcode op);
       current_address <- current_address + 2
 
     method write_instruction1 op arg0 =
@@ -234,6 +246,7 @@ class jaf_compiler ctx debug_info =
       | SH_STRUCTREF when Ain.version_lt ctx.ain (1, 0) ->
           (* ain v0 encodes SH_STRUCTREF as 0x62 (which is EOF from v1 on). *)
           CBuffer.write_int16 buffer 0x62;
+          self#crc_push_word 0x62;
           CBuffer.write_int32 buffer arg0;
           current_address <- current_address + 6
       | S_MOD when Ain.version_lt ctx.ain (11, 0) ->
@@ -241,22 +254,26 @@ class jaf_compiler ctx debug_info =
           self#write_instruction0 S_MOD
       | _ ->
           CBuffer.write_int16 buffer (int_of_opcode op);
+          self#crc_push_word (int_of_opcode op);
           CBuffer.write_int32 buffer arg0;
           current_address <- current_address + 6
 
     method write_instruction1_float op arg0 =
       CBuffer.write_int16 buffer (int_of_opcode op);
+      self#crc_push_word (int_of_opcode op);
       CBuffer.write_float buffer arg0;
       current_address <- current_address + 6
 
     method write_instruction2 op arg0 arg1 =
       CBuffer.write_int16 buffer (int_of_opcode op);
+      self#crc_push_word (int_of_opcode op);
       CBuffer.write_int32 buffer arg0;
       CBuffer.write_int32 buffer arg1;
       current_address <- current_address + 10
 
     method write_instruction3 op arg0 arg1 arg2 =
       CBuffer.write_int16 buffer (int_of_opcode op);
+      self#crc_push_word (int_of_opcode op);
       CBuffer.write_int32 buffer arg0;
       CBuffer.write_int32 buffer arg1;
       CBuffer.write_int32 buffer arg2;
@@ -1116,7 +1133,10 @@ class jaf_compiler ctx debug_info =
           List.iter decls.vars ~f:self#compile_variable_declaration
       | Expression e -> self#compile_expr_and_pop e
       | Compound stmts -> self#compile_block stmts
-      | Label name -> self#add_label name stmt
+      | Label name ->
+          self#crc_push_word 0x406;
+          self#crc_push_label_name name;
+          self#add_label name stmt
       | If (test, con, alt) ->
           self#compile_expression test;
           let ifz_addr = current_address + 2 in
@@ -1190,8 +1210,14 @@ class jaf_compiler ctx debug_info =
               self#write_address_at break_addr current_address);
           self#end_loop
       | Goto name ->
+          self#crc_push_word 0x407;
+          self#crc_push_label_name name;
+          (* The 0x407 marker replaces the JUMP, so don't hash the JUMP. *)
+          let saved = crc_state in
+          crc_state <- Crc32.Inactive;
           self#add_goto name (current_address + 2) stmt;
-          self#write_instruction1 JUMP 0
+          self#write_instruction1 JUMP 0;
+          crc_state <- saved
       | Continue -> self#add_continue (ASTStatement stmt)
       | Break ->
           self#push_break_addr (current_address + 2) (ASTStatement stmt);
@@ -1387,12 +1413,26 @@ class jaf_compiler ctx debug_info =
       cflow_stmts <- Stack.create ();
       let prev_labels = labels in
       labels <- Hashtbl.create (module String);
+      (* Freeze the parent's CRC: it stops at this nested FUNC (lambda). *)
+      let prev_crc_state = Crc32.freeze crc_state in
       self#write_instruction1 FUNC index;
+      (* Accumulate the function CRC over the return/argument type codes and the
+         body opcodes. FUNC and ENDFUNC are excluded. *)
+      crc_state <- Crc32.start;
+      let int_of_data_type t =
+        Ain.Type.int_of_data_type (Ain.version ctx.ain) t
+      in
+      self#crc_push_word (int_of_data_type func.return_type);
+      List.iter (Ain.Function.logical_parameters func) ~f:(fun v ->
+          self#crc_push_word (int_of_data_type v.value_type));
       self#compile_block (Option.value_exn decl.body);
       if not (func.is_label || String.equal func.name "NULL") then (
         self#compile_default_return func.return_type
           (ASTDeclaration (Function decl));
         self#write_instruction0 RETURN);
+      let crc = Crc32.finalize crc_state in
+      crc_state <- prev_crc_state;
+      let func = { func with crc } in
       (* ENDFUNC is not generated for the "NULL" function and methods except
          auto-generated array initializers. ain v0/v1 does not have ENDFUNC. *)
       (match decl with
