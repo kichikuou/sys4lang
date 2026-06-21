@@ -1146,6 +1146,17 @@ let write_functype buf ain (ft : FunctionType.t) =
   BB.add_int buf (List.length ft.variables);
   List.iter ft.variables ~f:(write_variable buf ain)
 
+(* Write an FNCT/DELG section. Its second field is the byte size of the section
+   excluding the 4-byte magic tag. *)
+let write_functype_section buf ain tag (entries : FunctionType.t Dynarray.t) =
+  let module BB = BinBuffer in
+  BB.add_string buf tag;
+  let body = BB.create 1024 in
+  BB.add_int body (Dynarray.length entries);
+  Dynarray.iter (write_functype body ain) entries;
+  BB.add_int buf (BB.length body + 4);
+  Buffer.add_buffer buf body
+
 let to_buffer ain =
   let global_initvals =
     let acc = ref [] in
@@ -1221,19 +1232,11 @@ let to_buffer ain =
     BB.add_string buf "OJMP";
     BB.add_int buf ain.ojmp);
   (* XXX: section disappears in Rance IX (mid v6) *)
-  if Dynarray.length ain.function_types > 0 then (
-    BB.add_string buf "FNCT";
-    BB.add_int buf 0;
-    (* FIXME: section size *)
-    BB.add_int buf (Dynarray.length ain.function_types);
-    Dynarray.iter (write_functype buf ain) ain.function_types);
+  if Dynarray.length ain.function_types > 0 then
+    write_functype_section buf ain "FNCT" ain.function_types;
   (* XXX: section first appears in Oyako Rankan (mid v6) *)
-  if Dynarray.length ain.delegates > 0 then (
-    BB.add_string buf "DELG";
-    BB.add_int buf 0;
-    (* FIXME: section size *)
-    BB.add_int buf (Dynarray.length ain.delegates);
-    Dynarray.iter (write_functype buf ain) ain.delegates);
+  if Dynarray.length ain.delegates > 0 then
+    write_functype_section buf ain "DELG" ain.delegates;
   if version_gte ain (5, 0) then (
     BB.add_string buf "OBJG";
     BB.add_int buf (Dynarray.length ain.global_group_names);
