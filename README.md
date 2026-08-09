@@ -104,6 +104,7 @@ Arguments:
 | Argument | Description |
 |----------|-------------|
 | `AIN_FILE` | The `.ain` file to decompile. |
+| `FUNCTION` | Optional. Restricts the output to a single function. With `--disassemble`/`--disassemble-raw`, only this function is disassembled; otherwise, detailed information about its decompilation process is printed. |
 
 Options:
 
@@ -113,7 +114,6 @@ Options:
 | `--address` | Print bytecode addresses as comments in the output. |
 | `--disassemble` | Disassemble the code section instead of decompiling. |
 | `--disassemble-raw` | Like `--disassemble`, but without resolving identifiers or generating labels (raw listing with addresses). |
-| `--inspect FUNCTION` | Print detailed information about the decompilation process for a single function, instead of decompiling the entire file. |
 | `--move-to-original-file` | Move overridden functions to the files where they were originally defined. Useful for mods created with AinDecompiler. |
 | `--continue-on-error` | Continue decompilation even if an error is encountered in one function. |
 
