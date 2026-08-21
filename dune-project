@@ -32,7 +32,7 @@
    dune
    dune-build-info
    (linol-eio (and (>= "0.11") (< "0.12")))
-   eio_main
+   (eio_main (>= "1.6"))
    fpath
    menhir
    yojson
