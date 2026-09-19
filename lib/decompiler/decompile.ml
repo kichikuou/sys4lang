@@ -16,6 +16,7 @@
 
 open Base
 open Loc
+open Ast
 
 let collect_lambdas lambdas parent body =
   let acc = ref [] in
@@ -27,6 +28,99 @@ let collect_lambdas lambdas parent body =
     | _ -> ());
   List.rev !acc
 
+(* HACK: In the Darknesshero Rance mod, damageall/quakeall/healall use an
+   array<tagBattleBusho> as an array of nullable references.  For example, the
+   essential bytecode sequence
+
+     batnums; i; REF; DELETE; PUSH -1; ASSIGN
+
+   releases the object referenced by batnums[i] and stores NULL in that array
+   slot.  The VM supports this, but JAF/sys4c cannot express reference
+   assignment to a struct-array element directly.  Rewrite the temporary to the
+   representation used by the original Rance7.ain instead.  In source-like
+   notation, the transformation is:
+
+     // DHR semantics; the assignment itself is not valid JAF.
+     array@tagBattleBusho batnums[6]; batnums[i] <- value;
+       =>
+     // Valid JAF accepted by sys4c.
+     array@RefTagBattleBusho batnums[6]; batnums[i].value <- value;
+
+   RefTagBattleBusho contains a single `ref tagBattleBusho value` member, so
+   this preserves the references held by the array while producing valid JAF. *)
+let rewrite_dhr_battle_busho_array (f : CodeSection.function_t) stmt =
+  let affected_function =
+    List.mem
+      [ "tagBattle@damageall"; "tagBattle@quakeall"; "tagBattle@healall" ]
+      f.func.name ~equal:String.equal
+  in
+  if not affected_function then stmt
+  else
+    match
+      ( Hashtbl.find Ain.ain.struct_by_name "tagBattleBusho",
+        Hashtbl.find Ain.ain.struct_by_name "RefTagBattleBusho" )
+    with
+    | Some busho, Some wrapper -> (
+        match
+          ( Array.find_mapi f.func.vars ~f:(fun i v ->
+                match v with
+                | { name = "batnums"; type_ = Type.Array (Type.Struct sno); _ }
+                  when sno = busho.id ->
+                    Some (i, v)
+                | _ -> None),
+            Array.find_mapi wrapper.members ~f:(fun i v ->
+                match v with
+                | { name = "value"; type_ = Type.Ref (Type.Struct sno); _ }
+                  when sno = busho.id ->
+                    Some (i, v)
+                | _ -> None) )
+        with
+        | Some (var_index, old_var), Some (value_index, _) ->
+            let new_var =
+              { old_var with type_ = Type.Array (Type.Struct wrapper.id) }
+            in
+            let is_old_var v = phys_equal v old_var || Poly.equal v old_var in
+            let is_new_array = function
+              | Load (Var (LocalPage, v)) -> phys_equal v new_var
+              | _ -> false
+            in
+            let member_slot array index =
+              Slot
+                ( Load (Slot (array, index)),
+                  Number (Int32.of_int_exn value_index) )
+            in
+            let rewrite_expr = function
+              | Load (Var (LocalPage, v)) when is_old_var v ->
+                  Load (Var (LocalPage, new_var))
+              | RefTo (Var (LocalPage, v)) when is_old_var v ->
+                  RefTo (Var (LocalPage, new_var))
+              | Call (Builtin (op, Var (LocalPage, v)), args) when is_old_var v
+                ->
+                  Call (Builtin (op, Var (LocalPage, new_var)), args)
+              | Load (Slot (array, index)) when is_new_array array ->
+                  Load (member_slot array index)
+              | RefTo (Slot (array, index)) when is_new_array array ->
+                  RefTo (member_slot array index)
+              | AssignOp (op, Slot (array, index), rhs) when is_new_array array
+                ->
+                  AssignOp (op, member_slot array index, rhs)
+              | expr -> expr
+            in
+            let stmt = Ast.map_expr stmt ~f:rewrite_expr in
+            let stmt =
+              Ast.map_stmt stmt ~f:(function
+                | VarDecl (v, init) when is_old_var v -> VarDecl (new_var, init)
+                | stmt -> stmt)
+            in
+            f.func.vars.(var_index) <- new_var;
+            Stdio.eprintf
+              "Warning: Rewriting %s's array<tagBattleBusho> temporary as "
+              f.func.name;
+            Stdio.eprintf "array<RefTagBattleBusho>\n";
+            stmt
+        | _ -> stmt)
+    | _ -> stmt
+
 let rec decompile_function ~lambdas (f : CodeSection.function_t) =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   let body =
@@ -34,6 +128,7 @@ let rec decompile_function ~lambdas (f : CodeSection.function_t) =
     |> BasicBlock.generate_var_decls f.func
     |> ControlFlow.analyze
     |> BasicBlock.prepend_var_decls f.func
+    |> rewrite_dhr_battle_busho_array f
     |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
     |> Transform.apply_all_transforms
   in
@@ -52,6 +147,7 @@ let rec inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   |> BasicBlock.generate_var_decls f.func
   |> ControlFlow.analyze
   |> BasicBlock.prepend_var_decls f.func
+  |> rewrite_dhr_battle_busho_array f
   |> (fun stmt ->
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
