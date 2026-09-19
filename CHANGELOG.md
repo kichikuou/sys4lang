@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.1 - 2026-09-20
+
+- Decompiler: The DarknessHero Rance mod now decompiles correctly.
+- Decompiler: Function inspection now uses a positional `FUNCTION` argument (for example, `sys4dc game.ain FunctionName`) instead of the removed `--inspect` option.
+- Decompiler: Added `--disassemble` and `--disassemble-raw` for inspecting AIN bytecode.
+- Compiler: Generated AIN files now include correct function CRCs and FNCT/DELG section sizes.
+- Compiler: Added `sys4c build --no-debug-info` to skip writing `debug_info.json`.
+- LSP: A `.pje` file can now be supplied as a command-line argument. The server also accepts source-file messages up to 8 MiB.
+
 ## 0.9.0 - 2026-06-06
 - Compiler: **Scoping rule change for variable declarations in `for` loops.** A variable declared in the initializer of a `for` loop (e.g. `for (int i = 0; ...)`) is now placed in the enclosing scope, so it remains visible after the loop. Previously sys4c scoped the variable to the loop body (as C/Java do).
 - Compiler, Decompiler: Added support for ain v0 (DALK gaiden) and v1 (Mamanyonyo).
