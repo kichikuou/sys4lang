@@ -394,7 +394,7 @@ let applyGSET ain =
       ain.glob.(initval.global_index) <-
         { (ain.glob.(initval.global_index)) with init_val = Some initval.value })
 
-let ain =
+let create () =
   {
     vers = -1;
     keyc = -1l;
@@ -424,7 +424,9 @@ let ain =
     ifthen_optimized = false;
   }
 
-let readSections br =
+let ain = create ()
+
+let readSections ain br =
   while not (BR.eof br) do
     match BR.tag br with
     | "VERS" -> ain.vers <- readVERS br
@@ -485,10 +487,15 @@ let decode bytes =
       (Buffer.contents_bytes ain_buf, true)
   | _ -> failwith "unrecognized .ain format"
 
-let load path =
+let load_into loaded path =
   let bytes, is_ai2 =
     Bytes.of_string (Stdio.In_channel.read_all path) |> decode
   in
-  ain.is_ai2 <- is_ai2;
-  readSections (BR.create bytes { version = -1 });
-  applyGSET ain
+  loaded.is_ai2 <- is_ai2;
+  readSections loaded (BR.create bytes { version = -1 });
+  applyGSET loaded
+
+let load path =
+  let loaded = create () in
+  load_into loaded path;
+  loaded

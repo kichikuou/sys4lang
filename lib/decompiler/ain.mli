@@ -153,5 +153,6 @@ type t = {
   mutable ifthen_optimized : bool;
 }
 
+val load : string -> t
 val ain : t
-val load : string -> unit
+val load_into : t -> string -> unit

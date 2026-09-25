@@ -40,7 +40,7 @@ let write_to_file out_dir fname buf =
 let sys4dc output_dir print_addr move_to_original_file continue_on_error
     disassemble disassemble_raw func ain_file =
   let output_dir = Option.value output_dir ~default:"." in
-  Ain.load ain_file;
+  Ain.load_into Ain.ain ain_file;
   if disassemble || disassemble_raw then
     Disassemble.disassemble ~raw:disassemble_raw ?func ()
   else
