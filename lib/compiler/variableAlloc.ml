@@ -256,8 +256,9 @@ class variable_alloc_visitor ctx =
         (* write updated fundecl to ain file *)
         let vars = List.rev (Stack.pop_exn func_vars) in
         (if not (f.is_label && Ain.version ctx.ain = 1) then
-           match Ain.get_function ctx.ain (mangled_name f) with
-           | Some obj ->
+           match f.index with
+           | Some index ->
+               let obj = Ain.get_function_by_index ctx.ain index in
                obj |> jaf_to_ain_function f |> add_vars vars
                |> Ain.write_function ctx.ain
            | None ->

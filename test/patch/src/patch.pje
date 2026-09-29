@@ -1,0 +1,9 @@
+Encoding = "UTF-8"
+
+CodeName = "base.ain"
+
+#define _AINVERSION 4
+
+Source = {
+	"base.jaf",
+}

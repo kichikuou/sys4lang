@@ -164,12 +164,86 @@ let cmd_build_pje =
   in
   Cmd.v info Term.(const do_build $ project $ output_dir $ no_debug_info)
 
+let cmd_patch =
+  let doc = "Apply selected source changes to an existing AIN." in
+  let man =
+    [
+      `S Manpage.s_description;
+      `P
+        "Requires a PJE project, a base AIN (version below 8), and one or more \
+         names or source JAF/HLL files. Existing functions are replaced and \
+         new functions and selected types are added. Global groups and HLL \
+         libraries/functions may also be added. Debug information is updated.";
+      `P
+        "Successful compilation does not certify save compatibility. The patch \
+         author must follow the System4 SDK ResumeSave restrictions.";
+      `P
+        "Selecting any global variable or group rebuilds the complete global \
+         variable declarations. New globals may only be added after existing \
+         globals. Selecting a class likewise permits trailing data-member \
+         additions.";
+    ]
+  in
+  let project =
+    Arg.(required & pos 0 (some string) None & info [] ~docv:"PROJECT")
+  in
+  let targets = Arg.(value & pos_right 0 string [] & info [] ~docv:"TARGET") in
+  let base =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "base-ain" ] ~docv:"BASE_AIN"
+          ~doc:"Base AIN. Defaults to the AIN path specified by PROJECT.")
+  in
+  let output =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "o"; "output" ] ~docv:"OUTPUT_AIN"
+          ~doc:"Output AIN. Defaults to the AIN path specified by PROJECT.")
+  in
+  let sources =
+    Arg.(
+      value & opt_all string []
+      & info [ "source" ] ~docv:"PATCH_SOURCE"
+          ~doc:"Select declarations from PATCH_SOURCE. Repeatable.")
+  in
+  let no_debug_info =
+    let doc = "Do not read or write the debug_info.json file." in
+    Arg.(value & flag & info [ "no-debug-info" ] ~doc)
+  in
+  let run project targets base sources output no_debug_info =
+    handle_errors
+      (fun () ->
+        try
+          let result =
+            Patch.compile ?base ~targets ~sources ?output
+              ~write_debug_info:(not no_debug_info) project
+          in
+          List.iter (result.added_types @ result.added_entries)
+            ~f:(fun (kind, name) -> Stdio.printf "Added %s: %s\n" kind name);
+          List.iter result.replaced ~f:(Stdio.printf "Replaced: %s\n");
+          List.iter result.added ~f:(Stdio.printf "Added: %s\n")
+        with
+        | Unix.Unix_error (error, operation, path) ->
+            raise
+              (Sys_error
+                 (operation ^ " " ^ path ^ ": " ^ Unix.error_message error))
+        | Pje.KeyError message | Failure message | Invalid_argument message ->
+            raise (Sys_error message))
+      (fun _ -> None)
+  in
+  Cmd.v
+    (Cmd.info "patch" ~doc ~man)
+    Term.(
+      const run $ project $ targets $ base $ sources $ output $ no_debug_info)
+
 let cmd =
   let doc = "System 4 Compiler" in
   let version =
     Option.map (Build_info.V1.version ()) ~f:Build_info.V1.Version.to_string
   in
   let info = Cmd.info "sys4c" ?version ~doc in
-  Cmd.group info [ cmd_compile_jaf; cmd_build_pje ]
+  Cmd.group info [ cmd_compile_jaf; cmd_build_pje; cmd_patch ]
 
 let () = Stdlib.exit (Cmd.eval cmd)

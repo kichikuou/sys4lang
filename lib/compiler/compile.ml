@@ -24,13 +24,7 @@ type source =
 
 type program = source list
 
-let parse_file lexer parser file read_file =
-  let source = read_file file in
-  let lexbuf = Lexing.from_string source in
-  Lexing.set_filename lexbuf file;
-  try parser lexer lexbuf with
-  | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
-  | e -> raise e
+let parse_file = SourceParser.parse_file
 
 (* pass 1: Parse jaf/hll files and create symbol table entries *)
 let parse_pass ctx sources read_file =

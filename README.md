@@ -6,7 +6,7 @@ Games up to Heartful Maman (early 2017) are currently supported. Games from Beat
 
 ## Components
 
-*   **sys4c (Compiler):** A compiler for System 4. This is primarily intended for building source files that were decompiled using `sys4dc`. Unlike AinDecompiler, it focuses on full builds and cannot modify only specific functions in an existing `.ain` file.
+*   **sys4c (Compiler):** A compiler for System 4. This is primarily intended for building source files that were decompiled using `sys4dc`. It supports full builds and patching an existing `.ain` file with selected function replacements or new functions.
 
 *   **sys4dc (Decompiler):** A decompiler for System 4 `.ain` files.
 
@@ -56,7 +56,7 @@ $ sys4c build src/SengokuRance.pje
 
 ### sys4c
 
-`sys4c` is the System 4 compiler. It has two subcommands.
+`sys4c` is the System 4 compiler. It has three subcommands.
 
 #### `sys4c build PROJECT`
 
@@ -90,6 +90,35 @@ Options:
 | `--ain-minor-version MINOR` | `0` | Minor version of the output `.ain` file. |
 | `--import-as HLL_NAME=NAME` | | Import an `.hll` file under a different name. Can be specified multiple times. |
 | `--input-encoding ENCODING` | `UTF-8` | Input file encoding: `UTF-8` or `Shift_JIS`. |
+
+#### `sys4c patch PROJECT [TARGET...]`
+
+Replace selected functions, add functions, types, global groups, or HLL entries, and rebuild array initialization in an existing AIN below version 8. Targets can name functions, methods, types, globals, global groups, or HLL imports.
+
+```sh
+$ sys4c patch src/SengokuRance.pje --base-ain SengokuRance.ain \
+    --source fixes.jaf -o SengokuRance-patched.ain
+```
+
+Arguments:
+
+| Argument | Description |
+|----------|-------------|
+| `PROJECT` | The `.pje` project file containing the source declarations. |
+| `TARGET` | Optional. A function, method, type, global, global group, or HLL import to select. Can be specified multiple times. |
+
+Options:
+
+| Option | Description |
+|--------|-------------|
+| `--base-ain BASE_AIN` | Base `.ain` file. Defaults to the AIN path specified by `PROJECT`. |
+| `--source PATCH_SOURCE` | Select declarations from a `.jaf` or `.hll` file. Can be specified multiple times. |
+| `-o, --output OUTPUT_AIN` | Output `.ain` file. Defaults to the AIN path specified by `PROJECT`. |
+| `--no-debug-info` | Do not read or update the `debug_info.json` file. |
+
+Omitting both `--base-ain` and `--output` updates the project's AIN in place. The command reports replaced and added names, and extends an existing `debug_info.json` with mappings for appended code.
+
+**Successful compilation does not certify save compatibility.** Follow the System4 SDK ResumeSave restrictions for functions on saved call stacks. See the [patch usage guide](docs/patch-usage.md) for examples, source selection, array regeneration, repeated patches and limitations.
 
 ### sys4dc
 

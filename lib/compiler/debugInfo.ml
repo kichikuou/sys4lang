@@ -23,19 +23,23 @@ type t = {
   mutable sources : string list;
   mutable current_src : int;
   mutable mappings : debug_mapping list;
+  mutable force_new_source : bool;
 }
 
-let create () = { sources = []; current_src = -1; mappings = [] }
+let create () =
+  { sources = []; current_src = -1; mappings = []; force_new_source = false }
 
 let add dbginfo addr file line =
   let src =
     match dbginfo.sources with
-    | s :: _ when String.equal s file -> dbginfo.current_src
+    | s :: _ when (not dbginfo.force_new_source) && String.equal s file ->
+        dbginfo.current_src
     | _ ->
         dbginfo.sources <- file :: dbginfo.sources;
         dbginfo.current_src <- dbginfo.current_src + 1;
         dbginfo.current_src
   in
+  dbginfo.force_new_source <- false;
   dbginfo.mappings <-
     (match dbginfo.mappings with
     | [] -> [ { addr; src; line } ]
@@ -66,5 +70,60 @@ let to_json dbginfo =
       ("sources", `List sources);
       ("mappings", `List mappings);
     ]
+
+let invalid file message =
+  raise (Sys_error (file ^ ": invalid debug information: " ^ message))
+
+let load file =
+  let json =
+    try Yojson.Basic.from_file file with
+    | Yojson.Json_error message -> invalid file message
+    | Sys_error _ as error -> raise error
+  in
+  let member name fields =
+    match List.Assoc.find fields ~equal:String.equal name with
+    | Some value -> value
+    | None -> invalid file ("missing " ^ name)
+  in
+  let fields =
+    match json with
+    | `Assoc fields -> fields
+    | _ -> invalid file "top-level value is not an object"
+  in
+  (match member "version" fields with
+  | `String "alpha-1" -> ()
+  | `String version -> invalid file ("unsupported version " ^ version)
+  | _ -> invalid file "version is not a string");
+  let sources =
+    match member "sources" fields with
+    | `List values ->
+        List.map values ~f:(function
+          | `String source -> source
+          | _ -> invalid file "source path is not a string")
+    | _ -> invalid file "sources is not an array"
+  in
+  let nr_sources = List.length sources in
+  let mappings =
+    match member "mappings" fields with
+    | `List values ->
+        List.map values ~f:(function
+          | `List [ `Int addr; `Int src; `Int line ] -> { addr; src; line }
+          | _ -> invalid file "mapping is not an array of three integers")
+    | _ -> invalid file "mappings is not an array"
+  in
+  {
+    sources = List.rev sources;
+    current_src = nr_sources - 1;
+    mappings = List.rev mappings;
+    force_new_source = false;
+  }
+
+let last_address dbginfo =
+  match dbginfo.mappings with [] -> None | m :: _ -> Some m.addr
+
+let start_patch dbginfo = dbginfo.force_new_source <- true
+
+let write_to_channel dbginfo channel =
+  Yojson.Basic.to_channel channel (to_json dbginfo)
 
 let write_to_file dbginfo file = Yojson.Basic.to_file file (to_json dbginfo)

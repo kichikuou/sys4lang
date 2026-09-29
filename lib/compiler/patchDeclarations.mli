@@ -1,4 +1,4 @@
-(* Copyright (C) 2025 kichikuou <KichikuouChrome@gmail.com>
+(* Copyright (C) 2026 kichikuou <KichikuouChrome@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,20 +14,21 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+open Common
+
 type t
 
-val create : unit -> t
+(** Add the selected declarations to the AIN and bind all source declarations to
+    it. *)
+val create : Ain.t -> PatchSources.t -> t
 
-(** Read an [alpha-1] debug information file. *)
-val load : string -> t
+val context : t -> Jaf.context
+val added_types : t -> (string * string) list
 
-val last_address : t -> int option
+(** Added global groups, HLL libraries and HLL functions. *)
+val added_entries : t -> (string * string) list
 
-(** Make the next mapping use a new source index. *)
-val start_patch : t -> unit
+val resolve_type : t -> Jaf.type_specifier -> unit
 
-val add : t -> int -> string -> int -> unit
-val add_loc : t -> int -> Lexing.position * Lexing.position -> unit
-val to_json : t -> Yojson.Basic.t
-val write_to_channel : t -> Stdlib.out_channel -> unit
-val write_to_file : t -> string -> unit
+(** Bind the compiler-generated array initializer called by a constructor. *)
+val bind_initializer_reference : t -> Jaf.fundecl -> unit

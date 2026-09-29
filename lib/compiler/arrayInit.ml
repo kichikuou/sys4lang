@@ -21,6 +21,7 @@ open Jaf
 let make_stmt node = { node; delete_vars = []; loc = dummy_location }
 
 let array_alloc_stmt (v : variable) =
+  let make_expr = make_expr ~loc:v.location in
   let var = make_expr (Ident (v.name, UnresolvedIdent)) in
   let func = make_expr (Member (var, "Alloc", UnresolvedMember)) in
   let call =
@@ -30,7 +31,15 @@ let array_alloc_stmt (v : variable) =
            List.map ~f:Option.some v.array_dim,
            BuiltinCall Bytecode.ArrayAlloc ))
   in
-  make_stmt (Expression call)
+  { (make_stmt (Expression call)) with loc = v.location }
+
+let insert_array_initializer_call (fdecl : fundecl) =
+  let func = make_expr ~loc:fdecl.loc (Ident ("2", UnresolvedIdent)) in
+  let call = make_expr ~loc:fdecl.loc (Call (func, [], UnresolvedCall)) in
+  fdecl.body <-
+    Some
+      ({ (make_stmt (Expression call)) with loc = fdecl.loc }
+      :: Option.value_exn fdecl.body)
 
 class visitor ctx =
   object (self)
@@ -38,12 +47,8 @@ class visitor ctx =
     val mutable initializer_funcs : declaration list = []
     val mutable global_init_stmts : statement list = []
 
-    method insert_array_initializer_call (fdecl : fundecl) =
-      (* insert `2();` at the beginning of constructor body *)
-      let func = make_expr (Ident ("2", UnresolvedIdent)) in
-      let call = make_expr (Call (func, [], UnresolvedCall)) in
-      fdecl.body <-
-        Some (make_stmt (Expression call) :: Option.value_exn fdecl.body)
+    method insert_array_initializer_call fdecl =
+      insert_array_initializer_call fdecl
 
     method visit_struct_decl s =
       let initialize_stmts = ref [] in
