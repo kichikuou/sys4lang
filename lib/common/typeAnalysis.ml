@@ -217,7 +217,7 @@ let type_coerce_numerics parent op a b =
       | _ -> compile_error "invalid operation on boolean type" parent)
   | _ -> compiler_bug "coerce_numerics: non-numeric type" (Some parent)
 
-class type_analyze_visitor ctx =
+class type_analyze_visitor ?(register_entrypoints = true) ctx =
   object (self)
     inherit ivisitor ctx as super
     val mutable errors : compile_error list = []
@@ -869,13 +869,13 @@ class type_analyze_visitor ctx =
 
     method! visit_fundecl f =
       super#visit_fundecl f;
-      if String.equal f.name "main" then
+      if register_entrypoints && String.equal f.name "main" then
         match (f.return.ty, f.params) with
         | Int, [] -> Ain.set_main_function ctx.ain (Option.value_exn f.index)
         | _ ->
             compile_error "Invalid declaration of 'main' function"
               (ASTDeclaration (Function f))
-      else if String.equal f.name "message" then
+      else if register_entrypoints && String.equal f.name "message" then
         match f.return.ty with
         | Void -> (
             match List.map f.params ~f:(fun v -> v.type_spec.ty) with

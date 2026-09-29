@@ -280,6 +280,8 @@ class jaf_compiler ctx debug_info =
       current_address <- current_address + 14
 
     method write_address_at dst addr =
+      if dst < start_address || dst + 4 > current_address then
+        failwith "bytecode address fixup outside the current output buffer";
       CBuffer.write_int32_at buffer (dst - start_address) addr
 
     method write_buffer =

@@ -1,0 +1,33 @@
+int target(int value)
+{
+	return fresh(value);
+}
+
+int fresh(int value)
+{
+	return value + 1;
+}
+
+class NewClass {
+public:
+	int value;
+	array@int values[3];
+
+	NewClass() { value = 2; }
+	~NewClass() { value = 0; }
+	int method() { return value; }
+};
+
+struct NewStruct {
+	NewClass object;
+};
+
+functype int Callback(int value);
+delegate void EventHandler(ref NewStruct value);
+
+int use_new_types(NewStruct argument, Callback callback, EventHandler event)
+{
+	NewStruct local;
+	local.object.value = argument.object.value;
+	return callback(local.object.method());
+}

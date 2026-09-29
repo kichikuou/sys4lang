@@ -1297,6 +1297,17 @@ let get_global ain name =
   |> Option.map ~f:(fun i -> (Dynarray.get ain.globals i).variable)
 
 let get_global_by_index ain no = (Dynarray.get ain.globals no).variable
+let get_global_group_index ain no = (Dynarray.get ain.globals no).group_index
+
+let find_global_group_index ain name =
+  let exception Found of int in
+  match
+    Dynarray.iteri
+      (fun i n -> if String.equal n name then Stdlib.raise_notrace (Found i))
+      ain.global_group_names
+  with
+  | () -> None
+  | exception Found i -> Some i
 
 let set_global_type ain name t =
   match Hashtbl.find ain.global_by_name name with
@@ -1306,17 +1317,20 @@ let set_global_type ain name t =
         { g with variable = { g.variable with value_type = t } }
   | None -> failwith (sprintf "No global named '%s' in ain object" name)
 
-let set_global_initval ain name initval =
+let set_global_initval_opt ain name initval =
   match Hashtbl.find ain.global_by_name name with
   | Some i ->
       let g = Dynarray.get ain.globals i in
       Dynarray.set ain.globals i
-        { g with variable = { g.variable with initval = Some initval } }
+        { g with variable = { g.variable with initval } }
   | None -> failwith (sprintf "No global named '%s' in ain object" name)
 
-let write_new_global ain (v : Variable.t) =
+let set_global_initval ain name initval =
+  set_global_initval_opt ain name (Some initval)
+
+let write_new_global ?(group_index = 0) ain (v : Variable.t) =
   let index = Dynarray.length ain.globals in
-  let g : Global.t = { variable = { v with index }; group_index = 0 } in
+  let g : Global.t = { variable = { v with index }; group_index } in
   Dynarray.add_last ain.globals g;
   try_add_name_index ain.global_by_name v.name index;
   index

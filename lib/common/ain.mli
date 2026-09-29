@@ -146,9 +146,12 @@ val write : ?raw:bool -> t -> Stdio.Out_channel.t -> unit
 val write_file : t -> string -> unit
 val get_global : t -> string -> Variable.t option
 val get_global_by_index : t -> int -> Variable.t
+val get_global_group_index : t -> int -> int
+val find_global_group_index : t -> string -> int option
 val set_global_type : t -> string -> Type.t -> unit
 val set_global_initval : t -> string -> Variable.initval -> unit
-val write_new_global : t -> Variable.t -> int
+val set_global_initval_opt : t -> string -> Variable.initval option -> unit
+val write_new_global : ?group_index:int -> t -> Variable.t -> int
 val add_global : t -> string -> int -> int
 val add_global_group : t -> string -> int
 val get_function : t -> string -> Function.t option
