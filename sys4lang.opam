@@ -20,7 +20,7 @@ depends: [
   "camlzip"
   "dune" {>= "3.13"}
   "dune-build-info"
-  "linol-eio" {>= "0.11" & < "0.12"}
+  "linol-eio" {>= "0.11"}
   "eio_main" {>= "1.6"}
   "fpath"
   "menhir" {>= "20180523"}
