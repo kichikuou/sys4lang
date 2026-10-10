@@ -215,15 +215,31 @@ let validate_function_type t get (f : fundecl) =
     || not (Poly.equal (variable_types vars) (variable_types base.variables))
   then error "function type signature mismatch" f.name f.loc
 
+type type_kind = StructKind | FuncTypeKind | DelegateKind
+
+let base_type_name = function
+  | StructKind -> "struct/class"
+  | FuncTypeKind -> "functype"
+  | DelegateKind -> "delegate"
+
+let exists_in_base ain name = function
+  | StructKind -> Option.is_some (Ain.get_struct_index ain name)
+  | FuncTypeKind -> Option.is_some (Ain.get_functype_index ain name)
+  | DelegateKind -> Option.is_some (Ain.get_delegate_index ain name)
+
 let prepare ain (program : PatchSources.t) =
   let type_declarations =
     List.concat_map program.sources ~f:(function
       | PatchSources.Jaf source ->
           List.filter_map source.declarations ~f:(function
             | StructDef s ->
-                Some ((if s.is_class then "class" else "struct"), s.name, s.loc)
-            | FuncTypeDef f -> Some ("functype", f.name, f.loc)
-            | DelegateDef f -> Some ("delegate", f.name, f.loc)
+                Some
+                  ( StructKind,
+                    (if s.is_class then "class" else "struct"),
+                    s.name,
+                    s.loc )
+            | FuncTypeDef f -> Some (FuncTypeKind, "functype", f.name, f.loc)
+            | DelegateDef f -> Some (DelegateKind, "delegate", f.name, f.loc)
             | _ -> None)
       | Hll _ -> [])
   in
@@ -239,39 +255,30 @@ let prepare ain (program : PatchSources.t) =
   in
   let source_types = Hashtbl.create (module String) in
   let added_types =
-    List.filter_map type_declarations ~f:(fun (kind, name, loc) ->
-        (match Hashtbl.add source_types ~key:name ~data:kind with
+    List.filter_map type_declarations ~f:(fun (kind, label, name, loc) ->
+        (match Hashtbl.add source_types ~key:name ~data:(kind, label) with
         | `Ok -> ()
         | `Duplicate ->
-            let previous = Hashtbl.find_exn source_types name in
-            if
-              String.equal previous kind
-              || List.mem [ "class"; "struct" ] previous ~equal:String.equal
-                 && List.mem [ "class"; "struct" ] kind ~equal:String.equal
-            then error "duplicate source type declaration" name loc
+            let previous_kind, previous_label =
+              Hashtbl.find_exn source_types name
+            in
+            if Poly.equal previous_kind kind then
+              error "duplicate source type declaration" name loc
             else
               error
-                ("type name collision (" ^ previous ^ " and " ^ kind ^ ")")
+                ("type name collision (" ^ previous_label ^ " and " ^ label
+               ^ ")")
                 name loc);
         let base_kinds =
-          List.filter_map
-            [
-              ("struct/class", Option.is_some (Ain.get_struct_index ain name));
-              ("functype", Option.is_some (Ain.get_functype_index ain name));
-              ("delegate", Option.is_some (Ain.get_delegate_index ain name));
-            ]
-            ~f:(fun (kind, exists) -> if exists then Some kind else None)
+          List.filter
+            [ StructKind; FuncTypeKind; DelegateKind ]
+            ~f:(exists_in_base ain name)
         in
         List.iter base_kinds ~f:(fun base_kind ->
-            let matches =
-              String.equal kind base_kind
-              || String.equal base_kind "struct/class"
-                 && List.mem [ "class"; "struct" ] kind ~equal:String.equal
-            in
-            if not matches then
+            if not (Poly.equal kind base_kind) then
               error
-                ("type name collision (source " ^ kind ^ ", input " ^ base_kind
-               ^ ")")
+                ("type name collision (source " ^ label ^ ", input "
+               ^ base_type_name base_kind ^ ")")
                 name loc);
         if List.is_empty base_kinds then (
           if not (Hash_set.mem selected_types name) then
@@ -279,7 +286,7 @@ let prepare ain (program : PatchSources.t) =
               ("New type " ^ name ^ " is not selected; select " ^ name
              ^ " or pass its source with --source.")
               loc;
-          Some (kind, name))
+          Some (label, name))
         else None)
   in
   let table () = Hashtbl.create (module String) in
