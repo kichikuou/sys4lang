@@ -17,15 +17,19 @@
 open Common
 open Base
 
+type kind = GlobalArrays | MemberArrays | DefaultConstructor
+
 type target = {
+  kind : kind;
   name : string;
   owner : Jaf.structdecl option;
   index : int option;
 }
 
 let select ain (program : PatchSources.t) =
-  let target ?owner name =
+  let target ?owner kind name =
     {
+      kind;
       name;
       owner;
       index = Option.map (Ain.get_function ain name) ~f:(fun f -> f.index);
@@ -47,20 +51,21 @@ let select ain (program : PatchSources.t) =
         Option.is_none (Ain.get_function ain init_name)
         && not
              (List.exists program.output_definitions ~f:(fun d ->
-                  String.equal d.name (name ^ "@0")))
+                  Jaf.is_constructor d.declaration
+                  && Option.equal String.equal d.class_name (Some name)))
       then
         CompileError.raise
           ("Initializer requires a selected constructor body: " ^ name)
           s.loc;
-      target ~owner:s init_name)
-    else target ~owner:s (name ^ "@0")
+      target ~owner:s MemberArrays init_name)
+    else target ~owner:s DefaultConstructor (name ^ "@0")
   in
   let classes =
     List.map (PatchSources.selected_classes program) ~f:(fun s -> s.name)
     @ List.filter_map program.output_definitions ~f:(fun d ->
         match d.class_name with
         | Some owner
-          when String.equal d.name (owner ^ "@0")
+          when Jaf.is_constructor d.declaration
                && Option.is_none (Ain.get_function ain (owner ^ "@2")) ->
             Some owner
         | _ -> None)
@@ -71,11 +76,12 @@ let select ain (program : PatchSources.t) =
         (not v.Jaf.is_const) && not (List.is_empty v.array_dim))
   in
   let targets =
-    List.map classes ~f:class_target @ if globals then [ target "0" ] else []
+    List.map classes ~f:class_target
+    @ if globals then [ target GlobalArrays "0" ] else []
   in
   List.filter targets ~f:(fun t ->
       Option.is_some t.index
-      || String.is_suffix t.name ~suffix:"@2"
+      || Poly.equal t.kind MemberArrays
       ||
       match t.owner with
       | None -> has_allocation global_variables
@@ -95,7 +101,7 @@ let generate declarations (program : PatchSources.t) (target : target) index =
             | _ -> []),
           Some s.name,
           Ain.get_struct_index ctx.ain s.name,
-          (if String.is_suffix target.name ~suffix:"@2" then "2" else "0"),
+          (match target.kind with MemberArrays -> "2" | _ -> "0"),
           s.loc )
     | None ->
         let variables = PatchSources.global_variables program in

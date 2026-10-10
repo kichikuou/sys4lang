@@ -56,7 +56,7 @@ let%expect_test "ordinary replacement appends code and reuses function ID" =
   with_program "int g = 999; int helper(int x) { return unknown_body; }"
     "int target(int renamed) { int local = helper(renamed); return local + g; }"
     (fun p ->
-      let names = (Patch.compile_sources ain p).functions in
+      let names = function_names (Patch.compile_sources ain p) in
       let after = Option.value_exn (Ain.get_function ain "target") in
       Stdio.printf "replaced: %s\n" (String.concat ~sep:", " names);
       Stdio.printf "old CODE retained: %b\n"
@@ -285,7 +285,7 @@ let%expect_test
     |}
     (fun p ->
       Stdio.print_endline
-        (String.concat ~sep:", " (Patch.compile_sources ain p).functions);
+        (String.concat ~sep:", " (function_names (Patch.compile_sources ain p)));
       Stdio.printf "STRT retained: %b, global retained: %b\n"
         (Poly.equal structure (Ain.get_struct ain "C"))
         (Poly.equal global (Ain.get_global ain "untouched"));
@@ -350,7 +350,7 @@ let%expect_test "new functions reserve trailing IDs for cross-file mutual calls"
           (file "project.pje")
       in
       Stdio.print_endline
-        (String.concat ~sep:", " (Patch.compile_sources ain p).functions);
+        (String.concat ~sep:", " (function_names (Patch.compile_sources ain p)));
       Stdio.printf "trailing IDs: %b\n"
         ((Option.value_exn (Ain.get_function ain "first")).index = count
         && (Option.value_exn (Ain.get_function ain "second")).index = count + 1
@@ -493,7 +493,7 @@ let%expect_test
   let run () =
     with_program "class C { public: int value; C(); ~C(); };"
       "C::C() { value = 1; } C::~C() { value = 0; }" (fun program ->
-        (Patch.compile_sources ain program).functions)
+        function_names (Patch.compile_sources ain program))
   in
   let names = run () in
   let ids () =
@@ -543,7 +543,7 @@ let%expect_test "regenerate class and global arrays from declarations" =
     "const int N = 3; class C { private: const int SIZE = N + 2; array@int \
      a[SIZE]; public: C(); }; array@int g[N]; int unchanged = 999;"
     (fun program ->
-      let names = (Patch.compile_sources ain program).functions in
+      let names = function_names (Patch.compile_sources ain program) in
       Stdio.printf "output: %s\n" (String.concat ~sep:", " names);
       print_new_code ain (Bytes.length old_code);
       Stdio.printf "GSET rebuilt: %b\n"
@@ -606,7 +606,8 @@ let%expect_test
     |}
     (fun program ->
       Stdio.printf "outputs: %s\n"
-        (String.concat ~sep:", " (Patch.compile_sources ain program).functions));
+        (String.concat ~sep:", "
+           (function_names (Patch.compile_sources ain program))));
   List.iter
     [ "integer"; "real"; "text"; "removed"; "alias" ]
     ~f:(print_global_initval ain);
@@ -628,7 +629,8 @@ let%expect_test "append global suffix and rebuild all initializers" =
   with_project ~targets:[ "added" ]
     "int old = 2; int added = 3; array@int values[4];" (fun program ->
       Stdio.printf "outputs: %s\n"
-        (String.concat ~sep:", " (Patch.compile_sources ain program).functions));
+        (String.concat ~sep:", "
+           (function_names (Patch.compile_sources ain program))));
   Stdio.printf "globals=%d; old ID=%d; added ID=%d; values ID=%d\n"
     (Ain.nr_globals ain) (Option.value_exn (Ain.get_global ain "old")).index
     (Option.value_exn (Ain.get_global ain "added")).index
@@ -667,7 +669,8 @@ let%expect_test "append physical member suffix including ref padding" =
     "class C { public: int old; ref int added; array@int values[3]; };"
     (fun program ->
       Stdio.printf "outputs: %s\n"
-        (String.concat ~sep:", " (Patch.compile_sources ain program).functions));
+        (String.concat ~sep:", "
+           (function_names (Patch.compile_sources ain program))));
   let structure = Option.value_exn (Ain.get_struct ain "C") in
   List.iter structure.members ~f:(fun v ->
       Stdio.printf "%d:%s:%s\n" v.index v.name (Ain.Type.to_string v.value_type));
@@ -741,7 +744,8 @@ let%expect_test "constructor patch splits automatic initializer like full build"
   with_program "class C { public: array@int a[32]; int used; C(); };"
     "C::C() { used = 1; }" (fun program ->
       Stdio.printf "%s\n"
-        (String.concat ~sep:", " (Patch.compile_sources ain program).functions));
+        (String.concat ~sep:", "
+           (function_names (Patch.compile_sources ain program))));
   print_new_code ain start;
   Stdio.printf "constructor ID retained: %b; STRT retained: %b\n"
     (original.index = (Option.value_exn (Ain.get_function ain "C@0")).index)

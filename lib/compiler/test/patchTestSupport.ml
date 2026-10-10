@@ -122,10 +122,14 @@ let print_new_code ain start =
     Dasm.next dasm
   done
 
+let function_names (result : Patch.sources_result) =
+  List.map result.functions ~f:(fun f -> f.name)
+
 let print_result (result : Patch.sources_result) =
   List.iter result.added_types ~f:(fun (kind, name) ->
       Stdio.printf "Added %s: %s\n" kind name);
-  Stdio.printf "functions: %s\n" (String.concat ~sep:", " result.functions)
+  Stdio.printf "functions: %s\n"
+    (String.concat ~sep:", " (function_names result))
 
 let print_entries (result : Patch.sources_result) =
   List.iter result.added_entries ~f:(fun (kind, name) ->

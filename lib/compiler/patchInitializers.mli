@@ -14,7 +14,10 @@
  * along with this program; if not, see <http://gnu.org/licenses/>.
  *)
 
+type kind = GlobalArrays | MemberArrays | DefaultConstructor
+
 type target = {
+  kind : kind;
   name : string;
   owner : Common.Jaf.structdecl option;
   index : int option;

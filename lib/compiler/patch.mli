@@ -33,8 +33,22 @@ val compile :
   result
 
 (* Exposed for testing *)
+type function_kind =
+  | Ordinary
+  | Constructor
+  | Destructor
+  | Generated of PatchInitializers.kind
+
+(* Exposed for testing *)
+type compiled_function = {
+  name : string;
+  kind : function_kind;
+  replaced : bool;
+}
+
+(* Exposed for testing *)
 type sources_result = {
-  functions : string list;
+  functions : compiled_function list;
   added_types : (string * string) list;
   added_entries : (string * string) list;
 }

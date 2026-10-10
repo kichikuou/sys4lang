@@ -107,39 +107,50 @@ type output =
   | Body of PatchSources.definition
   | Initializer of PatchInitializers.target
 
+type function_kind =
+  | Ordinary
+  | Constructor
+  | Destructor
+  | Generated of PatchInitializers.kind
+
+type compiled_function = {
+  name : string;
+  kind : function_kind;
+  replaced : bool;
+}
+
 let name = function Body d -> d.name | Initializer t -> t.name
 
-let outputs (program : PatchSources.t) targets =
-  let seen = Hash_set.create (module String) in
-  List.filter
-    (List.map program.output_definitions ~f:(fun d -> Body d)
-    @ List.map targets ~f:(fun t -> Initializer t))
-    ~f:(fun output -> Hash_set.strict_add seen (name output) |> Result.is_ok)
+let kind = function
+  | Body d when is_constructor d.declaration -> Constructor
+  | Body d when is_destructor d.declaration -> Destructor
+  | Body _ -> Ordinary
+  | Initializer t -> Generated t.kind
+
+let owner = function
+  | Body d -> d.class_name
+  | Initializer t -> Option.map t.owner ~f:(fun s -> s.Jaf.name)
 
 let register ain outputs =
   List.map outputs ~f:(fun output ->
-      let func_name = name output in
-      let existing = Ain.get_function ain func_name in
+      let name = name output in
+      let kind = kind output in
+      let existing = Ain.get_function ain name in
       let f =
-        match existing with
-        | Some f -> f
-        | None -> Ain.add_function ain func_name
+        match existing with Some f -> f | None -> Ain.add_function ain name
       in
-      let owner =
-        match output with
-        | Body d ->
-            d.declaration.index <- Some f.index;
-            d.class_name
-        | Initializer t -> Option.map t.owner ~f:(fun s -> s.Jaf.name)
-      in
+      (match output with
+      | Body d -> d.declaration.index <- Some f.index
+      | Initializer _ -> ());
       if Option.is_none existing then
-        Option.iter owner ~f:(fun owner ->
+        Option.iter (owner output) ~f:(fun owner ->
             let s = Option.value_exn (Ain.get_struct ain owner) in
-            if String.equal func_name (owner ^ "@0") then
-              Ain.write_struct ain { s with constructor = f.index }
-            else if String.equal func_name (owner ^ "@1") then
-              Ain.write_struct ain { s with destructor = f.index });
-      (output, f.index))
+            match kind with
+            | Constructor | Generated DefaultConstructor ->
+                Ain.write_struct ain { s with constructor = f.index }
+            | Destructor -> Ain.write_struct ain { s with destructor = f.index }
+            | Ordinary | Generated (GlobalArrays | MemberArrays) -> ());
+      (output, f.index, { name; kind; replaced = Option.is_some existing }))
 
 let by_source (definitions : PatchSources.definition list) =
   let rec group = function
@@ -155,7 +166,7 @@ let by_source (definitions : PatchSources.definition list) =
   group definitions
 
 type sources_result = {
-  functions : string list;
+  functions : compiled_function list;
   added_types : (string * string) list;
   added_entries : (string * string) list;
 }
@@ -169,7 +180,10 @@ let compile_sources ?(debug_info = DebugInfo.create ()) ain
         unsupported ("special function " ^ d.name) f.loc);
   let declarations = PatchDeclarations.create ain program in
   let generated = PatchInitializers.select ain program in
-  let outputs = outputs program generated in
+  let outputs =
+    List.map program.output_definitions ~f:(fun d -> Body d)
+    @ List.map generated ~f:(fun t -> Initializer t)
+  in
   let ctx = PatchDeclarations.context declarations in
   let rebuild_globals = PatchSources.rebuild_globals program in
   prepare_values ~rebuild_globals declarations program;
@@ -201,11 +215,11 @@ let compile_sources ?(debug_info = DebugInfo.create ()) ain
         ArrayInit.insert_array_initializer_call d.declaration));
   let generated_bodies =
     List.filter_map registered ~f:(function
-      | Initializer target, index ->
+      | Initializer target, index, _ ->
           Some
             (Function
                (PatchInitializers.generate declarations program target index))
-      | Body _, _ -> None)
+      | Body _, _, _ -> None)
   in
   let functions =
     List.map program.output_definitions ~f:(fun d -> Function d.declaration)
@@ -227,7 +241,7 @@ let compile_sources ?(debug_info = DebugInfo.create ()) ain
     SanityCheck.check_invariants ctx generated_bodies;
     Codegen.compile ctx "" generated_bodies debug_info);
   {
-    functions = List.map outputs ~f:name;
+    functions = List.map registered ~f:(fun (_, _, f) -> f);
     added_types = PatchDeclarations.added_types declarations;
     added_entries = PatchDeclarations.added_entries declarations;
   }
@@ -259,27 +273,19 @@ let compile ?base ?output ?(write_debug_info = true) ~targets ~sources project =
            (debug_file ^ ": debug information does not match base AIN " ^ base))
   | _ -> ());
   DebugInfo.start_patch debug_info;
-  let old_count = Ain.nr_functions ain in
   let result = compile_sources ~debug_info ain program in
-  let describe name =
-    let suffix =
-      if String.equal name "0" then " (global array initialization)"
-      else if String.is_suffix name ~suffix:"@2" then
-        " (member array initialization)"
-      else if String.is_suffix name ~suffix:"@1" then " (destructor)"
-      else if String.is_suffix name ~suffix:"@0" then
-        if
-          List.exists program.output_definitions ~f:(fun d ->
-              String.equal d.name name)
-        then " (constructor)"
-        else " (constructor, member array initialization)"
-      else ""
-    in
-    name ^ suffix
+  let describe f =
+    match f.kind with
+    | Ordinary -> f.name
+    | Constructor -> f.name ^ " (constructor)"
+    | Destructor -> f.name ^ " (destructor)"
+    | Generated GlobalArrays -> f.name ^ " (global array initialization)"
+    | Generated MemberArrays -> f.name ^ " (member array initialization)"
+    | Generated DefaultConstructor ->
+        f.name ^ " (constructor, member array initialization)"
   in
   let replaced, added =
-    List.partition_tf result.functions ~f:(fun name ->
-        (Option.value_exn (Ain.get_function ain name)).index < old_count)
+    List.partition_tf result.functions ~f:(fun f -> f.replaced)
   in
   Ain.write_file ain output;
   if write_debug_info then DebugInfo.write_to_file debug_info debug_file;
