@@ -424,8 +424,10 @@ module Enum = struct
   type t = { _index : int; name : string; _symbols : string list }
 end
 
+type format = Raw | Compressed | Encrypted
+
 type t = {
-  is_ain2 : bool;
+  mutable format : format;
   mutable major_version : int;
   mutable minor_version : int;
   mutable keyc : int32;
@@ -466,7 +468,9 @@ let create ?is_ain2 ?(keyc = 0l) ?(game_version = 0) major_version minor_version
   let function_by_name = Hashtbl.create (module String) in
   try_add_name_index function_by_name "NULL" 0;
   {
-    is_ain2 = Option.value is_ain2 ~default:(major_version >= 5);
+    format =
+      (if Option.value is_ain2 ~default:(major_version >= 5) then Compressed
+       else Encrypted);
     major_version;
     minor_version;
     keyc;
@@ -498,6 +502,8 @@ let create ?is_ain2 ?(keyc = 0l) ?(game_version = 0) major_version minor_version
     delegate_by_name = Hashtbl.create (module String);
   }
 
+let format ain = ain.format
+let set_format ain format = ain.format <- format
 let version ain = ain.major_version
 let minor_version ain = ain.minor_version
 
@@ -959,6 +965,7 @@ let load filename =
         in
         Zlib.uncompress refill flush;
         ain_buf.pos <- 0;
+        ain.format <- Compressed;
         read_sections ain_buf
     | "\x7e\xf5\x02\xba" ->
         (* encrypted "VERS" *)
@@ -966,12 +973,14 @@ let load filename =
         let data = Bytes.of_string (In_channel.input_all file) in
         let buf = { ain; data; pos = 0 } in
         decrypt buf.data;
+        ain.format <- Encrypted;
         read_sections buf
     | "VERS" ->
         (* raw (as produced by `alice ain dump -d`) *)
         In_channel.seek file 0L;
         let data = Bytes.of_string (In_channel.input_all file) in
         let buf = { ain; data; pos = 0 } in
+        ain.format <- Raw;
         read_sections buf
     | _ -> failwith "unrecognized .ain format"
   in
@@ -1247,44 +1256,46 @@ let to_buffer ain =
     Array.iter ain.enums ~f:(fun e -> BB.add_cstring buf e.name));
   buf
 
-let write ?(raw = false) ain out =
+let write ain out =
   let write_buffer buf =
-    if raw then Out_channel.output_buffer out buf
-    else if ain.is_ain2 then (
-      let write_int32 i =
-        let tmp = Bytes.create 4 in
-        Stdlib.Bytes.set_int32_le tmp 0 i;
-        Out_channel.output_bytes out tmp
-      in
-      (* write header *)
-      Out_channel.output_string out "AI2\x00";
-      write_int32 0l;
-      (* ??? *)
-      write_int32 (Int32.of_int_exn (BinBuffer.length buf));
-      (* uncompressed size *)
-      write_int32 0l;
-      (* compressed size determined later *)
-      (* compress *)
-      let ain_buf = { ain; data = BinBuffer.contents_bytes buf; pos = 0 } in
-      let refill zipbuf =
-        let in_len = Bytes.length ain_buf.data - ain_buf.pos in
-        let out_len = Bytes.length zipbuf in
-        let len = min in_len out_len in
-        Bytes.blit ~src:ain_buf.data ~src_pos:ain_buf.pos ~dst:zipbuf ~dst_pos:0
-          ~len;
-        ain_buf.pos <- ain_buf.pos + len;
-        len
-      in
-      let flush zipbuf len = Out_channel.output out ~buf:zipbuf ~pos:0 ~len in
-      Zlib.compress refill flush;
-      let compressed_size = Int64.(to_int32_exn (Out_channel.pos out - 16L)) in
-      Out_channel.seek out 12L;
-      write_int32 compressed_size)
-    else
-      (* encrypt *)
-      let data = BinBuffer.contents_bytes buf in
-      encrypt data;
-      Out_channel.output_bytes out data
+    match ain.format with
+    | Raw -> Out_channel.output_buffer out buf
+    | Compressed ->
+        let write_int32 i =
+          let tmp = Bytes.create 4 in
+          Stdlib.Bytes.set_int32_le tmp 0 i;
+          Out_channel.output_bytes out tmp
+        in
+        (* write header *)
+        Out_channel.output_string out "AI2\x00";
+        write_int32 0l;
+        (* ??? *)
+        write_int32 (Int32.of_int_exn (BinBuffer.length buf));
+        (* uncompressed size *)
+        write_int32 0l;
+        (* compressed size determined later *)
+        (* compress *)
+        let ain_buf = { ain; data = BinBuffer.contents_bytes buf; pos = 0 } in
+        let refill zipbuf =
+          let in_len = Bytes.length ain_buf.data - ain_buf.pos in
+          let out_len = Bytes.length zipbuf in
+          let len = min in_len out_len in
+          Bytes.blit ~src:ain_buf.data ~src_pos:ain_buf.pos ~dst:zipbuf
+            ~dst_pos:0 ~len;
+          ain_buf.pos <- ain_buf.pos + len;
+          len
+        in
+        let flush zipbuf len = Out_channel.output out ~buf:zipbuf ~pos:0 ~len in
+        Zlib.compress refill flush;
+        let compressed_size =
+          Int64.(to_int32_exn (Out_channel.pos out - 16L))
+        in
+        Out_channel.seek out 12L;
+        write_int32 compressed_size
+    | Encrypted ->
+        let data = BinBuffer.contents_bytes buf in
+        encrypt data;
+        Out_channel.output_bytes out data
   in
   to_buffer ain |> write_buffer
 

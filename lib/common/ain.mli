@@ -1,5 +1,8 @@
 type t
+type format = Raw | Compressed | Encrypted
 
+val format : t -> format
+val set_format : t -> format -> unit
 val version : t -> int
 val minor_version : t -> int
 val version_gte : t -> int * int -> bool
@@ -142,7 +145,7 @@ val create :
   ?is_ain2:bool -> ?keyc:int32 -> ?game_version:int -> int -> int -> t
 
 val load : string -> t
-val write : ?raw:bool -> t -> Stdio.Out_channel.t -> unit
+val write : t -> Stdio.Out_channel.t -> unit
 val write_file : t -> string -> unit
 val get_global : t -> string -> Variable.t option
 val get_global_by_index : t -> int -> Variable.t
