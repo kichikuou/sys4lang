@@ -1758,13 +1758,20 @@ let () =
   for i = 0xa1 to 0xdf do
     u2s.(0xfec0 + i) <- i
   done;
-  (* 2-byte characters *)
-  for i = 0x80 to 0xff do
+  (* 2-byte characters. Some characters have more than one code. Select the
+     same code as Windows (CP932): the lowest code, but not a code in the
+     NEC-selected IBM extensions (0xED40-0xEEFC). *)
+  let add i =
     for j = 0x40 to 0xff do
       let u = s2u.(i - 0x80).(j - 0x40) in
-      if u <> 0 then u2s.(u) <- i lor (j lsl 8)
+      if u <> 0 && u2s.(u) = 0 then u2s.(u) <- i lor (j lsl 8)
     done
-  done
+  in
+  for i = 0x80 to 0xff do
+    if i <> 0xed && i <> 0xee then add i
+  done;
+  add 0xed;
+  add 0xee
 
 let from_uchar_le u =
   if Uchar.to_scalar u < 0x10000 then
