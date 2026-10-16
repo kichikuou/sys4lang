@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Compiler: Default argument values in an out-of-class method definition are now an error. Previously sys4c ignored them.
+- Compiler: Fixed an issue where an out-of-class method definition could not use parameter names that are different from the method declaration.
+
 ## 0.9.1 - 2026-09-20
 
 - Decompiler: The DarknessHero Rance mod now decompiles correctly.

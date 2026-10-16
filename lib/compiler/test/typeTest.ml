@@ -244,6 +244,36 @@ let%expect_test "non-constant default parameter" =
         4 |         void f(int x = g);
                            ^^^^^^^^^ |}]
 
+let%expect_test "parameter names in method definition" =
+  type_test
+    {|
+      class C {
+      public:
+        int f(int a, int b = 1);
+      };
+      int C::f(int x, int y) { return x + y; }
+      void test() {
+        C c;
+        c.f(1);
+      }
+    |};
+  [%expect {| ok |}]
+
+let%expect_test "default parameter in method definition" =
+  type_test
+    {|
+      class C {
+        void f(int x);
+      };
+      void C::f(int x = 1) {}
+    |};
+  [%expect
+    {|
+    -:5:17-26: Default argument values must be specified in the declaration
+        5 |       void C::f(int x = 1) {}
+                            ^^^^^^^^^
+    |}]
+
 let%expect_test "return statement" =
   type_test
     {|

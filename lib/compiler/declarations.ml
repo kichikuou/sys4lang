@@ -57,10 +57,15 @@ class type_declare_visitor ctx =
               prev_decl)
             else (
               prev_decl.index <- decl.index;
-              (* Make sure the declaration has the default parameters specified
-                 in the method declaration (default values cannot be specified
-                 in method definition) *)
-              if Option.is_some decl.body then decl.params <- prev_decl.params;
+              List.iter decl.params ~f:(fun p ->
+                  if Option.is_some p.initval then
+                    compile_error
+                      "Default argument values must be specified in the \
+                       declaration"
+                      (ASTVariable p));
+              decl.params <-
+                List.map2_exn decl.params prev_decl.params ~f:(fun p prev ->
+                    { p with initval = prev.initval });
               (* Out-of-class definitions don't carry access modifiers; preserve
                  the visibility set during struct registration. *)
               decl.is_private <- prev_decl.is_private;
