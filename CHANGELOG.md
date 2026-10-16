@@ -3,6 +3,7 @@
 ## Unreleased
 - Compiler: Default argument values in an out-of-class method definition are now an error. Previously sys4c ignored them.
 - Compiler: Fixed an issue where an out-of-class method definition could not use parameter names that are different from the method declaration.
+- LSP: Fixed an issue where the access checks and the default argument values of a method were lost after its out-of-class definition was edited.
 
 ## 0.9.1 - 2026-09-20
 

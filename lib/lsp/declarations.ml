@@ -63,6 +63,7 @@ class type_declare_visitor ctx =
         | Some prev_decl
           when Option.is_none decl.body && Option.is_some prev_decl.body ->
             prev_decl.params <- copy_default_params decl.params prev_decl.params;
+            prev_decl.is_private <- decl.is_private;
             prev_decl
         | _ -> decl);
       let prev_lambda_index = lambda_index in
@@ -88,10 +89,19 @@ class type_declare_visitor ctx =
               if Hashtbl.mem ctx.structs qual then (
                 f.name <- name;
                 f.class_name <- Some qual;
-                if not (Hashtbl.mem ctx.functions (mangled_name f)) then
-                  compile_error
-                    (f.name ^ " is not declared in class " ^ qual)
-                    (ASTDeclaration decl)));
+                match Hashtbl.find ctx.functions (mangled_name f) with
+                | None ->
+                    compile_error
+                      (f.name ^ " is not declared in class " ^ qual)
+                      (ASTDeclaration decl)
+                | Some prev when Option.is_some prev.body ->
+                    (* The previous version of this definition has the default
+                       values and the visibility of the class declaration. The
+                       class declaration can be in a different document, which
+                       is not parsed again. *)
+                    f.params <- copy_default_params prev.params f.params;
+                    f.is_private <- prev.is_private
+                | Some _ -> ()));
           self#visit_fundecl f
       | FuncTypeDef f ->
           Hashtbl.set ctx.functypes ~key:f.name
