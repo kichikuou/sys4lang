@@ -23,17 +23,55 @@ type t = {
   mutable sources : string list;
   mutable current_src : int;
   mutable mappings : debug_mapping list;
+  mutable source_override : string option;
+  mutable force_new_source : bool;
 }
 
-let create () = { sources = []; current_src = -1; mappings = [] }
+let create () =
+  {
+    sources = [];
+    current_src = -1;
+    mappings = [];
+    source_override = None;
+    force_new_source = false;
+  }
+
+let load_file file =
+  let open Yojson.Basic.Util in
+  let json = Yojson.Basic.from_file file in
+  let sources = json |> member "sources" |> to_list |> List.map ~f:to_string in
+  let mappings =
+    json |> member "mappings" |> to_list
+    |> List.map ~f:(fun m ->
+        match to_list m |> List.map ~f:to_int with
+        | [ addr; src; line ] -> { addr; src; line }
+        | _ -> raise (Type_error ("Invalid mapping", m)))
+  in
+  {
+    sources = List.rev sources;
+    current_src = List.length sources - 1;
+    mappings = List.rev mappings;
+    source_override = None;
+    force_new_source = false;
+  }
+
+let last_address dbginfo =
+  match dbginfo.mappings with [] -> None | m :: _ -> Some m.addr
+
+let begin_source dbginfo path =
+  dbginfo.source_override <- Some path;
+  dbginfo.force_new_source <- true
 
 let add dbginfo addr file line =
+  let file = Option.value dbginfo.source_override ~default:file in
   let src =
     match dbginfo.sources with
-    | s :: _ when String.equal s file -> dbginfo.current_src
+    | s :: _ when String.equal s file && not dbginfo.force_new_source ->
+        dbginfo.current_src
     | _ ->
         dbginfo.sources <- file :: dbginfo.sources;
         dbginfo.current_src <- dbginfo.current_src + 1;
+        dbginfo.force_new_source <- false;
         dbginfo.current_src
   in
   dbginfo.mappings <-

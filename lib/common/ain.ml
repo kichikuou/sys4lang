@@ -515,6 +515,7 @@ let format ain = ain.format
 let set_format ain format = ain.format <- format
 let version ain = ain.major_version
 let minor_version ain = ain.minor_version
+let set_minor_version ain minor = ain.minor_version <- minor
 
 let version_equal ain (major, minor) =
   ain.major_version = major && ain.minor_version = minor
@@ -1317,6 +1318,10 @@ let get_global ain name =
   |> Option.map ~f:(fun i -> (Dynarray.get ain.globals i).variable)
 
 let get_global_by_index ain no = (Dynarray.get ain.globals no).variable
+let get_global_entry ain no = Dynarray.get ain.globals no
+
+let write_global ain (g : Global.t) =
+  Dynarray.set ain.globals g.variable.index g
 
 let set_global_type ain name t =
   match Hashtbl.find ain.global_by_name name with
@@ -1326,13 +1331,17 @@ let set_global_type ain name t =
         { g with variable = { g.variable with value_type = t } }
   | None -> failwith (sprintf "No global named '%s' in ain object" name)
 
-let set_global_initval ain name initval =
-  match Hashtbl.find ain.global_by_name name with
-  | Some i ->
-      let g = Dynarray.get ain.globals i in
-      Dynarray.set ain.globals i
-        { g with variable = { g.variable with initval = Some initval } }
-  | None -> failwith (sprintf "No global named '%s' in ain object" name)
+let set_global_initval_by_index ain no initval =
+  let g = Dynarray.get ain.globals no in
+  Dynarray.set ain.globals no
+    { g with variable = { g.variable with initval = Some initval } }
+
+let clear_global_initvals ain =
+  ain.globals <-
+    Dynarray.map
+      (fun (g : Global.t) ->
+        { g with variable = { g.variable with initval = None } })
+      ain.globals
 
 let write_new_global ain (v : Variable.t) =
   let index = Dynarray.length ain.globals in
@@ -1361,6 +1370,9 @@ let add_global_group ain name =
       Dynarray.add_last ain.global_group_names name;
       index
   | exception Found i -> i
+
+let nr_global_groups ain = Dynarray.length ain.global_group_names
+let get_global_group_name ain no = Dynarray.get ain.global_group_names no
 
 (* functions *)
 

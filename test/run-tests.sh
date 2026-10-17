@@ -23,3 +23,4 @@ cd $(dirname "$0")
 ./test-runner.sh hllcall.jaf Math.hll
 ./test-runner.sh macro.jaf
 ./test-runner.sh lambda.jaf --ain-version=6 --ain-minor-version=10
+./patch/run.sh

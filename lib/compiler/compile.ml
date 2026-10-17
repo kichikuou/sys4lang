@@ -66,6 +66,7 @@ let type_check_pass ctx program =
     | Jaf (_, jaf) ->
         TypeAnalysis.check_types_exn ctx jaf;
         ConstEval.evaluate_constant_expressions ctx jaf;
+        GlobalInit.write_initvals ctx jaf;
         VariableAlloc.allocate_variables ctx jaf
     | Hll _ -> ())
 

@@ -2,7 +2,7 @@
  (name sys4c)
  (public_name sys4c)
  (package sys4lang)
- (libraries compiler base cmdliner dune-build-info))
+ (libraries compiler base cmdliner dune-build-info fpath unix yojson))
 
 (executable
  (public_name sys4dc)

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Compiler: Added `sys4c patch`, which compiles selected functions and declarations and appends them to an existing `.ain` file. See [docs/patch.md](docs/patch.md).
 - Compiler, Decompiler: Default argument values are now preserved in AIN files of version 8 and later.
 - Decompiler: Arguments that are equal to the default values are now omitted.
 - LSP: The `ainPath`, `srcDir`, and `srcEncoding` initialization options are removed. Use `pjePath`.

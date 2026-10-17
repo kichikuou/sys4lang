@@ -1,0 +1,19 @@
+Encoding = "UTF-8"
+ProjectName = "patch"
+
+CodeName = "patch.ain"
+
+#define _AINVERSION 4
+#define _KEYCODE 0x00000000
+#define _ISAI2FILE false
+
+GameVersion = 100
+
+SourceDir = "."
+HLLDir = "HLL"
+ObjDir = "OBJ"
+OutputDir = "."
+
+Source = {
+	"main.jaf",
+}

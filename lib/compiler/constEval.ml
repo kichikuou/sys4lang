@@ -242,19 +242,8 @@ class const_eval_visitor ctx =
       else
         match (v.kind, v.initval) with
         | GlobalVar, Some e ->
-            Ain.set_global_initval ctx.ain v.name
-              (match e.node with
-              | ConstInt i | Cast (LongInt, { node = ConstInt i; _ }) ->
-                  Ain.Variable.Int (Int32.of_int_exn i)
-              | ConstFloat f -> Ain.Variable.Float f
-              | ConstString s -> Ain.Variable.String s
-              | Ident (name, _) -> (
-                  match self#env#resolve name with
-                  | ResolvedGlobal v ->
-                      Ain.Variable.Int
-                        (Int32.of_int_exn (Option.value_exn v.index))
-                  | _ -> const_error v)
-              | _ -> const_error v)
+            (* Only validate here. GlobalInit.write_initvals writes the value. *)
+            GlobalInit.initval_of_expression ctx v e |> ignore
         | Parameter, Some e -> (
             match e.node with
             | ConstInt _ | ConstFloat _ | ConstChar _ | ConstString _ | Null ->

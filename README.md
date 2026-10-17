@@ -6,7 +6,7 @@ Games up to Heartful Maman (early 2017) are currently supported. Games from Beat
 
 ## Components
 
-*   **sys4c (Compiler):** A compiler for System 4. This is primarily intended for building source files that were decompiled using `sys4dc`. Unlike AinDecompiler, it focuses on full builds and cannot modify only specific functions in an existing `.ain` file.
+*   **sys4c (Compiler):** A compiler for System 4. This is primarily intended for building source files that were decompiled using `sys4dc`. It can also patch selected functions and declarations into an existing `.ain` file.
 
 *   **sys4dc (Decompiler):** A decompiler for System 4 `.ain` files.
 
@@ -52,11 +52,13 @@ Use `sys4c` to build the source files:
 $ sys4c build src/SengokuRance.pje
 ```
 
+Alternatively, use `sys4c patch` to apply only selected changes to the original `.ain` file. See [docs/patch.md](docs/patch.md).
+
 ## Command Reference
 
 ### sys4c
 
-`sys4c` is the System 4 compiler. It has two subcommands.
+`sys4c` is the System 4 compiler. It has three subcommands.
 
 #### `sys4c build PROJECT`
 
@@ -90,6 +92,27 @@ Options:
 | `--ain-minor-version MINOR` | `0` | Minor version of the output `.ain` file. |
 | `--import-as HLL_NAME=NAME` | | Import an `.hll` file under a different name. Can be specified multiple times. |
 | `--input-encoding ENCODING` | `UTF-8` | Input file encoding: `UTF-8` or `Shift_JIS`. |
+
+#### `sys4c patch PROJECT [TARGET...]`
+
+Compile the selected functions and declarations of a project, and append them to an existing `.ain` file. See [docs/patch.md](docs/patch.md) for details.
+
+```sh
+$ sys4c patch src/SengokuRance.pje calculate_score --base-ain SengokuRance.ain -o SengokuRance-patched.ain
+```
+
+`TARGET` is the name of a function, method, constructor, destructor, structure, class, function type, or delegate type to apply.
+
+Options:
+
+| Option | Description |
+|--------|-------------|
+| `--base-ain FILE` | The `.ain` file to patch. Defaults to the `.ain` file of the project. |
+| `-o, --output FILE` | Output `.ain` file path. Defaults to the `.ain` file of the project. |
+| `--source FILE` | A patch source file. Its functions and types are applied, and its declarations replace the project declarations of the same names. Can be specified multiple times. |
+| `--globals` | Add new globals and global groups, and rebuild the initialization of all globals. |
+| `--keep-crc` | Keep the CRC values of the replaced functions. |
+| `--debug-info` | Read and update the `debug_info.json` file. |
 
 ### sys4dc
 

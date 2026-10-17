@@ -16,11 +16,13 @@
 
 type compile_error =
   | Error of string * Jaf.location
+  | Message of string
   | ErrorList of compile_error list
 
 exception Compile_error of compile_error
 
 val raise : string -> Jaf.location -> 'a
+val raise_message : string -> 'a
 val raise_list : compile_error list -> 'a
 val syntax_error : Lexing.lexbuf -> 'a
 val type_error : Jaf.jaf_type -> Jaf.expression option -> Jaf.ast_node -> 'a

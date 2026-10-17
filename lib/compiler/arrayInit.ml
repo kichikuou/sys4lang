@@ -32,7 +32,33 @@ let array_alloc_stmt (v : variable) =
   in
   make_stmt (Expression call)
 
-class visitor ctx =
+type patch_init = {
+  is_struct_selected : string -> bool;
+  rebuild_globals : bool;
+  find_base_function : string -> int option;
+}
+
+let make_initializer ?class_name ?class_index name index body =
+  {
+    name;
+    loc = dummy_location;
+    return = { ty = Void; location = dummy_location };
+    params = [];
+    body = Some body;
+    is_label = false;
+    is_lambda = false;
+    is_private = false;
+    index = Some index;
+    class_name;
+    class_index;
+  }
+
+class visitor ?allocator ?(generate = `All) ctx =
+  let allocator =
+    match allocator with
+    | Some a -> a
+    | None -> Declarations.build_allocator ctx.ain
+  in
   object (self)
     inherit ivisitor ctx as _super
     val mutable initializer_funcs : declaration list = []
@@ -59,33 +85,38 @@ class visitor ctx =
             if Option.is_some fdecl.body then
               self#insert_array_initializer_call fdecl
         | _ -> ());
-      if (not (List.is_empty !initialize_stmts)) || !has_ctor then (
-        (* generate array initializer for the class *)
-        let name = if !has_ctor then "2" else "0" in
-        let full_name = s.name ^ "@" ^ name in
-        let f_index = (Ain.add_function ctx.ain full_name).index in
+      let name = if !has_ctor then "2" else "0" in
+      let full_name = s.name ^ "@" ^ name in
+      let class_index = (Hashtbl.find_exn ctx.structs s.name).index in
+      let needed = (not (List.is_empty !initialize_stmts)) || !has_ctor in
+      let emit =
+        match generate with
+        | `All -> needed
+        | `Patch p ->
+            p.is_struct_selected s.name
+            && (needed || Option.is_some (p.find_base_function full_name))
+      in
+      if emit then (
+        let f_index = allocator#generated_function_index full_name in
         let fdecl =
-          {
-            name;
-            loc = dummy_location;
-            return = { ty = Void; location = dummy_location };
-            params = [];
-            body = Some (List.rev !initialize_stmts);
-            is_label = false;
-            is_lambda = false;
-            is_private = false;
-            index = Some f_index;
-            class_name = Some s.name;
-            class_index =
-              Some (Ain.get_struct ctx.ain s.name |> Option.value_exn).index;
-          }
+          make_initializer ~class_name:s.name ~class_index name f_index
+            (List.rev !initialize_stmts)
         in
         Hashtbl.add_exn ctx.functions ~key:full_name ~data:fdecl;
         initializer_funcs <- Function fdecl :: initializer_funcs;
         if not !has_ctor then
           (* register the generated constructor in ain *)
-          let ain_s = Option.value_exn (Ain.get_struct ctx.ain s.name) in
+          let ain_s = Ain.get_struct_by_index ctx.ain class_index in
           Ain.write_struct ctx.ain { ain_s with constructor = f_index })
+      else
+        match generate with
+        | `Patch p when !has_ctor ->
+            Option.iter (p.find_base_function full_name) ~f:(fun index ->
+                Hashtbl.set ctx.functions ~key:full_name
+                  ~data:
+                    (make_initializer ~class_name:s.name ~class_index name index
+                       []))
+        | _ -> ()
 
     method! visit_declaration decl =
       let visit_global = function
@@ -103,40 +134,25 @@ class visitor ctx =
       | _ -> ()
 
     method generate_initializers () =
-      let null_func =
-        Function
-          {
-            name = "NULL";
-            loc = dummy_location;
-            return = { ty = Void; location = dummy_location };
-            params = [];
-            body = Some [];
-            is_label = false;
-            is_lambda = false;
-            is_private = false;
-            index = Some 0;
-            class_name = None;
-            class_index = None;
-          }
+      let funcs = List.rev initializer_funcs in
+      let generate_global_init, funcs =
+        match generate with
+        | `All ->
+            let null_func = Function (make_initializer "NULL" 0 []) in
+            (not (List.is_empty global_init_stmts), funcs @ [ null_func ])
+        | `Patch p ->
+            ( p.rebuild_globals
+              && ((not (List.is_empty global_init_stmts))
+                 || Option.is_some (p.find_base_function "0")),
+              funcs )
       in
-      let funcs = List.rev (null_func :: initializer_funcs) in
-      if List.is_empty global_init_stmts then funcs
+      if not generate_global_init then funcs
       else
         let global_init =
           Function
-            {
-              name = "0";
-              loc = dummy_location;
-              return = { ty = Void; location = dummy_location };
-              params = [];
-              body = Some (List.rev global_init_stmts);
-              is_label = false;
-              is_lambda = false;
-              is_private = false;
-              index = Some (Ain.add_function ctx.ain "0").index;
-              class_name = None;
-              class_index = None;
-            }
+            (make_initializer "0"
+               (allocator#generated_function_index "0")
+               (List.rev global_init_stmts))
         in
         global_init :: funcs
   end

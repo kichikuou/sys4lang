@@ -21,10 +21,42 @@ open CompileError
 
 let lambda_index = ref 0
 
+(* Gives the AIN table index for each declaration that
+   register_type_declarations registers. When a method returns None, the
+   declaration gets no index. *)
+class type allocator = object
+  method function_index : fundecl -> string -> int option
+  method lambda_index : string -> int
+  method generated_function_index : string -> int
+  method global_index : variable -> group:int -> int
+  method global_group_index : global_group -> int
+  method struct_index : structdecl -> int
+  method functype_index : fundecl -> int
+  method delegate_index : fundecl -> int
+end
+
+let build_allocator ain : allocator =
+  object
+    method function_index decl name =
+      if Option.is_some decl.body then Some (Ain.add_function ain name).index
+      else None
+
+    method lambda_index name = (Ain.add_function ain name).index
+    method generated_function_index name = (Ain.add_function ain name).index
+    method global_index (g : variable) ~group = Ain.add_global ain g.name group
+
+    method global_group_index (gg : global_group) =
+      Ain.add_global_group ain gg.name
+
+    method struct_index (s : structdecl) = (Ain.add_struct ain s.name).index
+    method functype_index (f : fundecl) = (Ain.add_functype ain f.name).index
+    method delegate_index (f : fundecl) = (Ain.add_delegate ain f.name).index
+  end
+
 (*
  * AST pass over top-level declarations register names in the .ain file.
  *)
-class type_declare_visitor ctx =
+class type_declare_visitor ctx (allocator : allocator) =
   object (self)
     inherit ivisitor ctx as super
     val mutable gg_index = -1
@@ -40,8 +72,9 @@ class type_declare_visitor ctx =
          ctx.functions (so `jump` resolves) but leave their FUNC index unset. *)
       let is_v1_scenario_label = decl.is_label && Ain.version ctx.ain = 1 in
       let assign_index () =
-        if Option.is_some decl.body && not is_v1_scenario_label then
-          decl.index <- Some (Ain.add_function ctx.ain name).index
+        if decl.is_lambda then decl.index <- Some (allocator#lambda_index name)
+        else if not is_v1_scenario_label then
+          decl.index <- allocator#function_index decl name
       in
       Hashtbl.update ctx.functions name ~f:(function
         | Some prev_decl ->
@@ -88,12 +121,12 @@ class type_declare_visitor ctx =
                     (ASTDeclaration decl)
               | `Ok ->
                   if not g.is_const then
-                    g.index <- Some (Ain.add_global ctx.ain g.name gg_index))
+                    g.index <- Some (allocator#global_index g ~group:gg_index))
       | GlobalGroup gg ->
           if Ain.version ctx.ain < 5 then
             compile_error "Global groups require AIN version 5 or later"
               (ASTDeclaration decl);
-          gg_index <- Ain.add_global_group ctx.ain gg.name;
+          gg_index <- allocator#global_group_index gg;
           List.iter gg.vardecls ~f:(fun ds ->
               self#visit_declaration (Global ds));
           gg_index <- -1
@@ -114,21 +147,21 @@ class type_declare_visitor ctx =
           | `Duplicate ->
               compile_error "duplicate functype definition"
                 (ASTDeclaration decl)
-          | `Ok -> f.index <- Some (Ain.add_functype ctx.ain f.name).index)
+          | `Ok -> f.index <- Some (allocator#functype_index f))
       | DelegateDef f -> (
           match Hashtbl.add ctx.delegates ~key:f.name ~data:f with
           | `Duplicate ->
               compile_error "duplicate delegate definition"
                 (ASTDeclaration decl)
-          | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
+          | `Ok -> f.index <- Some (allocator#delegate_index f))
       | StructDef s ->
           if Hashtbl.mem ctx.structs s.name then
             compile_error "duplicate struct definition" (ASTDeclaration decl);
           let unqualified_struct_name =
             snd (Util.parse_qualified_name s.name)
           in
-          let ain_s = Ain.add_struct ctx.ain s.name in
-          let jaf_s = new_jaf_struct s.name s.loc ain_s.index in
+          let struct_index = allocator#struct_index s in
+          let jaf_s = new_jaf_struct s.name s.loc struct_index in
           let next_index = ref 0 in
           let in_private = ref s.is_class in
           let visit_decl = function
@@ -139,7 +172,7 @@ class type_declare_visitor ctx =
                   compile_error "constructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.class_name <- Some s.name;
-                f.class_index <- Some ain_s.index;
+                f.class_index <- Some struct_index;
                 f.is_private <- !in_private;
                 self#visit_fundecl f
             | Destructor f ->
@@ -148,12 +181,12 @@ class type_declare_visitor ctx =
                   compile_error "destructor name doesn't match struct name"
                     (ASTDeclaration (Function f));
                 f.class_name <- Some s.name;
-                f.class_index <- Some ain_s.index;
+                f.class_index <- Some struct_index;
                 f.is_private <- !in_private;
                 self#visit_fundecl f
             | Method f ->
                 f.class_name <- Some s.name;
-                f.class_index <- Some ain_s.index;
+                f.class_index <- Some struct_index;
                 f.is_private <- !in_private;
                 self#visit_fundecl f
             | MemberDecl ds ->
@@ -176,8 +209,11 @@ class type_declare_visitor ctx =
           compile_error "enum types not yet supported" (ASTDeclaration decl)
   end
 
-let register_type_declarations ctx decls =
-  (new type_declare_visitor ctx)#visit_toplevel decls
+let register_type_declarations ?allocator ctx decls =
+  let allocator =
+    match allocator with Some a -> a | None -> build_allocator ctx.ain
+  in
+  (new type_declare_visitor ctx allocator)#visit_toplevel decls
 
 (*
  * AST pass to resolve HLL-specific type aliases.
@@ -312,7 +348,7 @@ class type_define_visitor ctx =
 
 let define_types ctx decls = (new type_define_visitor ctx)#visit_toplevel decls
 
-let check_builtin_library builtin_type =
+let check_builtin_params builtin_type =
   (* All functions in HLL for a built-in type T must have a first argument of
      type ref T. *)
   List.iter ~f:(fun func ->
@@ -327,6 +363,16 @@ let check_builtin_library builtin_type =
                  (jaf_type_to_string builtin_type))
               (ASTVariable param))
 
+let check_builtin_library ctx import_name functions =
+  if ctx.version >= 800 then
+    match import_name with
+    | "Int" -> check_builtin_params Int functions
+    | "Float" -> check_builtin_params Float functions
+    | "String" -> check_builtin_params String functions
+    | "Array" -> check_builtin_params (Array HLLParam) functions
+    | "Delegate" -> check_builtin_params (Delegate None) functions
+    | _ -> ()
+
 let define_library ctx decls hll_name import_name =
   let functions =
     List.map decls ~f:(function
@@ -335,14 +381,7 @@ let define_library ctx decls hll_name import_name =
           compiler_bug "unexpected declaration in .hll file"
             (Some (ASTDeclaration decl)))
   in
-  (if ctx.version >= 800 then
-     match import_name with
-     | "Int" -> check_builtin_library Int functions
-     | "Float" -> check_builtin_library Float functions
-     | "String" -> check_builtin_library String functions
-     | "Array" -> check_builtin_library (Array HLLParam) functions
-     | "Delegate" -> check_builtin_library (Delegate None) functions
-     | _ -> ());
+  check_builtin_library ctx import_name functions;
   Ain.write_library ctx.ain
     {
       (Ain.add_library ctx.ain hll_name) with

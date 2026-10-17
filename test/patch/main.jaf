@@ -1,0 +1,29 @@
+int g_base = 1;
+
+class Counter {
+public:
+	int value;
+	Counter();
+	int get();
+};
+
+Counter::Counter()
+{
+	value = 1;
+}
+
+int Counter::get()
+{
+	return value;
+}
+
+int value()
+{
+	return 1;
+}
+
+int main()
+{
+	assert(0);
+	return 0;
+}

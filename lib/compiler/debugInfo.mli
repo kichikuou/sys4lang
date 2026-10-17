@@ -17,6 +17,14 @@
 type t
 
 val create : unit -> t
+val load_file : string -> t
+val last_address : t -> int option
+
+(** [begin_source t path] makes the next [add] start a new source entry, also
+    when the last entry has the same path. Later calls to [add] and [add_loc]
+    record [path] instead of their file names. *)
+val begin_source : t -> string -> unit
+
 val add : t -> int -> string -> int -> unit
 val add_loc : t -> int -> Lexing.position * Lexing.position -> unit
 val to_json : t -> Yojson.Basic.t

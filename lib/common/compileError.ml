@@ -22,11 +22,13 @@ let printf = Stdio.printf
 
 type compile_error =
   | Error of string * location
+  | Message of string
   | ErrorList of compile_error list
 
 exception Compile_error of compile_error
 
 let raise msg loc = Base.raise (Compile_error (Error (msg, loc)))
+let raise_message msg = Base.raise (Compile_error (Message msg))
 let raise_list es = Base.raise (Compile_error (ErrorList es))
 
 let syntax_error lexbuf =
@@ -85,6 +87,7 @@ let print_underline c s =
 let rec print_error err get_source_text =
   match err with
   | ErrorList es -> List.iter es ~f:(fun e -> print_error e get_source_text)
+  | Message msg -> printf "%s\n" msg
   | Error (msg, (s, e)) -> (
       printf "%s: %s\n" (format_location (s, e)) msg;
       match get_source_text s.pos_fname with

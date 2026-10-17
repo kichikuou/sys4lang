@@ -5,6 +5,7 @@ val format : t -> format
 val set_format : t -> format -> unit
 val version : t -> int
 val minor_version : t -> int
+val set_minor_version : t -> int -> unit
 val version_gte : t -> int * int -> bool
 val version_lt : t -> int * int -> bool
 
@@ -150,11 +151,16 @@ val write : t -> Stdio.Out_channel.t -> unit
 val write_file : t -> string -> unit
 val get_global : t -> string -> Variable.t option
 val get_global_by_index : t -> int -> Variable.t
+val get_global_entry : t -> int -> Global.t
+val write_global : t -> Global.t -> unit
 val set_global_type : t -> string -> Type.t -> unit
-val set_global_initval : t -> string -> Variable.initval -> unit
+val set_global_initval_by_index : t -> int -> Variable.initval -> unit
+val clear_global_initvals : t -> unit
 val write_new_global : t -> Variable.t -> int
 val add_global : t -> string -> int -> int
 val add_global_group : t -> string -> int
+val nr_global_groups : t -> int
+val get_global_group_name : t -> int -> string
 val get_function : t -> string -> Function.t option
 val get_function_by_index : t -> int -> Function.t
 val write_function : t -> Function.t -> unit

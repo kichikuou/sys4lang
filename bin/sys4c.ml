@@ -96,6 +96,116 @@ let do_build pje_file output_dir_override no_debug_info =
         DebugInfo.write_to_file debug_info (Pje.debug_info_path pje))
     (fun file -> Hashtbl.find files file)
 
+let realpath path = try Unix.realpath path with Unix.Unix_error _ -> path
+
+let relative_path ~from path =
+  let path = Fpath.v (realpath path) in
+  match Fpath.relativize ~root:(Fpath.v (realpath from)) path with
+  | Some p -> String.concat ~sep:"/" (Fpath.segs p)
+  | None -> Fpath.to_string path
+
+let do_patch pje_file targets base_ain extra_sources globals keep_crc output
+    use_debug_info =
+  let pje =
+    handle_errors
+      (fun () -> PjeLoader.load read_text_file pje_file)
+      (fun _ -> None)
+  in
+  let base_ain = Option.value base_ain ~default:(Pje.ain_path pje) in
+  let output = Option.value output ~default:(Pje.ain_path pje) in
+  let base =
+    try Ain.load base_ain
+    with e ->
+      let reason =
+        match e with Sys_error msg | Failure msg -> msg | e -> Exn.to_string e
+      in
+      Stdio.print_endline ("Cannot load base AIN: " ^ reason);
+      Stdlib.exit 1
+  in
+  let pje_dir = Stdlib.Filename.dirname pje_file in
+  let source_dir = Stdlib.Filename.concat pje_dir pje.source_dir in
+  let project_file path = Stdlib.Filename.concat source_dir path in
+  let files = Hashtbl.create (module String) in
+  handle_errors
+    (fun () ->
+      List.iter extra_sources ~f:(fun f ->
+          if String.is_suffix (String.lowercase f) ~suffix:".hll" then
+            CompileError.raise_message
+              ("HLL files cannot be patch sources: " ^ f));
+      let extra_paths = List.map extra_sources ~f:realpath in
+      let project_sources =
+        List.map (Pje.collect_sources pje) ~f:(function
+          | Pje.Jaf f ->
+              let selected =
+                List.mem extra_paths
+                  (realpath (project_file f))
+                  ~equal:String.equal
+              in
+              Patch.
+                {
+                  path = f;
+                  debug_path = f;
+                  origin = (if selected then `Project_selected else `Project);
+                  kind = `Jaf;
+                }
+          | Pje.Hll (f, import_name) ->
+              Patch.
+                {
+                  path = f;
+                  debug_path = f;
+                  origin = `Project;
+                  kind = `Hll import_name;
+                }
+          | Pje.Include _ -> failwith "unreachable")
+      in
+      let project_paths =
+        List.filter_map project_sources ~f:(fun (src : Patch.source) ->
+            match src.kind with
+            | `Jaf -> Some (realpath (project_file src.path))
+            | `Hll _ -> None)
+      in
+      let extra_sources =
+        List.filter_map (List.zip_exn extra_sources extra_paths)
+          ~f:(fun (f, abs) ->
+            if List.mem project_paths abs ~equal:String.equal then None
+            else
+              Some
+                Patch.
+                  {
+                    path = f;
+                    debug_path = relative_path ~from:pje_dir f;
+                    origin = `Extra;
+                    kind = `Jaf;
+                  })
+      in
+      let read_file (src : Patch.source) =
+        let file =
+          match src.origin with
+          | `Project | `Project_selected -> project_file src.path
+          | `Extra -> src.path
+        in
+        let content = read_text_file ~encoding:pje.encoding file in
+        Hashtbl.set files ~key:src.path ~data:content;
+        content
+      in
+      let debug_info_path = Pje.debug_info_path pje in
+      let debug_info =
+        if not use_debug_info then None
+        else
+          try Some (DebugInfo.load_file debug_info_path) with
+          | Sys_error msg -> CompileError.raise_message ("Cannot load " ^ msg)
+          | Yojson.Json_error msg | Yojson.Basic.Util.Type_error (msg, _) ->
+              CompileError.raise_message
+                (Printf.sprintf "Cannot load %s: %s" debug_info_path msg)
+      in
+      Patch.apply ~base ~pje
+        ~sources:(project_sources @ extra_sources)
+        ~targets ~globals ~keep_crc ~read_file ~debug_info;
+      Ain.write_file base output;
+      Option.iter debug_info ~f:(fun di ->
+          DebugInfo.write_to_file di debug_info_path))
+    (fun file -> Hashtbl.find files file)
+
 let encoding_conv =
   let parse s =
     try Ok (Pje.encoding_of_string s)
@@ -164,12 +274,62 @@ let cmd_build_pje =
   in
   Cmd.v info Term.(const do_build $ project $ output_dir $ no_debug_info)
 
+let cmd_patch =
+  let doc = "Apply selected source changes to an existing .ain file." in
+  let info = Cmd.info "patch" ~doc in
+  let project =
+    let doc = "The project file." in
+    Arg.(required & pos 0 (some string) None & info [] ~docv:"PROJECT" ~doc)
+  in
+  let targets =
+    let doc =
+      "Names of functions, methods, structures, classes, function types, or \
+       delegate types to apply."
+    in
+    Arg.(value & pos_right 0 string [] & info [] ~docv:"TARGET" ~doc)
+  in
+  let base_ain =
+    let doc =
+      "The .ain file to patch. Defaults to the .ain file of the project."
+    in
+    Arg.(value & opt (some string) None & info [ "base-ain" ] ~docv:"FILE" ~doc)
+  in
+  let sources =
+    let doc = "A patch source file to apply. Can be repeated." in
+    Arg.(value & opt_all string [] & info [ "source" ] ~docv:"FILE" ~doc)
+  in
+  let globals =
+    let doc =
+      "Add new globals and global groups, and rebuild global initialization."
+    in
+    Arg.(value & flag & info [ "globals" ] ~doc)
+  in
+  let keep_crc =
+    let doc = "Keep the CRC values of the replaced functions." in
+    Arg.(value & flag & info [ "keep-crc" ] ~doc)
+  in
+  let output =
+    let doc =
+      "The output .ain file. Defaults to the .ain file of the project."
+    in
+    Arg.(
+      value & opt (some string) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
+  in
+  let debug_info =
+    let doc = "Read and update the debug_info.json file." in
+    Arg.(value & flag & info [ "debug-info" ] ~doc)
+  in
+  Cmd.v info
+    Term.(
+      const do_patch $ project $ targets $ base_ain $ sources $ globals
+      $ keep_crc $ output $ debug_info)
+
 let cmd =
   let doc = "System 4 Compiler" in
   let version =
     Option.map (Build_info.V1.version ()) ~f:Build_info.V1.Version.to_string
   in
   let info = Cmd.info "sys4c" ?version ~doc in
-  Cmd.group info [ cmd_compile_jaf; cmd_build_pje ]
+  Cmd.group info [ cmd_compile_jaf; cmd_build_pje; cmd_patch ]
 
 let () = Stdlib.exit (Cmd.eval cmd)

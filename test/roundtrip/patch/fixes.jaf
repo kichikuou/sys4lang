@@ -1,0 +1,5 @@
+int int_constant_arithmetic()
+{
+	int x = 5 + 581;
+	return x;
+}

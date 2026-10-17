@@ -1,0 +1,37 @@
+class Counter {
+public:
+	int value;
+	array@int history[3];
+	Counter();
+	int get();
+	int total();
+};
+
+int Counter::total()
+{
+	return value + history.Numof();
+}
+
+int value()
+{
+	return added() + 1;
+}
+
+int added()
+{
+	return 1;
+}
+
+int g_base = 5;
+int g_added = 7;
+
+int main()
+{
+	Counter c;
+	assert(value() == 2);
+	assert(c.get() == 1);
+	assert(c.total() == 4);
+	assert(g_base == 5);
+	assert(g_added == 7);
+	return 0;
+}
