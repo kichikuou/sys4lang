@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.2 - 2026-10-18
 - Compiler: Fixed the UTF-8 to Shift_JIS conversion to match CP932 for characters that have more than one code, such as `Ⅱ`.
 - Compiler: `delegate` declarations are now an error for games that do not support delegates (Rance Quest and earlier). `functype` declarations are now an error for Rance 9 and later games.
 - Compiler: Default argument values in an out-of-class method definition are now an error. Previously sys4c ignored them.
@@ -8,7 +8,6 @@
 - LSP: Fixed an issue where the access checks and the default argument values of a method were lost after its out-of-class definition was edited.
 
 ## 0.9.1 - 2026-09-20
-
 - Decompiler: The DarknessHero Rance mod now decompiles correctly.
 - Decompiler: Function inspection now uses a positional `FUNCTION` argument (for example, `sys4dc game.ain FunctionName`) instead of the removed `--inspect` option.
 - Decompiler: Added `--disassemble` and `--disassemble-raw` for inspecting AIN bytecode.

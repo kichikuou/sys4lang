@@ -2,7 +2,7 @@
 (using menhir 3.0)
 
 (name sys4lang)
-(version 0.9.1)
+(version 0.9.2)
 
 (generate_opam_files true)
 
