@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Compiler: Fixed the UTF-8 to Shift_JIS conversion to match CP932 for characters that have more than one code, such as `Ⅱ`.
+- Compiler: `delegate` declarations are now an error for games that do not support delegates (Rance Quest and earlier). `functype` declarations are now an error for Rance 9 and later games.
 - Compiler: Default argument values in an out-of-class method definition are now an error. Previously sys4c ignored them.
 - Compiler: Fixed an issue where an out-of-class method definition could not use parameter names that are different from the method declaration.
 - LSP: Fixed an issue where the access checks and the default argument values of a method were lost after its out-of-class definition was edited.

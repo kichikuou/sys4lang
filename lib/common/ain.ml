@@ -1240,11 +1240,9 @@ let to_buffer ain =
   if ain.major_version >= 1 && ain.major_version < 7 then (
     BB.add_string buf "OJMP";
     BB.add_int buf ain.ojmp);
-  (* XXX: section disappears in Rance IX (mid v6) *)
-  if Dynarray.length ain.function_types > 0 then
+  if version_gte ain (1, 0) && version_lt ain (6, 20) then
     write_functype_section buf ain "FNCT" ain.function_types;
-  (* XXX: section first appears in Oyako Rankan (mid v6) *)
-  if Dynarray.length ain.delegates > 0 then
+  if version_gte ain (6, 10) then
     write_functype_section buf ain "DELG" ain.delegates;
   if version_gte ain (5, 0) then (
     BB.add_string buf "OBJG";

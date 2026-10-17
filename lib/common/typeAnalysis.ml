@@ -865,7 +865,17 @@ class type_analyze_visitor ctx =
       | None -> ()
 
     method! visit_declaration decl =
-      self#catch_errors (fun () -> super#visit_declaration decl)
+      self#catch_errors (fun () ->
+          (match decl with
+          | FuncTypeDef _ when Ain.version_gte ctx.ain (6, 20) ->
+              compile_error
+                "functype is not supported in AIN version 6.20 or later"
+                (ASTDeclaration decl)
+          | DelegateDef _ when Ain.version_lt ctx.ain (6, 10) ->
+              compile_error "delegate requires AIN version 6.10 or later"
+                (ASTDeclaration decl)
+          | _ -> ());
+          super#visit_declaration decl)
 
     method! visit_fundecl f =
       super#visit_fundecl f;

@@ -62,8 +62,9 @@ let print_disassemble ain =
     Dasm.next dasm
   done
 
-let compile_test ?(ain_version = 4) ?(hlls = []) input =
-  let ctx = Jaf.context_from_ain (Ain.create ain_version 0) in
+let compile_test ?(ain_version = (4, 0)) ?(hlls = []) input =
+  let major, minor = ain_version in
+  let ctx = Jaf.context_from_ain (Ain.create major minor) in
   let debug_info = DebugInfo.create () in
   try
     let srcs =
@@ -1061,7 +1062,7 @@ let%expect_test "member pointer" =
     |}]
 
 let%expect_test "dg_return_null" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       dg f() {
@@ -1091,7 +1092,7 @@ let%expect_test "dg_return_null" =
     |}]
 
 let%expect_test "dg_set" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f() {
@@ -1116,7 +1117,7 @@ let%expect_test "dg_set" =
     |}]
 
 let%expect_test "dg_copy" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f(dg d) {
@@ -1143,7 +1144,7 @@ let%expect_test "dg_copy" =
     |}]
 
 let%expect_test "dg_set_string" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f() {
@@ -1180,7 +1181,7 @@ let%expect_test "dg_set_string" =
     |}]
 
 let%expect_test "ref delegate string assign" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f(ref dg d) {
@@ -1205,7 +1206,7 @@ let%expect_test "ref delegate string assign" =
     |}]
 
 let%expect_test "dg_add_string" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f() {
@@ -1237,7 +1238,7 @@ let%expect_test "dg_add_string" =
     |}]
 
 let%expect_test "dg_from_string" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f(dg d) {}
@@ -1266,7 +1267,7 @@ let%expect_test "dg_from_string" =
     |}]
 
 let%expect_test "dg_erase" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       void f() {
@@ -1296,7 +1297,7 @@ let%expect_test "dg_erase" =
     |}]
 
 let%expect_test "dg_argument" =
-  compile_test
+  compile_test ~ain_version:(6, 10)
     {|
       delegate void dg();
       class C {
@@ -1331,7 +1332,7 @@ let%expect_test "dg_argument" =
     |}]
 
 let%expect_test "HLL-implemented builtin methods" =
-  compile_test ~ain_version:8
+  compile_test ~ain_version:(8, 0)
     ~hlls:
       [
         ("String.hll", "void foo(ref string self);");

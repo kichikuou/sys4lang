@@ -54,3 +54,23 @@ let%expect_test "output format is preserved" =
     Compressed AI2\000, same output: true
     Raw VERS, same output: true
     |}]
+
+let%expect_test "FNCT and DELG sections" =
+  List.iter
+    [ (0, 0); (1, 0); (6, 0); (6, 10); (6, 20); (7, 0) ]
+    ~f:(fun (major, minor) ->
+      let ain = Ain.create major minor in
+      Ain.set_format ain Raw;
+      let data, _ = write_and_read ain in
+      Stdio.printf "%d.%d: FNCT %b, DELG %b\n" major minor
+        (String.is_substring data ~substring:"FNCT")
+        (String.is_substring data ~substring:"DELG"));
+  [%expect
+    {|
+    0.0: FNCT false, DELG false
+    1.0: FNCT true, DELG false
+    6.0: FNCT true, DELG false
+    6.10: FNCT true, DELG true
+    6.20: FNCT false, DELG true
+    7.0: FNCT false, DELG true
+    |}]

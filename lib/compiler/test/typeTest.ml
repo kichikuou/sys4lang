@@ -17,8 +17,9 @@
 open Common
 open Compiler
 
-let type_test input =
-  let ctx = Jaf.context_from_ain (Ain.create 4 0) in
+let type_test ?(ain_version = (4, 0)) input =
+  let major, minor = ain_version in
+  let ctx = Jaf.context_from_ain (Ain.create major minor) in
   let debug_info = DebugInfo.create () in
   try
     Compile.compile ctx [ Pje.Jaf "-" ] debug_info (fun _ -> input);
@@ -625,6 +626,29 @@ let%expect_test "jump statement" =
     -:8:9-16: cannot return from scenario function
         8 |         return;   // error: return from a scenario function
                     ^^^^^^^
+    |}]
+
+let%expect_test "functype and delegate versions" =
+  List.iter
+    (fun (major, minor) ->
+      List.iter
+        (fun decl ->
+          Stdio.printf "v%d.%d %s: " major minor decl;
+          type_test ~ain_version:(major, minor) (decl ^ " void f(void);"))
+        [ "functype"; "delegate" ])
+    [ (6, 0); (6, 10); (6, 20) ];
+  [%expect
+    {|
+    v6.0 functype: ok
+    v6.0 delegate: -:1:1-23: delegate requires AIN version 6.10 or later
+        1 | delegate void f(void);
+            ^^^^^^^^^^^^^^^^^^^^^^
+    v6.10 functype: ok
+    v6.10 delegate: ok
+    v6.20 functype: -:1:1-23: functype is not supported in AIN version 6.20 or later
+        1 | functype void f(void);
+            ^^^^^^^^^^^^^^^^^^^^^^
+    v6.20 delegate: ok
     |}]
 
 let%expect_test "functype assignment" =

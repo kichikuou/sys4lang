@@ -8,7 +8,7 @@ cd $(dirname "$0")
 ./test-runner.sh array.jaf
 ./test-runner.sh struct.jaf
 ./test-runner.sh class.jaf
-./test-runner.sh delegate.jaf
+./test-runner.sh delegate.jaf --ain-version=6 --ain-minor-version=10
 ./test-runner.sh scope.jaf
 ./test-runner.sh control.jaf
 ./test-runner.sh function.jaf
@@ -22,4 +22,4 @@ cd $(dirname "$0")
 ./test-runner.sh unicode.jaf
 ./test-runner.sh hllcall.jaf Math.hll
 ./test-runner.sh macro.jaf
-./test-runner.sh lambda.jaf
+./test-runner.sh lambda.jaf --ain-version=6 --ain-minor-version=10

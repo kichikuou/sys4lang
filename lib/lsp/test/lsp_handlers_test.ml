@@ -23,6 +23,11 @@ let load_jaf proj path =
       | _ -> Stdio.print_endline "?");
   jaf_text
 
+let%expect_test "AIN version from PJE" =
+  let proj = initialize_project ~pje:"completion.pje" () in
+  load_jaf proj (testdir_path [ "src"; "completion_globals.jaf" ]) |> ignore;
+  [%expect {| |}]
+
 let%expect_test "get_hover" =
   let proj = initialize_project () in
   let path = testdir_path [ "src"; "hover.jaf" ] in
