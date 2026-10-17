@@ -86,6 +86,9 @@ let initialize proj (options : Types.InitializationOptions.t) =
         proj.pje.encoding <- encoding_of_string options.srcEncoding
   | pjePath ->
       proj.pje <- PjeLoader.load proj.read_file pjePath;
+      proj.ctx <-
+        Jaf.context_from_ain ~constants:predefined_constants
+          (Pje.create_ain proj.pje);
       let open Stdlib.Filename in
       if String.equal proj.pje.source_dir "." then
         proj.pje.source_dir <- dirname pjePath

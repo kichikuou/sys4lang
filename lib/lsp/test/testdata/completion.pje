@@ -1,4 +1,6 @@
 Encoding = "UTF-8"
+#define _AINVERSION 6
+#define _AINMINORVERSION 10
 Source = {
     "src\completion_globals.jaf",
     "src\completion.jaf",
