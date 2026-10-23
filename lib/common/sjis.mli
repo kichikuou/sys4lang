@@ -28,3 +28,7 @@ val is_valid : int -> bool
 (** [from_uchar_le u] converts the Unicode character [u] to a Shift_JIS code, in
     little-endian order. *)
 val from_uchar_le : Uchar.t -> int option
+
+(** [char_code s] converts the UTF-8 string [s] to a Shift_JIS code, in
+    little-endian order. [s] must contain exactly one character. *)
+val char_code : string -> int option

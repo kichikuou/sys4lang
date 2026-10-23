@@ -62,7 +62,8 @@ let print_disassemble ain =
     Dasm.next dasm
   done
 
-let compile_test ?(ain_version = (4, 0)) ?(hlls = []) input =
+let compile_test ?(ain_version = (4, 0)) ?(hlls = [])
+    ?(print = print_disassemble) input =
   let major, minor = ain_version in
   let ctx = Jaf.context_from_ain (Ain.create major minor) in
   let debug_info = DebugInfo.create () in
@@ -77,7 +78,7 @@ let compile_test ?(ain_version = (4, 0)) ?(hlls = []) input =
     Compile.compile ctx srcs debug_info (fun name ->
         List.Assoc.find hlls ~equal:String.equal name
         |> Option.value ~default:input);
-    print_disassemble ctx.ain
+    print ctx.ain
   with CompileError.Compile_error e ->
     CompileError.print_error e (fun _ -> Some input)
 
@@ -1362,6 +1363,39 @@ let%expect_test "HLL-implemented builtin methods" =
     068: EOF test.jaf
     074: FUNC NULL
     080: EOF
+    |}]
+
+let print_default_args ain =
+  Ain.function_iter ain ~f:(fun f ->
+      List.iter (Ain.Function.logical_parameters f) ~f:(fun v ->
+          match v.initval with
+          | None -> ()
+          | Some initval ->
+              Stdio.printf "%s %s = %s\n" f.name v.name
+                (match initval with
+                | Void -> "(void)"
+                | Int i -> Int32.to_string i
+                | Float x -> Float.to_string x
+                | String s -> sprintf "\"%s\"" s)))
+
+let%expect_test "default arguments" =
+  compile_test ~ain_version:(8, 0) ~print:print_default_args
+    {|
+      const bool true = 1;
+      delegate void dg();
+      class C {
+        void f(int a = -1, bool b = true);
+      };
+      void C::f(int a, bool b) {}
+      void g(float x = 1.5, string s = "abc", int n, dg d = NULL) {}
+    |};
+  [%expect
+    {|
+    C@f a = -1
+    C@f b = 1
+    g x = 1.5
+    g s = "abc"
+    g d = (void)
     |}]
 
 let%expect_test "comma operator in reference context" =

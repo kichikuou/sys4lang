@@ -53,14 +53,14 @@ let read_return_type (br : reader_context BR.t) =
     Type.create enum ~struc ~rank:1
 
 module Variable = struct
-  type init_value = String of string | Int of int32 | Float of float
+  type init_value = String of string | Int of int32 | Float of float | Void
   [@@deriving show]
 
   let read_initval br type_ =
     if BR.bool br then
       match type_ with
       | Type.String -> Some (String (BR.sjis_string br))
-      | Struct _ | Delegate _ | Ref _ | Array _ -> None
+      | Struct _ | Delegate _ | Ref _ | Array _ -> Some Void
       | Float -> Some (Float (BR.f32 br))
       | _ -> Some (Int (BR.i32 br))
     else None

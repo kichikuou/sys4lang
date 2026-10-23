@@ -536,18 +536,10 @@ class jaf_compiler ctx debug_info =
       | ConstInt i -> self#write_instruction1 PUSH i
       | ConstFloat f -> self#write_instruction1_float F_PUSH f
       | ConstChar s -> (
-          Stdlib.Uchar.(
-            let dec = Stdlib.String.get_utf_8_uchar s 0 in
-            if
-              not
-                (utf_decode_is_valid dec
-                && String.length s = utf_decode_length dec)
-            then compile_error "Invalid character constant" (ASTExpression expr);
-            match Sjis.from_uchar_le (utf_decode_uchar dec) with
-            | Some c -> self#write_instruction1 PUSH c
-            | None ->
-                compile_error "Invalid character constant" (ASTExpression expr))
-          )
+          match Sjis.char_code s with
+          | Some c -> self#write_instruction1 PUSH c
+          | None ->
+              compile_error "Invalid character constant" (ASTExpression expr))
       | ConstString s ->
           let no =
             if Ain.version_lt ctx.ain (1, 0) then Ain.add_message ctx.ain s

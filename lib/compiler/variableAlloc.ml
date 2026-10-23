@@ -243,7 +243,29 @@ class variable_alloc_visitor ctx =
         labels <- Hashtbl.create (module String);
         Stack.push func_vars [];
         let conv_var index (v : variable) =
-          Ain.Variable.make ~index v.name (jaf_to_ain_type v.type_spec.ty)
+          let initval =
+            match (v.kind, v.initval) with
+            | Parameter, Some e -> (
+                match e.node with
+                | ConstInt i -> Some (Ain.Variable.Int (Int32.of_int_exn i))
+                | ConstFloat f -> Some (Ain.Variable.Float f)
+                | ConstString s -> Some (Ain.Variable.String s)
+                | ConstChar s -> (
+                    match Sjis.char_code s with
+                    | Some c -> Some (Ain.Variable.Int (Int32.of_int_exn c))
+                    | None ->
+                        compile_error "Invalid character constant"
+                          (ASTExpression e))
+                | Null -> Some Ain.Variable.Void
+                | _ ->
+                    compiler_bug "non-constant default argument"
+                      (Some (ASTVariable v)))
+            | _ -> None
+          in
+          {
+            (Ain.Variable.make ~index v.name (jaf_to_ain_type v.type_spec.ty)) with
+            initval;
+          }
         in
         let add_vars vars (a_f : Ain.Function.t) =
           { a_f with vars = List.mapi vars ~f:conv_var }

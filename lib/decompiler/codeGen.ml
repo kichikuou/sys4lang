@@ -36,7 +36,8 @@ let from_ain_variable (v : Ain.Variable.t) =
           | Ref _ -> Load (Var (GlobalPage, Ain.ain.glob.(Int32.to_int_exn n)))
           | _ -> Number n)
       | String s -> String s
-      | Float f -> Float f)
+      | Float f -> Float f
+      | Void -> Null)
   in
   { v; dims = []; initval }
 
@@ -533,6 +534,11 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
     method private pr_vardecl out (arg : Ain.Variable.t) =
       bprintf out "%a %s" self#pr_type arg.type_ arg.name
 
+    method private pr_param out (arg : Ain.Variable.t) =
+      self#pr_vardecl out arg;
+      Option.iter (from_ain_variable arg).initval ~f:(fun e ->
+          bprintf out " = %a" (self#pr_expr 0) e)
+
     method print_function ?(as_lambda = false) (func : function_t) =
       let pr_label = function
         | Address label -> self#println "label%d:" label
@@ -709,8 +715,14 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
                    func.name
            | { func = { kind = Label; _ }; _ } -> bprintf out "#%s" func.name
            | _ -> bprintf out "%a %s" self#pr_type return_type func.name);
-        bprintf out "(%a)"
-          (pr_param_list self#pr_vardecl)
+        (* Default arguments of a method are allowed only in its class
+           declaration. *)
+        let pr_param =
+          match func.struc with
+          | Some _ -> self#pr_vardecl
+          | None -> self#pr_param
+        in
+        bprintf out "(%a)" (pr_param_list pr_param)
           (Ain.Function.args func.func);
         if as_lambda then bprintf out " => %a " self#pr_type return_type
         else self#print_newline
@@ -810,7 +822,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
               else
                 bprintf out "%a %s" self#pr_type func.func.return_type func.name;
               self#println "(%a);"
-                (pr_param_list self#pr_vardecl)
+                (pr_param_list self#pr_param)
                 (Ain.Function.args func.func)));
       self#println "};"
 

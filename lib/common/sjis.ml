@@ -1779,6 +1779,13 @@ let from_uchar_le u =
     if c <> 0 then Some c else None
   else None
 
+let char_code s =
+  Stdlib.Uchar.(
+    let dec = Stdlib.String.get_utf_8_uchar s 0 in
+    if utf_decode_is_valid dec && String.length s = utf_decode_length dec then
+      from_uchar_le (utf_decode_uchar dec)
+    else None)
+
 let from_utf8 s =
   let buf = Buffer.create (String.length s) in
   let i = ref 0 in

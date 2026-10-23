@@ -19,7 +19,7 @@ open Base
 type type_t = Type.ain_type
 
 module Variable : sig
-  type init_value = String of string | Int of int32 | Float of float
+  type init_value = String of string | Int of int32 | Float of float | Void
   [@@deriving show]
 
   type t = {
