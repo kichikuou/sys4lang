@@ -241,6 +241,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | String _ as e -> (e, String)
       | FuncAddr _ -> failwith "cannot happen"
       | MemberPointer _ -> failwith "cannot happen"
+      | OmittedArg -> failwith "cannot happen"
       | BoundMethod (e, f) ->
           let e', _ = self#analyze_expr Any e in
           ( BoundMethod (e', f),

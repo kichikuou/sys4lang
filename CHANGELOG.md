@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Compiler, Decompiler: Default argument values are now preserved in AIN files of version 8 and later.
+- Decompiler: Arguments that are equal to the default values are now omitted.
 
 ## 0.9.2 - 2026-10-18
 - Compiler: Fixed the UTF-8 to Shift_JIS conversion to match CP932 for characters that have more than one code, such as `Ⅱ`.

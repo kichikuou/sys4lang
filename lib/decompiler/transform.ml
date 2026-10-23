@@ -354,8 +354,51 @@ let fold_newline_func_to_msg stmt =
   in
   map_block stmt ~f:(fun stmts -> reduce [] (List.rev stmts))
 
+let is_default_arg (param : Ain.Variable.t) arg =
+  match (param.init_val, arg) with
+  | Some (Ain.Variable.Int n), (Number m | EnumValue (_, m)) -> Int32.equal n m
+  | Some (Ain.Variable.Int n), Boolean b -> Int32.equal n (if b then 1l else 0l)
+  | Some (Ain.Variable.Float f), Float f' ->
+      Int64.equal (Int64.bits_of_float f) (Int64.bits_of_float f')
+  | Some (Ain.Variable.String s), String s' -> String.equal s s'
+  | ( Some Ain.Variable.Void,
+      (Null | RefTo NullPlace | BoundMethod (Number -1l, { name = "NULL"; _ }))
+    ) ->
+      true
+  | _ -> false
+
+let omit_default_args (func : Ain.Function.t) args =
+  let params =
+    List.filter (Ain.Function.args func) ~f:(fun v ->
+        match v.type_ with Type.Void -> false | _ -> true)
+  in
+  match
+    List.map2 args params ~f:(fun arg param ->
+        if is_default_arg param arg then OmittedArg else arg)
+  with
+  | Unequal_lengths -> args
+  | Ok args ->
+      List.rev
+        (List.drop_while (List.rev args) ~f:(function
+          | OmittedArg -> true
+          | _ -> false))
+
+let implements_interface (func : Ain.Function.t) =
+  match (Ain.Function.parse_name func).struct_name with
+  | None -> false
+  | Some name -> (
+      match Hashtbl.find Ain.ain.struct_by_name name with
+      | Some struc -> not (Array.is_empty struc.interfaces)
+      | None -> false)
+
 let remove_optional_arguments =
   map_expr ~f:(function
+    | Call ((Function func as f), args) -> Call (f, omit_default_args func args)
+    (* sys4c resolves a call through an interface to the method declaration of
+       the interface, which has no default arguments. *)
+    | Call ((Method (_, func) as f), args) when not (implements_interface func)
+      ->
+        Call (f, omit_default_args func args)
     | Call ((Builtin (PSEUDO_A_NUMOF1, _) as f), [ Number 1l ]) -> Call (f, [])
     | Call
         ( (Builtin (A_SORT, _) as f),

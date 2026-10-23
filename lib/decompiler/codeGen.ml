@@ -362,6 +362,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | Page StructPage -> print_string out "this"
       | Null -> print_string out "NULL"
       | Void -> print_string out "<void>" (* FIXME *)
+      | OmittedArg -> ()
       | Option e -> bprintf out "%a?" (self#pr_expr (prec_value PREC_DOT)) e
       | UnaryOp (FTOI, expr) -> bprintf out "int(%a)" (self#pr_expr 0) expr
       | UnaryOp (ITOF, expr) -> bprintf out "float(%a)" (self#pr_expr 0) expr

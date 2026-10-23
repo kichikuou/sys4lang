@@ -66,6 +66,7 @@ and expr =
   | TempRef of Ain.Variable.t * expr
   | Null
   | Void
+  | OmittedArg
   | Option of expr
   | New of { struc : int; func : int; args : expr list }
   | ArrayLiteral of expr list
@@ -220,7 +221,8 @@ let subst expr e1 e2 =
     else
       match expr with
       | Page _ | Number _ | Boolean _ | Character _ | Float _ | EnumValue _
-      | String _ | FuncAddr _ | MemberPointer _ | Null | Void | New _ ->
+      | String _ | FuncAddr _ | MemberPointer _ | Null | Void | OmittedArg
+      | New _ ->
           expr
       | BoundMethod (e, m) -> BoundMethod (rec_expr e, m)
       | Load l -> Load (rec_lvalue l)
@@ -278,6 +280,7 @@ let map_expr stmt ~f =
     | TempRef (v, e) -> TempRef (v, rec_expr e) |> f
     | Null -> f Null
     | Void -> f Void
+    | OmittedArg -> f OmittedArg
     | Option expr -> Option (rec_expr expr) |> f
     | New r -> New { r with args = List.map ~f:rec_expr r.args } |> f
     | ArrayLiteral es -> ArrayLiteral (List.map ~f:rec_expr es) |> f
@@ -370,6 +373,7 @@ let walk_expr ?(expr_cb = fun _ -> ()) ?(lvalue_cb = fun _ -> ()) =
     | TempRef (_, e) -> rec_expr e
     | Null -> ()
     | Void -> ()
+    | OmittedArg -> ()
     | Option expr -> rec_expr expr
     | New r -> List.iter ~f:rec_expr r.args
     | ArrayLiteral es -> List.iter ~f:rec_expr es
