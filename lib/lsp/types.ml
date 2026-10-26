@@ -16,12 +16,7 @@
 open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 
 module InitializationOptions = struct
-  type t = {
-    pjePath : string; [@default ""]
-    ainPath : string; [@default ""] (* deprecated, use pjePath *)
-    srcDir : string; [@default ""] (* deprecated, use pjePath *)
-    srcEncoding : string; [@default ""] (* deprecated, use pjePath *)
-  }
+  type t = { pjePath : string [@default ""] }
   (* Run `dune build @lint --auto-promote` to regenerate below. *)
   [@@deriving_inline of_yojson]
   [@@yojson.allow_extra_fields]
@@ -32,45 +27,17 @@ module InitializationOptions = struct
     (let _tp_loc = "lib/lsp/types.ml.InitializationOptions.t" in
      function
      | `Assoc field_yojsons as yojson -> (
-         let ainPath_field = ref Ppx_yojson_conv_lib.Option.None
-         and pjePath_field = ref Ppx_yojson_conv_lib.Option.None
-         and srcDir_field = ref Ppx_yojson_conv_lib.Option.None
-         and srcEncoding_field = ref Ppx_yojson_conv_lib.Option.None
+         let pjePath_field = ref Ppx_yojson_conv_lib.Option.None
          and duplicates = ref []
          and extra = ref [] in
          let rec iter = function
            | (field_name, _field_yojson) :: tail ->
                (match field_name with
-               | "ainPath" -> (
-                   match Ppx_yojson_conv_lib.( ! ) ainPath_field with
-                   | Ppx_yojson_conv_lib.Option.None ->
-                       let fvalue = string_of_yojson _field_yojson in
-                       ainPath_field := Ppx_yojson_conv_lib.Option.Some fvalue
-                   | Ppx_yojson_conv_lib.Option.Some _ ->
-                       duplicates :=
-                         field_name :: Ppx_yojson_conv_lib.( ! ) duplicates)
                | "pjePath" -> (
                    match Ppx_yojson_conv_lib.( ! ) pjePath_field with
                    | Ppx_yojson_conv_lib.Option.None ->
                        let fvalue = string_of_yojson _field_yojson in
                        pjePath_field := Ppx_yojson_conv_lib.Option.Some fvalue
-                   | Ppx_yojson_conv_lib.Option.Some _ ->
-                       duplicates :=
-                         field_name :: Ppx_yojson_conv_lib.( ! ) duplicates)
-               | "srcDir" -> (
-                   match Ppx_yojson_conv_lib.( ! ) srcDir_field with
-                   | Ppx_yojson_conv_lib.Option.None ->
-                       let fvalue = string_of_yojson _field_yojson in
-                       srcDir_field := Ppx_yojson_conv_lib.Option.Some fvalue
-                   | Ppx_yojson_conv_lib.Option.Some _ ->
-                       duplicates :=
-                         field_name :: Ppx_yojson_conv_lib.( ! ) duplicates)
-               | "srcEncoding" -> (
-                   match Ppx_yojson_conv_lib.( ! ) srcEncoding_field with
-                   | Ppx_yojson_conv_lib.Option.None ->
-                       let fvalue = string_of_yojson _field_yojson in
-                       srcEncoding_field :=
-                         Ppx_yojson_conv_lib.Option.Some fvalue
                    | Ppx_yojson_conv_lib.Option.Some _ ->
                        duplicates :=
                          field_name :: Ppx_yojson_conv_lib.( ! ) duplicates)
@@ -93,30 +60,10 @@ module InitializationOptions = struct
                    (Ppx_yojson_conv_lib.( ! ) extra)
                    yojson
              | [] ->
-                 let ( ainPath_value,
-                       pjePath_value,
-                       srcDir_value,
-                       srcEncoding_value ) =
-                   ( Ppx_yojson_conv_lib.( ! ) ainPath_field,
-                     Ppx_yojson_conv_lib.( ! ) pjePath_field,
-                     Ppx_yojson_conv_lib.( ! ) srcDir_field,
-                     Ppx_yojson_conv_lib.( ! ) srcEncoding_field )
-                 in
+                 let pjePath_value = Ppx_yojson_conv_lib.( ! ) pjePath_field in
                  {
-                   ainPath =
-                     (match ainPath_value with
-                     | Ppx_yojson_conv_lib.Option.None -> ""
-                     | Ppx_yojson_conv_lib.Option.Some v -> v);
                    pjePath =
                      (match pjePath_value with
-                     | Ppx_yojson_conv_lib.Option.None -> ""
-                     | Ppx_yojson_conv_lib.Option.Some v -> v);
-                   srcDir =
-                     (match srcDir_value with
-                     | Ppx_yojson_conv_lib.Option.None -> ""
-                     | Ppx_yojson_conv_lib.Option.Some v -> v);
-                   srcEncoding =
-                     (match srcEncoding_value with
                      | Ppx_yojson_conv_lib.Option.None -> ""
                      | Ppx_yojson_conv_lib.Option.Some v -> v);
                  }))
@@ -128,6 +75,4 @@ module InitializationOptions = struct
   let _ = t_of_yojson
 
   [@@@deriving.end]
-
-  let default = { srcDir = ""; ainPath = ""; pjePath = ""; srcEncoding = "" }
 end

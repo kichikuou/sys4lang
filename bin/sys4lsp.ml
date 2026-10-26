@@ -110,19 +110,22 @@ class lsp_server ~sw ~fs ~default_pje_path =
       in
       (* Fall back to the pje path given on the command line when the client
          did not specify one via initializationOptions. *)
-      let options =
-        if String.is_empty options.pjePath then
-          { options with pjePath = default_pje_path }
-        else options
+      let pje_path =
+        if String.is_empty options.pjePath then default_pje_path
+        else options.pjePath
       in
       (try
-         Project.initialize project options;
+         if String.is_empty pje_path then
+           notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Warning
+             "No .pje file is specified. Some features may not work correctly."
+         else (
+           Project.initialize project pje_path;
+           notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
+             (pje_path ^ " loaded"));
          Eio.Fiber.fork ~sw (fun () ->
              (try Project.initial_scan project
               with e -> show_exn notify_back e);
-             Eio.Promise.resolve (snd initial_scan_done) ());
-         notify_back#send_log_msg ~type_:Lsp.Types.MessageType.Info
-           (options.pjePath ^ " loaded")
+             Eio.Promise.resolve (snd initial_scan_done) ())
        with e -> show_exn notify_back e);
       super#on_req_initialize ~notify_back i
 

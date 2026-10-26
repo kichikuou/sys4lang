@@ -18,12 +18,6 @@ open Base
 open Document
 module Lsp = Linol_lsp.Lsp
 
-let encoding_of_string s =
-  match String.lowercase s with
-  | "utf-8" -> Pje.UTF8
-  | "shift_jis" -> Pje.SJIS
-  | _ -> raise (Invalid_argument ("Invalid encoding: " ^ s))
-
 type t = {
   read_file : string -> string;
   mutable ctx : Jaf.context;
@@ -74,26 +68,16 @@ let create ~read_file =
     documents = Hashtbl.create (module String);
   }
 
-let initialize proj (options : Types.InitializationOptions.t) =
-  match options.pjePath with
-  | "" ->
-      if not (String.is_empty options.ainPath) then
-        proj.ctx <-
-          Jaf.context_from_ain ~constants:predefined_constants
-            (Ain.load options.ainPath);
-      proj.pje.source_dir <- options.srcDir;
-      if not (String.is_empty options.srcEncoding) then
-        proj.pje.encoding <- encoding_of_string options.srcEncoding
-  | pjePath ->
-      proj.pje <- PjeLoader.load proj.read_file pjePath;
-      proj.ctx <-
-        Jaf.context_from_ain ~constants:predefined_constants
-          (Pje.create_ain proj.pje);
-      let open Stdlib.Filename in
-      if String.equal proj.pje.source_dir "." then
-        proj.pje.source_dir <- dirname pjePath
-      else if is_relative proj.pje.source_dir then
-        proj.pje.source_dir <- concat (dirname pjePath) proj.pje.source_dir
+let initialize proj pje_path =
+  proj.pje <- PjeLoader.load proj.read_file pje_path;
+  proj.ctx <-
+    Jaf.context_from_ain ~constants:predefined_constants
+      (Pje.create_ain proj.pje);
+  let open Stdlib.Filename in
+  if String.equal proj.pje.source_dir "." then
+    proj.pje.source_dir <- dirname pje_path
+  else if is_relative proj.pje.source_dir then
+    proj.pje.source_dir <- concat (dirname pje_path) proj.pje.source_dir
 
 let resolve_source_path proj fname =
   Stdlib.Filename.concat proj.pje.source_dir fname

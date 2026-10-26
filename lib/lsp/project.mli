@@ -4,7 +4,7 @@ module Lsp = Linol_lsp.Lsp
 type t
 
 val create : read_file:(string -> string) -> t
-val initialize : t -> Types.InitializationOptions.t -> unit
+val initialize : t -> string -> unit
 val update_document : t -> path:string -> string -> Lsp.Types.Diagnostic.t list
 val load_document : t -> string -> unit
 val initial_scan : t -> unit

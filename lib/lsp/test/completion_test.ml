@@ -7,9 +7,7 @@ let testdir_path = List.fold ~init:test_project_dir ~f:Stdlib.Filename.concat
 
 let initialize_project ?(pje = "default.pje") () =
   let proj = Project.create ~read_file:Stdio.In_channel.read_all in
-  let pjePath = testdir_path [ pje ] in
-  let options = { Types.InitializationOptions.default with pjePath } in
-  Project.initialize proj options;
+  Project.initialize proj (testdir_path [ pje ]);
   Project.initial_scan proj;
   proj
 
