@@ -90,6 +90,9 @@ class type_declare_visitor ctx =
                   if not g.is_const then
                     g.index <- Some (Ain.add_global ctx.ain g.name gg_index))
       | GlobalGroup gg ->
+          if Ain.version ctx.ain < 5 then
+            compile_error "Global groups require AIN version 5 or later"
+              (ASTDeclaration decl);
           gg_index <- Ain.add_global_group ctx.ain gg.name;
           List.iter gg.vardecls ~f:(fun ds ->
               self#visit_declaration (Global ds));

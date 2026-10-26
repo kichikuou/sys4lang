@@ -1463,3 +1463,14 @@ let%expect_test "comma operator in reference context" =
     178: FUNC NULL
     184: EOF
     |}]
+
+let%expect_test "global group before v5" =
+  compile_test {|
+globalgroup G { int a; }
+  |};
+  [%expect
+    {|
+    test.jaf:2:1-25: Global groups require AIN version 5 or later
+        2 | globalgroup G { int a; }
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |}]
