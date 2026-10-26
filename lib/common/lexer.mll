@@ -20,15 +20,14 @@ open Parser
 
 exception Error
 
-(* Unquote & splice string literal *)
-let process_string s =
-  let rec loop s i in_text result =
-    if i >= String.length s then
-      String.of_char_list (List.rev result)
-    else
+(* Unquote & splice string literals or messages *)
+let unquote quote s =
+  let buf = Buffer.create (String.length s) in
+  let rec loop i in_text =
+    if i < String.length s then
       match String.get s i with
-      | '"' ->
-          loop s (i+1) (not in_text) result
+      | c when Char.equal c quote ->
+          loop (i+1) (not in_text)
       | '\\' ->
           let c = match String.get s (i+1) with
           | 'r' -> '\r'
@@ -37,40 +36,17 @@ let process_string s =
           (* TODO: warn about invalid escape sequences *)
           | a   -> a
           in
-          loop s (i+2) in_text (c :: result)
+          Buffer.add_char buf c;
+          loop (i+2) in_text
       | c ->
-          if in_text then
-            loop s (i+1) in_text (c :: result)
-          else
-            loop s (i+1) in_text result
+          if in_text then Buffer.add_char buf c;
+          loop (i+1) in_text
   in
-  loop s 0 false []
+  loop 0 false;
+  Buffer.contents buf
 
-(* Unquote & splice message *)
-let process_message s =
-  let rec loop s i in_text result =
-    if i >= String.length s then
-      String.of_char_list (List.rev result)
-    else
-      match String.get s i with
-      | '\'' ->
-          loop s (i+1) (not in_text) result
-      | '\\' ->
-          let c = match String.get s (i+1) with
-          | 'r' -> '\r'
-          | 'n' -> '\n'
-          | 't' -> '\t'
-          (* TODO: warn about invalid escape sequences *)
-          | a   -> a
-          in
-          loop s (i+2) in_text (c :: result)
-      | c ->
-          if in_text then
-            loop s (i+1) in_text (c :: result)
-          else
-            loop s (i+1) in_text result
-  in
-  loop s 0 false []
+let process_string = unquote '"'
+let process_message = unquote '\''
 
 let keyword_table = Hashtbl.create (module String)
 let () =
