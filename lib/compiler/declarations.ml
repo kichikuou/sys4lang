@@ -39,8 +39,10 @@ class type_declare_visitor ctx =
       (* ain v1 scenario labels are not recorded in the FUNC table. Keep them in
          ctx.functions (so `jump` resolves) but leave their FUNC index unset. *)
       let is_v1_scenario_label = decl.is_label && Ain.version ctx.ain = 1 in
-      if Option.is_some decl.body && not is_v1_scenario_label then
-        decl.index <- Some (Ain.add_function ctx.ain name).index;
+      let assign_index () =
+        if Option.is_some decl.body && not is_v1_scenario_label then
+          decl.index <- Some (Ain.add_function ctx.ain name).index
+      in
       Hashtbl.update ctx.functions name ~f:(function
         | Some prev_decl ->
             if
@@ -56,6 +58,7 @@ class type_declare_visitor ctx =
               decl.index <- Some (-1);
               prev_decl)
             else (
+              assign_index ();
               prev_decl.index <- decl.index;
               List.iter decl.params ~f:(fun p ->
                   if Option.is_some p.initval then
@@ -70,7 +73,9 @@ class type_declare_visitor ctx =
                  the visibility set during struct registration. *)
               decl.is_private <- prev_decl.is_private;
               decl)
-        | None -> decl);
+        | None ->
+            assign_index ();
+            decl);
       super#visit_fundecl decl
 
     method! visit_declaration decl =
@@ -113,7 +118,9 @@ class type_declare_visitor ctx =
               compile_error "duplicate delegate definition"
                 (ASTDeclaration decl)
           | `Ok -> f.index <- Some (Ain.add_delegate ctx.ain f.name).index)
-      | StructDef s -> (
+      | StructDef s ->
+          if Hashtbl.mem ctx.structs s.name then
+            compile_error "duplicate struct definition" (ASTDeclaration decl);
           let unqualified_struct_name =
             snd (Util.parse_qualified_name s.name)
           in
@@ -161,10 +168,7 @@ class type_declare_visitor ctx =
                     | `Ok -> ())
           in
           List.iter s.decls ~f:visit_decl;
-          match Hashtbl.add ctx.structs ~key:s.name ~data:jaf_s with
-          | `Duplicate ->
-              compile_error "duplicate struct definition" (ASTDeclaration decl)
-          | `Ok -> ())
+          Hashtbl.add_exn ctx.structs ~key:s.name ~data:jaf_s
       | Enum _ ->
           compile_error "enum types not yet supported" (ASTDeclaration decl)
   end

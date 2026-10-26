@@ -55,6 +55,30 @@ let%expect_test "output format is preserved" =
     Raw VERS, same output: true
     |}]
 
+let%expect_test "duplicate names" =
+  let print_failure f =
+    try f () with Failure msg -> Stdio.print_endline msg
+  in
+  let ain = Ain.create 4 0 in
+  ignore (Ain.add_function ain "f" : Ain.Function.t);
+  print_failure (fun () -> ignore (Ain.add_function ain "f" : Ain.Function.t));
+  Ain.write_function ain { (Ain.add_function ain "g") with name = "f" };
+  print_failure (fun () -> ignore (write_and_read ain : string * Ain.t));
+  [%expect
+    {|
+    function f has multiple entries
+    function f has multiple entries
+    |}]
+
+let%expect_test "duplicate library names" =
+  let ain = Ain.create 4 0 in
+  ignore (Ain.add_library ain "L" : Ain.Library.t);
+  ignore (Ain.add_library ain "L" : Ain.Library.t);
+  let _, loaded = write_and_read ain in
+  Stdio.printf "%d libraries, L is %d\n" (Ain.nr_libraries loaded)
+    (Option.value_exn (Ain.get_library_index loaded "L"));
+  [%expect {| 2 libraries, L is 0 |}]
+
 let%expect_test "FNCT and DELG sections" =
   List.iter
     [ (0, 0); (1, 0); (6, 0); (6, 10); (6, 20); (7, 0) ]

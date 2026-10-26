@@ -459,14 +459,21 @@ type t = {
   delegate_by_name : (string, int) Hashtbl.t;
 }
 
-let try_add_name_index tbl name index =
+let add_name_index kind tbl name index =
+  match Hashtbl.add tbl ~key:name ~data:index with
+  | `Ok -> ()
+  | `Duplicate -> failwith (sprintf "%s %s has multiple entries" kind name)
+
+(* The AIN file of Pascha C++ has two ACXLoader libraries. The first one is
+   used. *)
+let add_library_name_index tbl name index =
   Hashtbl.add tbl ~key:name ~data:index |> ignore
 
 let create ?is_ain2 ?(keyc = 0l) ?(game_version = 0) major_version minor_version
     =
   let functions = Dynarray.of_list [ Function.create ~index:0 "NULL" ] in
   let function_by_name = Hashtbl.create (module String) in
-  try_add_name_index function_by_name "NULL" 0;
+  add_name_index "function" function_by_name "NULL" 0;
   {
     format =
       (if Option.value is_ain2 ~default:(major_version >= 5) then Compressed
@@ -918,25 +925,27 @@ let load filename =
     Hashtbl.clear ain.delegate_by_name;
     Dynarray.iteri
       (fun i (f : Function.t) ->
-        try_add_name_index ain.function_by_name f.name i)
+        add_name_index "function" ain.function_by_name f.name i)
       ain.functions;
     Dynarray.iteri
       (fun i (g : Global.t) ->
-        try_add_name_index ain.global_by_name g.variable.name i)
+        add_name_index "global" ain.global_by_name g.variable.name i)
       ain.globals;
     Dynarray.iteri
-      (fun i (s : Struct.t) -> try_add_name_index ain.struct_by_name s.name i)
+      (fun i (s : Struct.t) ->
+        add_name_index "struct" ain.struct_by_name s.name i)
       ain.structures;
     Dynarray.iteri
-      (fun i (l : Library.t) -> try_add_name_index ain.library_by_name l.name i)
+      (fun i (l : Library.t) ->
+        add_library_name_index ain.library_by_name l.name i)
       ain.libraries;
     Dynarray.iteri
       (fun i (ft : FunctionType.t) ->
-        try_add_name_index ain.functype_by_name ft.name i)
+        add_name_index "functype" ain.functype_by_name ft.name i)
       ain.function_types;
     Dynarray.iteri
       (fun i (dg : FunctionType.t) ->
-        try_add_name_index ain.delegate_by_name dg.name i)
+        add_name_index "delegate" ain.delegate_by_name dg.name i)
       ain.delegates
   in
   let load' file =
@@ -1327,7 +1336,7 @@ let write_new_global ain (v : Variable.t) =
   let index = Dynarray.length ain.globals in
   let g : Global.t = { variable = { v with index }; group_index = 0 } in
   Dynarray.add_last ain.globals g;
-  try_add_name_index ain.global_by_name v.name index;
+  add_name_index "global" ain.global_by_name v.name index;
   index
 
 let add_global ain name group_index =
@@ -1335,7 +1344,7 @@ let add_global ain name group_index =
   let variable = Variable.make ~index name Void in
   let g = Global.create variable group_index in
   Dynarray.add_last ain.globals g;
-  try_add_name_index ain.global_by_name name index;
+  add_name_index "global" ain.global_by_name name index;
   index
 
 let add_global_group ain name =
@@ -1364,7 +1373,7 @@ let write_new_function ain (f : Function.t) =
   let index = Dynarray.length ain.functions in
   let f = { f with index } in
   Dynarray.add_last ain.functions f;
-  try_add_name_index ain.function_by_name f.name index;
+  add_name_index "function" ain.function_by_name f.name index;
   index
 
 let add_function ain name =
@@ -1390,7 +1399,7 @@ let write_new_struct ain (s : Struct.t) =
   let index = Dynarray.length ain.structures in
   let s = { s with index } in
   Dynarray.add_last ain.structures s;
-  try_add_name_index ain.struct_by_name s.name index;
+  add_name_index "struct" ain.struct_by_name s.name index;
   index
 
 let add_struct ain name =
@@ -1437,7 +1446,7 @@ let write_new_library ain (lib : Library.t) =
   let index = Dynarray.length ain.libraries in
   let lib = { lib with index } in
   Dynarray.add_last ain.libraries lib;
-  try_add_name_index ain.library_by_name lib.name index;
+  add_library_name_index ain.library_by_name lib.name index;
   index
 
 let add_library ain name =
@@ -1486,7 +1495,7 @@ let write_new_functype ain (ft : FunctionType.t) =
   let index = Dynarray.length ain.function_types in
   let ft = { ft with index } in
   Dynarray.add_last ain.function_types ft;
-  try_add_name_index ain.functype_by_name ft.name index;
+  add_name_index "functype" ain.functype_by_name ft.name index;
   index
 
 let add_functype ain name =
@@ -1528,7 +1537,7 @@ let write_new_delegate ain (dg : FunctionType.t) =
   let index = Dynarray.length ain.delegates in
   let dg = { dg with index } in
   Dynarray.add_last ain.delegates dg;
-  try_add_name_index ain.delegate_by_name dg.name index;
+  add_name_index "delegate" ain.delegate_by_name dg.name index;
   index
 
 let add_delegate ain name =
