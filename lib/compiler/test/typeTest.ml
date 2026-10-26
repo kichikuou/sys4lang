@@ -19,7 +19,7 @@ open Compiler
 
 let type_test ?(ain_version = (4, 0)) input =
   let major, minor = ain_version in
-  let ctx = Jaf.context_from_ain (Ain.create major minor) in
+  let ctx = Jaf.create_context (Ain.create major minor) in
   let debug_info = DebugInfo.create () in
   try
     Compile.compile ctx [ Pje.Jaf "-" ] debug_info (fun _ -> input);

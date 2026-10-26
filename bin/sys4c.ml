@@ -55,7 +55,7 @@ let do_compile sources output major minor import_as input_encoding =
           Pje.Hll (f, import_name)
         else Pje.Jaf f)
   in
-  let ctx = Jaf.context_from_ain (Ain.create major minor) in
+  let ctx = Jaf.create_context (Ain.create major minor) in
   let files = Hashtbl.create (module String) in
   handle_errors
     (fun () ->
@@ -75,7 +75,7 @@ let do_build pje_file output_dir_override no_debug_info =
       (fun () -> PjeLoader.load read_text_file pje_file)
       (fun _ -> None)
   in
-  let ctx = Jaf.context_from_ain (Pje.create_ain pje) in
+  let ctx = Jaf.create_context (Pje.create_ain pje) in
   let files = Hashtbl.create (module String) in
   handle_errors
     (fun () ->

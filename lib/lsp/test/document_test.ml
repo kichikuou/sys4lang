@@ -5,7 +5,7 @@ open System4_lsp
 let analyze source =
   let doc =
     Document.create
-      (Jaf.context_from_ain (Ain.create 4 0))
+      (Jaf.create_context (Ain.create 4 0))
       ~fname:"test.jaf" source
   in
   if List.is_empty doc.errors then Stdio.print_endline "ok"
@@ -159,7 +159,7 @@ let print_errors (doc : Document.t) =
   else List.iter doc.errors ~f:(fun (_, message) -> Stdio.print_endline message)
 
 let%expect_test "reparse method definition in another document" =
-  let ctx = Jaf.context_from_ain (Ain.create 4 0) in
+  let ctx = Jaf.create_context (Ain.create 4 0) in
   let decls = "class C { public: void f(int a = 1); private: void g(); };" in
   let defs =
     "void C::f(int a) {} void C::g() {} void test() { C c; c.f(); c.g(); }"
@@ -175,7 +175,7 @@ let%expect_test "reparse method definition in another document" =
     |}]
 
 let%expect_test "reparse method definition before class" =
-  let ctx = Jaf.context_from_ain (Ain.create 4 0) in
+  let ctx = Jaf.create_context (Ain.create 4 0) in
   let source =
     "void C::g() {} class C { private: void g(); }; void test() { C c; c.g(); }"
   in

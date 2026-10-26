@@ -63,7 +63,7 @@ let predefined_constants =
 let create ~read_file =
   {
     read_file;
-    ctx = Jaf.context_from_ain ~constants:predefined_constants (Ain.create 4 0);
+    ctx = Jaf.create_context ~constants:predefined_constants (Ain.create 4 0);
     pje = Pje.default_pje "default.pje" SJIS;
     documents = Hashtbl.create (module String);
   }
@@ -71,8 +71,7 @@ let create ~read_file =
 let initialize proj pje_path =
   proj.pje <- PjeLoader.load proj.read_file pje_path;
   proj.ctx <-
-    Jaf.context_from_ain ~constants:predefined_constants
-      (Pje.create_ain proj.pje);
+    Jaf.create_context ~constants:predefined_constants (Pje.create_ain proj.pje);
   let open Stdlib.Filename in
   if String.equal proj.pje.source_dir "." then
     proj.pje.source_dir <- dirname pje_path

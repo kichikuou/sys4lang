@@ -181,6 +181,8 @@ module Type = struct
     | Int | Bool | Float | LongInt | FuncType _ -> true
     | _ -> false
 
+  let is_ref_scalar = function Ref t -> is_scalar t | _ -> false
+
   let rec of_parsed parsed =
     (* constructor for old array types *)
     let rec make_array elem_t rank =

@@ -65,7 +65,7 @@ let print_disassemble ain =
 let compile_test ?(ain_version = (4, 0)) ?(hlls = [])
     ?(print = print_disassemble) input =
   let major, minor = ain_version in
-  let ctx = Jaf.context_from_ain (Ain.create major minor) in
+  let ctx = Jaf.create_context (Ain.create major minor) in
   let debug_info = DebugInfo.create () in
   try
     let srcs =

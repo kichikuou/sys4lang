@@ -193,9 +193,8 @@ let collect_scope ctx text pos toplevel =
 let item ~label ~kind ?detail () =
   Lsp.Types.CompletionItem.create ~label ~kind ?detail ()
 
-(* Skip class methods, lambdas, and the synthetic [NULL] entry. *)
 let is_non_global_function (f : Jaf.fundecl) =
-  Option.is_some f.class_name || f.is_lambda || String.equal f.name "NULL"
+  Option.is_some f.class_name || f.is_lambda
 
 let variable_kind (v : Jaf.variable) =
   if v.is_const then Lsp.Types.CompletionItemKind.Constant else Variable
