@@ -385,6 +385,9 @@ let number_of_name numbering name =
 type context = {
   ain : Ain.t;
   version : int; (* ain_major_version * 100 + ain_minor_version *)
+  (* When true, a functype or delegate type without a name accepts any
+     function. The language server sets this. *)
+  loose_functype_check : bool;
   globals : (string, variable) Hashtbl.t;
   structs : (string, jaf_struct) Hashtbl.t;
   (* The indices of the types in the AIN tables. *)
@@ -931,12 +934,14 @@ let rec jaf_to_ain_type = function
   | MemberPtr _ -> Ain.Type.Int (* slot number *)
   | TypeUnion _ -> failwith "tried to convert TypeUnion to ain data type"
 
-let create_context ?(constants : variable list = []) ain =
+let create_context ?(constants : variable list = [])
+    ?(loose_functype_check = false) ain =
   let globals = Hashtbl.create (module String) in
   List.iter constants ~f:(fun v -> Hashtbl.add_exn globals ~key:v.name ~data:v);
   {
     ain;
     version = (Ain.version ain * 100) + Ain.minor_version ain;
+    loose_functype_check;
     globals;
     structs = Hashtbl.create (module String);
     struct_numbers = new_numbering ();
