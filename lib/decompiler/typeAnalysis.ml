@@ -86,6 +86,47 @@ let remove_cast (t : ain_type) e =
   | LongInt, UnaryOp (ITOLI, e) -> e
   | _, _ -> e
 
+let without_void =
+  List.filter ~f:(function (Void : ain_type) -> false | _ -> true)
+
+(* The parameter types of the other functions in [funcs] that have the name of
+   [func]. Functions can be overloaded in AIN v11+. *)
+let other_overloads funcs ~name ~arg_types func =
+  if Ain.ain.vers < 11 then []
+  else
+    List.filter_map funcs ~f:(fun f ->
+        if phys_equal f func || not (String.equal (name f) (name func)) then
+          None
+        else Some (without_void (arg_types f)))
+
+let function_overloads (func : Ain.Function.t) =
+  other_overloads
+    (Array.to_list Ain.ain.func)
+    ~name:(fun (f : Ain.Function.t) -> f.name)
+    ~arg_types:Ain.Function.arg_types func
+
+let hll_overloads lib (func : Ain.HLL.function_t) =
+  other_overloads
+    (Array.to_list Ain.ain.hll0
+    |> List.filter ~f:(fun (l : Ain.HLL.t) -> String.equal l.name lib)
+    |> List.concat_map ~f:(fun (l : Ain.HLL.t) -> Array.to_list l.functions))
+    ~name:(fun (f : Ain.HLL.function_t) -> f.name)
+    ~arg_types:Ain.HLL.arg_types func
+
+(* True if the numeric cast of the argument [i] selects the callee, which takes
+   [params], over the [overloads]. The callee takes the argument before the
+   cast only by conversion. Without the cast, an overload that takes another
+   numeric type or hll_param at [i] matches the argument at least as well. *)
+let cast_selects_overload i params overloads =
+  let param_at ps = match List.nth_exn ps i with Ref t -> t | t -> t in
+  let callee_param = param_at params in
+  List.exists overloads ~f:(fun o ->
+      List.length o = List.length params
+      &&
+      let p = param_at o in
+      (Type.is_scalar p || Poly.equal p HllParam)
+      && not (Poly.equal p callee_param))
+
 let remove_binop_cast (insn : Instructions.instruction) lhs rhs =
   match insn with
   | F_ADD | F_SUB | F_MUL | F_DIV | F_EQUALE | F_NOTE | F_LT | F_LTE | F_GT
@@ -328,20 +369,24 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (InterfaceCast (struc, e'), IFace struc)
 
     method private analyze_call callable args =
-      let analyze_args arg_types =
-        let arg_types =
-          List.filter arg_types ~f:(function
-            | (Void : ain_type) -> false
-            | _ -> true)
-        in
-        List.map2_exn args arg_types ~f:(fun arg t ->
+      let analyze_args ?(overloads = fun () -> []) arg_types =
+        let arg_types = without_void arg_types in
+        List.mapi (List.zip_exn args arg_types) ~f:(fun i (arg, t) ->
             let arg', t' = self#analyze_expr t arg in
             unify_if_functype t t';
-            remove_cast t arg')
+            match arg' with
+            | UnaryOp ((FTOI | ITOF), _)
+              when cast_selects_overload i arg_types (overloads ()) ->
+                arg'
+            | _ -> remove_cast t arg')
       in
       match callable with
       | Function func as expr ->
-          let args = analyze_args (Ain.Function.arg_types func) in
+          let args =
+            analyze_args
+              ~overloads:(fun () -> function_overloads func)
+              (Ain.Function.arg_types func)
+          in
           (Call (expr, args), func.return_type)
       | FuncPtr (ft, expr) -> (
           match self#analyze_expr Any expr with
@@ -361,7 +406,11 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
               Printf.failwithf "Delegate expected, got %s" (show_ain_type t) ())
       | Method (this, func) ->
           let expr', _ = self#analyze_expr Any this in
-          let args = analyze_args (Ain.Function.arg_types func) in
+          let args =
+            analyze_args
+              ~overloads:(fun () -> function_overloads func)
+              (Ain.Function.arg_types func)
+          in
           (Call (Method (expr', func), args), func.return_type)
       | HllFunc ("Array", func) as expr -> (
           (* Resolve hll_param using the type of the first argument, because
@@ -377,8 +426,12 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
                 Type.replace_hll_param elem_ty func.return_type )
           | _, t ->
               Printf.failwithf "Array expected, got %s" (show_ain_type t) ())
-      | HllFunc (_, func) as expr ->
-          let args = analyze_args (Ain.HLL.arg_types func) in
+      | HllFunc (lib, func) as expr ->
+          let args =
+            analyze_args
+              ~overloads:(fun () -> hll_overloads lib func)
+              (Ain.HLL.arg_types func)
+          in
           (Call (expr, args), func.return_type)
       | SysCall n as expr ->
           let syscall = Instructions.syscalls.(n) in
