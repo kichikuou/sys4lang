@@ -882,11 +882,17 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | args -> self#println "(%a);" (pr_param_list self#pr_vardecl) args
 
     method print_hll (funcs : Ain.HLL.function_t array) =
-      let printed = Hash_set.create (module String) in
+      (* A function is a duplicate if an earlier function has the same name and
+         the same parameter types. Otherwise it is an overload. *)
+      let printed = Hashtbl.create (module String) in
       Array.iter funcs ~f:(fun func ->
-          if Hash_set.mem printed func.name then
-            print_string out "// (duplicated) "
-          else Hash_set.add printed func.name;
+          let arg_types = Ain.HLL.arg_types func in
+          if
+            List.mem
+              (Hashtbl.find_multi printed func.name)
+              arg_types ~equal:Poly.equal
+          then print_string out "// (duplicated) "
+          else Hashtbl.add_multi printed ~key:func.name ~data:arg_types;
           self#print_hll_function func)
 
     method print_hll_inc =
