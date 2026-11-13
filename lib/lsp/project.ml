@@ -83,18 +83,13 @@ let resolve_source_path proj fname =
 
 let update_document proj ~path contents =
   let previous = find_document proj path in
-  let doc = Document.create proj.ctx ~fname:path ?previous contents in
+  let doc =
+    Document.create proj.ctx ~fname:path ?previous
+      ~predefined:predefined_constants contents
+  in
   set_document proj path doc;
   List.map doc.errors ~f:(fun (range, message) ->
       Lsp.Types.Diagnostic.create ~range ~message:(`String message) ())
-
-let load_document proj fname =
-  let path = resolve_source_path proj fname in
-  let to_utf8 =
-    match proj.pje.encoding with UTF8 -> Fn.id | SJIS -> Sjis.to_utf8
-  in
-  let contents = proj.read_file path |> to_utf8 in
-  update_document proj ~path contents |> ignore
 
 let initial_scan proj =
   let to_utf8 =
@@ -104,7 +99,8 @@ let initial_scan proj =
       match source with
       | Jaf fname ->
           let path = resolve_source_path proj fname in
-          Document.parse proj.ctx ~fname:path (proj.read_file path |> to_utf8)
+          Document.parse proj.ctx ~fname:path ~predefined:predefined_constants
+            (proj.read_file path |> to_utf8)
       | Hll (fname, hll_import_name) ->
           let path = resolve_source_path proj fname in
           Document.parse proj.ctx ~fname:path ~hll_import_name
@@ -177,29 +173,10 @@ let get_hover proj ~path pos =
           make_hover (Jaf.ast_node_pos decl) (Jaf.sdecl_to_string sdecl)
       | _ -> None)
 
-let filename_of_func ain (func : Ain.Function.t) =
-  let code = Ain.get_code ain in
-  let rec find_eof addr =
-    match Bytecode.opcode_of_int (Stdlib.Bytes.get_int16_le code addr) with
-    | EOF ->
-        let i = Stdlib.Bytes.get_int32_le code (addr + 2) in
-        Ain.get_file ain (Int32.to_int_exn i)
-    | op ->
-        let nr_args = List.length (Bytecode.args_of_opcode op) in
-        find_eof (addr + 2 + (nr_args * 4))
-  in
-  find_eof func.address
-
 let location_of_func proj name =
   match Jaf.find_function proj.ctx name with
   | Some f when Option.is_some f.body -> Some f.loc
-  | _ ->
-      (* Load .jaf file and try again. *)
-      Option.(
-        Ain.get_function proj.ctx.ain name >>= fun func ->
-        filename_of_func proj.ctx.ain func >>= fun fname ->
-        load_document proj (backslash_to_slash fname);
-        Jaf.find_function proj.ctx name >>| fun f -> f.loc)
+  | _ -> None
 
 let find_location proj path pos f =
   match find_document proj path with
