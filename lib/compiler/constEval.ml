@@ -78,7 +78,7 @@ let const_unary dst e int_op float_op =
 
 class const_eval_visitor ctx =
   object (self)
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
     val mutable in_const_ctx = false
 
     method private eval_variable expr (v : variable) =

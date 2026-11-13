@@ -20,7 +20,7 @@ open CompileError
 
 class sanity_check_visitor ctx =
   object
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
 
     method! visit_expression expr =
       super#visit_expression expr;

@@ -18,17 +18,31 @@ open Base
 open Jaf
 open CompileError
 open TypeRules
+open NameResolution
 
 let sprintf = Printf.sprintf
 
 class type_analyze_visitor ctx =
   object (self)
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
     val mutable errors : compile_error list = []
     method errors = List.rev errors
 
     method catch_errors f =
       try f () with Compile_error e -> errors <- e :: errors
+
+    (* Makes [expr] the access to the member [m] of [obj]. *)
+    method private set_member (expr : expression) obj name m =
+      match m with
+      | MemberVar v ->
+          expr.node <-
+            Member
+              (obj, name, if v.is_const then ClassConst v else ClassVariable v);
+          expr.ty <- v.type_spec.ty
+      | MemberFunctions fs ->
+          let f = List.hd_exn fs in
+          expr.node <- Member (obj, name, ClassMethod f);
+          expr.ty <- TyMethod (ft_of_fundecl f)
 
     method! visit_expression expr =
       super#visit_expression expr;
@@ -75,7 +89,7 @@ class type_analyze_visitor ctx =
       | ConstChar _ -> expr.ty <- Int
       | ConstString _ -> expr.ty <- String
       | Ident (name, _) -> (
-          match self#env#resolve name with
+          match resolve ctx self#env name with
           | ResolvedLocal v ->
               expr.node <- Ident (name, LocalVariable v);
               expr.ty <- v.type_spec.ty
@@ -88,20 +102,9 @@ class type_analyze_visitor ctx =
           | ResolvedFunction f ->
               expr.node <- Ident (name, FunctionName name);
               expr.ty <- TyFunction (ft_of_fundecl f)
-          | ResolvedMember (s, v) ->
-              expr.node <-
-                Member
-                  ( make_expr ~ty:(Struct (s.name, s.index)) This,
-                    name,
-                    if v.is_const then ClassConst v else ClassVariable v );
-              expr.ty <- v.type_spec.ty
-          | ResolvedMethod (s, f) ->
-              expr.node <-
-                Member
-                  ( make_expr ~ty:(Struct (s.name, s.index)) This,
-                    name,
-                    ClassMethod f );
-              expr.ty <- TyMethod (ft_of_fundecl f)
+          | ResolvedMember (s, m) ->
+              let this = make_expr ~ty:(Struct (s.name, s.index)) This in
+              self#set_member expr this name m
           | ResolvedLibrary l ->
               expr.node <- Ident (name, HLLName l);
               expr.ty <- Void
@@ -122,18 +125,17 @@ class type_analyze_visitor ctx =
               match Util.parse_qualified_name name with
               | None, name -> undefined_variable_error name (ASTExpression expr)
               | Some sname, name -> (
-                  match self#env#resolve_qualified sname name with
-                  | UnresolvedName ->
-                      undefined_variable_error
-                        (sname ^ "::" ^ name)
-                        (ASTExpression expr)
-                  | ResolvedMember (_, v) ->
+                  match
+                    Option.bind (Hashtbl.find ctx.structs sname) ~f:(fun s ->
+                        find_member ctx s name)
+                  with
+                  | Some (MemberVar v) ->
                       expr.node <- MemberAddr (sname, v);
                       expr.ty <- MemberPtr (sname, v.type_spec.ty)
-                  | _ ->
-                      compiler_bug
-                        "resolve_qualified returned an unexpected value"
-                        (Some (ASTExpression expr)))))
+                  | Some (MemberFunctions _) | None ->
+                      undefined_variable_error
+                        (sname ^ "::" ^ name)
+                        (ASTExpression expr))))
       | MemberAddr _ ->
           compiler_bug "unexpected MemberAddr" (Some (ASTExpression expr))
       | Unary (op, e) -> (
@@ -307,28 +309,20 @@ class type_analyze_visitor ctx =
                   (sprintf "%s::%s is not public" struc.name member_name)
                   (ASTExpression expr)
           in
-          match Hashtbl.find struc.members member_name with
-          | Some member ->
-              if member.is_private then access_check ();
-              expr.node <-
-                Member
-                  ( obj,
-                    member_name,
-                    if member.is_const then ClassConst member
-                    else ClassVariable member );
-              expr.ty <- member.type_spec.ty
-          | None -> (
-              let fun_name = struc.name ^ "@" ^ member_name in
-              match find_function ctx fun_name with
-              | Some f ->
-                  if f.is_private then access_check ();
-                  expr.node <- Member (obj, member_name, ClassMethod f);
-                  expr.ty <- TyMethod (ft_of_fundecl f)
-              | None ->
-                  (* TODO: separate error type for this? *)
-                  undefined_variable_error
-                    (struc.name ^ "." ^ member_name)
-                    (ASTExpression expr)))
+          match find_member ctx struc member_name with
+          | Some m ->
+              let is_private =
+                match m with
+                | MemberVar v -> v.is_private
+                | MemberFunctions fs -> (List.hd_exn fs).is_private
+              in
+              if is_private then access_check ();
+              self#set_member expr obj member_name m
+          | None ->
+              (* TODO: separate error type for this? *)
+              undefined_variable_error
+                (struc.name ^ "." ^ member_name)
+                (ASTExpression expr))
       (* regular function call *)
       | Call (({ node = Ident (_, FunctionName name); _ } as e), args, _) ->
           let f = Option.value_exn (find_function ctx name) in

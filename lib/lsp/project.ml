@@ -219,10 +219,11 @@ let get_definition proj ~path pos =
           node = Member ({ ty = Struct (s_name, _); _ }, m_name, ClassVariable _);
           _;
         }
-      :: _ ->
+      :: _ -> (
         let s = Hashtbl.find_exn proj.ctx.structs s_name in
-        let v = Hashtbl.find_exn s.members m_name in
-        Some v.location
+        match Hashtbl.find s.members m_name with
+        | Some (MemberVariable v) -> Some v.location
+        | _ -> None)
     | Jaf.ASTType { ty; _ } :: _ -> (
         match jaf_base_type ty with
         | Struct (name, _) -> Some (Hashtbl.find_exn proj.ctx.structs name).loc
@@ -313,9 +314,9 @@ let symbol_at_nodes nodes =
 (* Walks a subtree (fundecl or toplevel) and collects locations of
    expressions/types/declarations matching [target]. Declaration-site
    matches are emitted only when [include_declaration] is true. *)
-class reference_collector ctx target ~include_declaration =
+class reference_collector target ~include_declaration =
   object (self)
-    inherit Jaf.ivisitor ctx as super
+    inherit Jaf.ivisitor as super
     val mutable refs : Jaf.location list = []
     method refs = refs
     method private add loc = refs <- loc :: refs
@@ -429,9 +430,7 @@ let get_references proj ~path pos ~include_declaration =
           let locs =
             match target with
             | RefLocalVar _ ->
-                let v =
-                  new reference_collector proj.ctx target ~include_declaration
-                in
+                let v = new reference_collector target ~include_declaration in
                 Option.iter
                   (enclosing_fundecl_of_nodes nodes)
                   ~f:v#visit_fundecl;
@@ -441,8 +440,7 @@ let get_references proj ~path pos ~include_declaration =
                 Hashtbl.fold proj.documents ~init:[]
                   ~f:(fun ~key:_ ~data:doc acc ->
                     let v =
-                      new reference_collector
-                        proj.ctx target ~include_declaration
+                      new reference_collector target ~include_declaration
                     in
                     v#visit_toplevel doc.toplevel;
                     List.rev_append v#refs acc)

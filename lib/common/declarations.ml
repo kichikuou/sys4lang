@@ -82,6 +82,10 @@ let register_global ctx decl (g : variable) =
       compile_error "duplicate global definition" (ASTDeclaration decl)
   | `Ok -> ()
 
+(* A member variable hides a method of the same name. *)
+let add_method_member (s : jaf_struct) name =
+  Hashtbl.add s.members ~key:name ~data:MemberMethod |> ignore
+
 let register_struct ctx (s : structdecl) =
   if Hashtbl.mem ctx.structs s.name then
     compile_error "duplicate struct definition" (ASTDeclaration (StructDef s));
@@ -96,6 +100,14 @@ let register_struct ctx (s : structdecl) =
     f.is_private <- !in_private;
     register_function ctx f
   in
+  let register_variable (v : variable) =
+    v.is_private <- !in_private;
+    match Hashtbl.find jaf_s.members v.name with
+    | Some (MemberVariable _) ->
+        compile_error "duplicate member variable declaration" (ASTVariable v)
+    | Some MemberMethod | None ->
+        Hashtbl.set jaf_s.members ~key:v.name ~data:(MemberVariable v)
+  in
   List.iter s.decls ~f:(function
     | AccessSpecifier Public -> in_private := false
     | AccessSpecifier Private -> in_private := true
@@ -109,15 +121,10 @@ let register_struct ctx (s : structdecl) =
           compile_error "destructor name doesn't match struct name"
             (ASTDeclaration (Function f));
         register_method f
-    | Method f -> register_method f
-    | MemberDecl ds ->
-        List.iter ds.vars ~f:(fun v ->
-            v.is_private <- !in_private;
-            match Hashtbl.add jaf_s.members ~key:v.name ~data:v with
-            | `Duplicate ->
-                compile_error "duplicate member variable declaration"
-                  (ASTVariable v)
-            | `Ok -> ()))
+    | Method f ->
+        add_method_member jaf_s f.name;
+        register_method f
+    | MemberDecl ds -> List.iter ds.vars ~f:register_variable)
 
 let register_declaration ctx decl =
   match decl with
@@ -128,6 +135,11 @@ let register_declaration ctx decl =
           (ASTDeclaration decl);
       List.iter gg.vardecls ~f:(fun ds ->
           List.iter ds.vars ~f:(register_global ctx (Global ds)))
+  | Function ({ class_name = Some class_name; _ } as f) ->
+      (* A generated method. *)
+      Option.iter (Hashtbl.find ctx.structs class_name) ~f:(fun s ->
+          add_method_member s f.name);
+      register_function ctx f
   | Function f ->
       (* An out-of-class definition of a method. *)
       (match Util.parse_qualified_name f.name with
@@ -204,9 +216,9 @@ let unregister ctx decls = List.iter decls ~f:(unregister_declaration ctx)
 (*
  * AST pass to resolve HLL-specific type aliases.
  *)
-class hll_type_resolve_visitor ctx =
+class hll_type_resolve_visitor =
   object
-    inherit ivisitor ctx
+    inherit ivisitor
 
     method! visit_type_specifier ts =
       match ts.ty with
@@ -222,7 +234,7 @@ class hll_type_resolve_visitor ctx =
  *)
 class type_resolve_visitor ctx =
   object (self)
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
 
     method resolve_type name node =
       match Hashtbl.find ctx.structs name with
@@ -272,7 +284,7 @@ class type_resolve_visitor ctx =
 let resolve ctx decls = (new type_resolve_visitor ctx)#visit_toplevel decls
 
 let resolve_hll ctx decls =
-  (new hll_type_resolve_visitor ctx)#visit_toplevel decls;
+  (new hll_type_resolve_visitor)#visit_toplevel decls;
   resolve ctx decls
 
 let check_builtin_params builtin_type =

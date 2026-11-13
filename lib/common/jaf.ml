@@ -268,15 +268,16 @@ let is_constructor (f : fundecl) =
   | Some s -> String.equal f.name (snd (Util.parse_qualified_name s))
   | _ -> false
 
+(* The AIN name of the method [name] of the class [class_name]. *)
+let method_mangled_name class_name name =
+  let _, s = Util.parse_qualified_name class_name in
+  if String.equal name s then class_name ^ "@0"
+  else if String.equal name ("~" ^ s) then class_name ^ "@1"
+  else class_name ^ "@" ^ name
+
 let mangled_name fdecl =
   match fdecl.class_name with
-  | Some s ->
-      s
-      ^
-      let _, s = Util.parse_qualified_name s in
-      if String.equal fdecl.name s then "@0"
-      else if String.equal fdecl.name ("~" ^ s) then "@1"
-      else "@" ^ fdecl.name
+  | Some s -> method_mangled_name s fdecl.name
   | None -> fdecl.name
 
 type access_specifier = Public | Private
@@ -342,11 +343,15 @@ let ast_node_pos = function
       | Method f -> f.loc)
   | ASTType t -> t.location
 
+(* A member of a class, by its name. The overloads of a method are in the
+   function table of the context. *)
+type member = MemberVariable of variable | MemberMethod
+
 type jaf_struct = {
   name : string;
   loc : location;
   index : int;
-  members : (string, variable) Hashtbl.t;
+  members : (string, member) Hashtbl.t;
 }
 
 let new_jaf_struct name loc index =
@@ -418,22 +423,29 @@ let find_functions ctx name =
    is the first overload. *)
 let find_function ctx name = List.hd (find_functions ctx name)
 
+(* The entry that holds the record [f]. *)
+let function_entry_of ctx (f : fundecl) =
+  let holds = Option.exists ~f:(phys_equal f) in
+  List.find
+    (Hashtbl.find_multi ctx.functions (mangled_name f))
+    ~f:(fun e -> holds e.decl || holds e.def)
+
+(* True if [a] and [b] are the records of the same function. A function has a
+   record for its declaration and another for its definition. *)
+let same_function ctx (a : fundecl) (b : fundecl) =
+  phys_equal a b
+  ||
+  match function_entry_of ctx a with
+  | Some { decl; def } ->
+      Option.exists decl ~f:(phys_equal b)
+      || Option.exists def ~f:(phys_equal b)
+  | None -> false
+
 let all_functions ctx =
   List.concat_map (Hashtbl.data ctx.functions) ~f:(List.map ~f:entry_fundecl)
 
-type resolved_name =
-  | ResolvedLocal of variable
-  | ResolvedGlobal of variable
-  | ResolvedFunction of fundecl
-  | ResolvedMember of jaf_struct * variable
-  | ResolvedMethod of jaf_struct * fundecl
-  | ResolvedLibrary of library
-  | ResolvedSystem
-  | ResolvedBuiltin of Bytecode.builtin
-  | UnresolvedName
-
-class environment ctx current_function =
-  object (self)
+class environment current_function =
+  object
     val mutable stack = []
 
     val mutable variables =
@@ -463,51 +475,11 @@ class environment ctx current_function =
 
     method get_local name =
       List.find variables ~f:(fun v -> String.equal v.name name)
-
-    method resolve name =
-      let ctx_resolve ctx =
-        match Hashtbl.find ctx.globals name with
-        | Some g -> ResolvedGlobal g
-        | None -> (
-            match find_function ctx name with
-            | Some f -> ResolvedFunction f
-            | None -> (
-                match Hashtbl.find ctx.libraries name with
-                | Some l -> ResolvedLibrary l
-                | None -> UnresolvedName))
-      in
-      match name with
-      | "system" -> ResolvedSystem
-      | "assert" ->
-          ResolvedBuiltin
-            (Option.value_exn (Bytecode.builtin_function_of_string "assert"))
-      | _ -> (
-          match self#get_local name with
-          | Some v -> ResolvedLocal v
-          | None -> (
-              match self#current_class with
-              | Some (Struct (s_name, _)) -> (
-                  let s = Hashtbl.find_exn ctx.structs s_name in
-                  match Hashtbl.find s.members name with
-                  | Some v -> ResolvedMember (s, v)
-                  | None -> (
-                      match find_function ctx (s_name ^ "@" ^ name) with
-                      | Some f -> ResolvedMethod (s, f)
-                      | None -> ctx_resolve ctx))
-              | _ -> ctx_resolve ctx))
-
-    method resolve_qualified sname name =
-      match Hashtbl.find ctx.structs sname with
-      | None -> UnresolvedName
-      | Some s -> (
-          match Hashtbl.find s.members name with
-          | Some v -> ResolvedMember (s, v)
-          | None -> UnresolvedName)
   end
 
-class ivisitor ctx =
+class ivisitor =
   object (self)
-    val env_stack = Stack.singleton (new environment ctx None)
+    val env_stack = Stack.singleton (new environment None)
     val mutable current_struct_name : string option = None
     method env = Stack.top_exn env_stack
     method current_struct_name = current_struct_name
@@ -612,7 +584,7 @@ class ivisitor ctx =
       self#visit_type_specifier f.return;
       List.iter f.params ~f:self#visit_variable;
       Option.iter f.body ~f:(fun body ->
-          Stack.push env_stack (new environment ctx (Some f));
+          Stack.push env_stack (new environment (Some f));
           List.iter ~f:self#visit_statement body;
           Stack.pop_exn env_stack |> ignore)
 
