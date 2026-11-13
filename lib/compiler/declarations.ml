@@ -293,6 +293,13 @@ class type_resolve_visitor ctx =
 let resolve_types ctx decls =
   (new type_resolve_visitor ctx)#visit_toplevel decls
 
+(* Records the "main" and "message" functions in the AIN. *)
+let write_entry_point ctx (f : fundecl) =
+  match (f.class_name, f.name, f.index) with
+  | None, "main", Some i -> Ain.set_main_function ctx.ain i
+  | None, "message", Some i -> Ain.set_message_function ctx.ain i
+  | _ -> ()
+
 (*
  * AST pass over top-level declarations to define function/struct types.
  *)
@@ -321,11 +328,12 @@ class type_define_visitor ctx =
               self#visit_declaration (Global ds))
       | Function f ->
           (* v1 scenario labels have no FUNC table entry to define. *)
-          if not (f.is_label && Ain.version ctx.ain = 1) then
+          if not (f.is_label && Ain.version ctx.ain = 1) then (
             let obj =
               Ain.get_function_by_index ctx.ain (Option.value_exn f.index)
             in
-            obj |> jaf_to_ain_function f |> Ain.write_function ctx.ain
+            obj |> jaf_to_ain_function f |> Ain.write_function ctx.ain;
+            write_entry_point ctx f)
       | FuncTypeDef f -> jaf_to_ain_functype f |> Ain.write_functype ctx.ain
       | DelegateDef f -> jaf_to_ain_functype f |> Ain.write_delegate ctx.ain
       | StructDef s -> (
@@ -382,15 +390,18 @@ let define_library ctx decls hll_name import_name =
             (Some (ASTDeclaration decl)))
   in
   check_builtin_library ctx import_name functions;
+  let lib = Ain.add_library ctx.ain hll_name in
   Ain.write_library ctx.ain
     {
-      (Ain.add_library ctx.ain hll_name) with
+      lib with
       functions = Array.of_list_map functions ~f:jaf_to_ain_hll_function;
     };
+  List.iteri functions ~f:(fun i f -> f.index <- Some i);
   let functions =
     Hashtbl.create_with_key_exn
       (module String)
       ~get_key:(fun (d : fundecl) -> d.name)
       functions
   in
-  Hashtbl.add_exn ctx.libraries ~key:import_name ~data:{ hll_name; functions }
+  Hashtbl.add_exn ctx.libraries ~key:import_name
+    ~data:{ hll_name; index = Some lib.index; functions }

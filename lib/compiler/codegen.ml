@@ -30,7 +30,7 @@ type cflow_stmt = {
   mutable continue_addrs : int list;
 }
 
-type scope = { mutable vars : Ain.Variable.t list }
+type scope = { mutable vars : variable list }
 
 type label_data = {
   mutable address : int option;
@@ -40,6 +40,9 @@ type label_data = {
 let is_variable_ref = function
   | Ident _ | Member (_, _, ClassVariable _) | Subscript _ -> true
   | _ -> false
+
+let var_index (v : variable) = Option.value_exn v.index
+let fun_index (f : fundecl) = Option.value_exn f.index
 
 let incdec_instruction = function
   | (PreInc | PostInc), LongInt -> LI_INC
@@ -51,7 +54,7 @@ let incdec_instruction = function
 class jaf_compiler ctx debug_info =
   object (self)
     (* The function currently being compiled. *)
-    val mutable current_function : Ain.Function.t option = None
+    val mutable current_function : fundecl option = None
 
     (* The bytecode output buffer. *)
     val mutable buffer = CBuffer.create 2048
@@ -220,20 +223,14 @@ class jaf_compiler ctx debug_info =
       | Some stmt -> stmt.break_addrs <- addr :: stmt.break_addrs
       | None -> compile_error "'break' statement outside of loop" node
 
-    method compile_CALLHLL lib_name fun_name t parent =
-      match Ain.get_library_index ctx.ain lib_name with
-      | Some lib_no -> (
-          match Ain.get_library_function_index ctx.ain lib_no fun_name with
-          | Some fun_no -> self#write_instruction3 CALLHLL lib_no fun_no t
-          | None -> compile_error "No HLL function found for built-in" parent)
-      | None -> compile_error "No HLL library found for built-in" parent
-
     (* Feed a 32-bit word into the running CRC. *)
     method private crc_push_word n = crc_state <- Crc32.feed_word crc_state n
 
     (* Hash a label/goto's qualified name "FuncName::labelName" into the CRC. *)
     method private crc_push_label_name label =
-      let name = (Option.value_exn current_function).name ^ "::" ^ label in
+      let name =
+        mangled_name (Option.value_exn current_function) ^ "::" ^ label
+      in
       crc_state <- Crc32.feed_string crc_state name
 
     method write_instruction0 op =
@@ -288,21 +285,6 @@ class jaf_compiler ctx debug_info =
         CBuffer.clear buffer;
         start_address <- current_address)
 
-    method get_local i =
-      match current_function with
-      | Some f -> List.nth_exn f.vars i
-      | None -> compiler_bug "get_local outside of function" None
-
-    method member_type (expr : expression) =
-      match expr.node with
-      | Member
-          ( { ty = Struct (_, struct_no) | Ref (Struct (_, struct_no)); _ },
-            _,
-            ClassVariable member_no ) ->
-          let struct_type = Ain.get_struct_by_index ctx.ain struct_no in
-          (List.nth_exn struct_type.members member_no).value_type
-      | _ -> compiler_bug "member of non-struct" (Some (ASTExpression expr))
-
     method compile_lock_peek =
       if Ain.version_lt ctx.ain (6, 0) then (
         self#write_instruction1 CALLSYS (int_of_syscall LockPeek);
@@ -313,18 +295,18 @@ class jaf_compiler ctx debug_info =
         self#write_instruction1 CALLSYS (int_of_syscall UnlockPeek);
         self#write_instruction0 POP)
 
-    method compile_delete_var (v : Ain.Variable.t) =
-      match v.value_type with
-      | Ref _ | Struct _ -> self#write_instruction1 SH_LOCALDELETE v.index
+    method compile_delete_var (v : variable) =
+      match v.type_spec.ty with
+      | Ref _ | Struct _ -> self#write_instruction1 SH_LOCALDELETE (var_index v)
       | Array _ ->
-          self#compile_local_ref v.index;
+          self#compile_local_ref (var_index v);
           self#write_instruction0 A_FREE
       | _ -> ()
 
     (** Emit the code to put the value of a variable onto the stack (including
         member variables and array elements). Assumes a page + page-index is
         already on the stack. *)
-    method compile_dereference (t : Ain.Type.t) =
+    method compile_dereference (t : jaf_type) =
       match t with
       | Ref (Int | Float | Bool | LongInt | FuncType _) ->
           self#write_instruction0 REFREF;
@@ -336,14 +318,12 @@ class jaf_compiler ctx debug_info =
           (* ain v0/v1 has no A_REF; array rvalues are passed by reference
              without a deep copy. *)
           if ctx.version > 100 then self#write_instruction0 A_REF
-      | Struct no | Ref (Struct no) -> self#write_instruction1 SR_REF no
+      | Struct (_, no) | Ref (Struct (_, no)) ->
+          self#write_instruction1 SR_REF no
       | Delegate _ | Ref (Delegate _) ->
           self#write_instruction0 REF;
           self#write_instruction0 DG_COPY
-      | Void | IMainSystem | HLLFunc2 | HLLParam | Ref _ | Wrap _ | Option _
-      | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-      | IFaceWrap _ | Function | Method | NullType ->
-          compiler_bug "dereference not supported for type" None
+      | _ -> compiler_bug "dereference not supported for type" None
 
     method compile_local_ref i =
       self#write_instruction0 PUSHLOCALPAGE;
@@ -355,17 +335,16 @@ class jaf_compiler ctx debug_info =
 
     method compile_identifier_ref id_type =
       match id_type with
-      | LocalVariable (i, _) -> self#compile_local_ref (self#get_local i).index
-      | GlobalVariable i ->
-          self#compile_global_ref (Ain.get_global_by_index ctx.ain i).index
+      | LocalVariable v -> self#compile_local_ref (var_index v)
+      | GlobalVariable v -> self#compile_global_ref (var_index v)
       | _ -> compiler_bug "Invalid identifier type" None
 
     method compile_variable_ref (e : expression) =
       match e.node with
       | Ident (_, id_type) -> self#compile_identifier_ref id_type
-      | Member (e, _, ClassVariable member_no) ->
+      | Member (e, _, ClassVariable v) ->
           self#compile_lvalue e;
-          self#write_instruction1 PUSH member_no
+          self#write_instruction1 PUSH (var_index v)
       | Subscript (obj, index) ->
           self#compile_lvalue obj;
           self#compile_expression index
@@ -383,7 +362,7 @@ class jaf_compiler ctx debug_info =
         element) onto the stack, e.g. to prepare for an assignment or to pass a
         variable by reference. *)
     method compile_lvalue (e : expression) =
-      let compile_lvalue_after (t : Ain.Type.t) =
+      let compile_lvalue_after (t : jaf_type) =
         match t with
         | Ref (Int | Float | Bool | LongInt) -> self#write_instruction0 REFREF
         | Ref (String | Array _ | Struct _ | Delegate _) ->
@@ -393,53 +372,45 @@ class jaf_compiler ctx debug_info =
         | _ -> ()
       in
       match e.node with
-      | Ident (_, LocalVariable (i, _)) -> (
-          match self#get_local i with
-          | {
-           value_type =
-             ( String | Array _ | Struct _
-             | Ref (String | Array _ | Struct _ | Delegate _) );
-           _;
-          }
+      | Ident (_, LocalVariable v) -> (
+          match v.type_spec.ty with
+          | String | Array _ | Struct _
+          | Ref (String | Array _ | Struct _ | Delegate _)
             when ctx.version < 630 ->
-              self#write_instruction1 SH_LOCALREF i
-          | v ->
-              self#compile_local_ref v.index;
-              compile_lvalue_after v.value_type)
-      | Ident (_, GlobalVariable i) -> (
-          match Ain.get_global_by_index ctx.ain i with
-          | {
-           value_type =
-             ( String | Array _ | Struct _
-             | Ref (String | Array _ | Struct _ | Delegate _) );
-           _;
-          }
+              self#write_instruction1 SH_LOCALREF (var_index v)
+          | t ->
+              self#compile_local_ref (var_index v);
+              compile_lvalue_after t)
+      | Ident (_, GlobalVariable v) -> (
+          match v.type_spec.ty with
+          | String | Array _ | Struct _
+          | Ref (String | Array _ | Struct _ | Delegate _)
             when ctx.version < 630 ->
-              self#write_instruction1 SH_GLOBALREF i
-          | v ->
-              self#compile_global_ref v.index;
-              compile_lvalue_after v.value_type)
-      | Member (obj, _, ClassVariable member_no) -> (
+              self#write_instruction1 SH_GLOBALREF (var_index v)
+          | t ->
+              self#compile_global_ref (var_index v);
+              compile_lvalue_after t)
+      | Member (obj, _, ClassVariable v) -> (
           match (obj.node, e.ty) with
           | ( This,
               ( Ref (String | Array _ | Struct _ | Delegate _)
               | String | Array _ | Struct _ | Delegate _ ) )
             when ctx.version < 630 ->
-              self#write_instruction1 SH_STRUCTREF member_no
+              self#write_instruction1 SH_STRUCTREF (var_index v)
           | _ ->
               self#compile_lvalue obj;
-              self#write_instruction1 PUSH member_no;
-              compile_lvalue_after (self#member_type e))
+              self#write_instruction1 PUSH (var_index v);
+              compile_lvalue_after v.type_spec.ty)
       | Subscript (obj, index) ->
           self#compile_lvalue obj;
           self#compile_expression index;
-          compile_lvalue_after (jaf_to_ain_type e.ty)
+          compile_lvalue_after e.ty
       | New _ -> compiler_bug "bare new expression" (Some (ASTExpression e))
-      | DummyRef (var_no, ref_expr) -> (
-          self#scope_add_var (self#get_local var_no);
+      | DummyRef (v, ref_expr) -> (
+          self#scope_add_var v;
           (* prepare for assign to dummy variable *)
           self#write_instruction0 PUSHLOCALPAGE;
-          self#write_instruction1 PUSH var_no;
+          self#write_instruction1 PUSH (var_index v);
           match ref_expr with
           | { node = New { ty = Struct (_, s_no); _ }; _ } ->
               self#write_instruction1 PUSH s_no;
@@ -499,13 +470,13 @@ class jaf_compiler ctx debug_info =
             ("compile_pop: unsupported value type " ^ jaf_type_to_string t)
             (Some parent)
 
-    method compile_argument (expr : expression option) (t : Ain.Type.t) =
+    method compile_argument (expr : expression option) (t : jaf_type) =
       match expr with
       | None -> compiler_bug "missing argument" None
       | Some expr -> (
           match t with
           | Ref _ -> self#compile_lvalue expr
-          | Method ->
+          | TyMethod _ ->
               (* XXX: for delegate builtins *)
               self#compile_expression expr
           | Delegate _ -> (
@@ -515,19 +486,16 @@ class jaf_compiler ctx debug_info =
               | _ -> ())
           | _ -> self#compile_expression expr)
 
-    method compile_function_arguments args (f : Ain.Function.t) =
-      let compile_arg arg (var : Ain.Variable.t) =
-        self#compile_argument arg var.value_type
-      in
-      List.iter2_exn args (Ain.Function.logical_parameters f) ~f:compile_arg
+    method compile_function_arguments args (f : fundecl) =
+      List.iter2_exn args f.params ~f:(fun arg (param : variable) ->
+          self#compile_argument arg param.type_spec.ty)
 
     (** Emit the code to call a method. The object upon which the method is to
         be called should already be on the stack before this code is executed.
     *)
-    method compile_method_call args method_no =
-      let f = Ain.get_function_by_index ctx.ain method_no in
+    method compile_method_call args (f : fundecl) =
       self#compile_function_arguments args f;
-      self#write_instruction1 CALLMETHOD method_no
+      self#write_instruction1 CALLMETHOD (fun_index f)
 
     (** Emit the code to compute an expression. Computing an expression produces
         a value (of the expression's value type) on the stack. *)
@@ -546,35 +514,35 @@ class jaf_compiler ctx debug_info =
             else Ain.add_string ctx.ain s
           in
           self#write_instruction1 S_PUSH no
-      | Ident (_, LocalVariable (i, _)) -> (
-          match (self#get_local i).value_type with
+      | Ident (_, LocalVariable v) -> (
+          match v.type_spec.ty with
           | (Int | Float | Bool | LongInt | FuncType _) when ctx.version < 630
             ->
-              self#write_instruction1 SH_LOCALREF i
+              self#write_instruction1 SH_LOCALREF (var_index v)
           | t ->
               self#write_instruction0 PUSHLOCALPAGE;
-              self#write_instruction1 PUSH i;
+              self#write_instruction1 PUSH (var_index v);
               self#compile_dereference t)
-      | FuncAddr (_, Some no) -> self#write_instruction1 PUSH no
+      | FuncAddr (_, Some f) -> self#write_instruction1 PUSH (fun_index f)
       | FuncAddr (_, None) ->
           compiler_bug "unresolved FuncAddr" (Some (ASTExpression expr))
-      | MemberAddr (_, _, v) -> self#write_instruction1 PUSH v
-      | Ident (_, GlobalVariable i) -> (
-          match (Ain.get_global_by_index ctx.ain i).value_type with
+      | MemberAddr (_, v) -> self#write_instruction1 PUSH (var_index v)
+      | Ident (_, GlobalVariable v) -> (
+          match v.type_spec.ty with
           | (Int | Float | Bool | LongInt | FuncType _) when ctx.version < 630
             ->
-              self#write_instruction1 SH_GLOBALREF i
+              self#write_instruction1 SH_GLOBALREF (var_index v)
           | t ->
               self#write_instruction0 PUSHGLOBALPAGE;
-              self#write_instruction1 PUSH i;
+              self#write_instruction1 PUSH (var_index v);
               self#compile_dereference t)
-      | Ident (_, GlobalConstant) ->
+      | Ident (_, GlobalConstant _) ->
           compiler_bug "global constant not eliminated"
             (Some (ASTExpression expr))
       | Ident (_, FunctionName _) ->
           compiler_bug "tried to compile function identifier"
             (Some (ASTExpression expr))
-      | Ident (_, HLLName) ->
+      | Ident (_, HLLName _) ->
           compiler_bug "tried to compile HLL identifier"
             (Some (ASTExpression expr))
       | Ident (_, System) ->
@@ -691,7 +659,7 @@ class jaf_compiler ctx debug_info =
           | String, LTE -> self#write_instruction0 S_LTE
           | String, GTE -> self#write_instruction0 S_GTE
           | String, Modulo ->
-              let int_of_t (t : Ain.Type.t) =
+              let int_of_t (t : jaf_type) =
                 match t with
                 | Int -> 2
                 | Float -> 3
@@ -702,7 +670,7 @@ class jaf_compiler ctx debug_info =
                     compiler_bug "invalid type for string formatting"
                       (Some (ASTExpression expr))
               in
-              self#write_instruction1 S_MOD (int_of_t (jaf_to_ain_type b.ty))
+              self#write_instruction1 S_MOD (int_of_t b.ty)
           | ( String,
               ( Minus | Times | Divide | BitOr | BitXor | BitAnd | LShift
               | RShift | LogOr | LogAnd ) ) ->
@@ -844,20 +812,20 @@ class jaf_compiler ctx debug_info =
           self#compile_expression index;
           match obj.ty with
           | String -> self#write_instruction0 C_REF
-          | _ -> self#compile_dereference (jaf_to_ain_type expr.ty))
-      | Member ({ node = This; _ }, _, ClassVariable member_no)
-        when ctx.version < 630 && Ain.Type.is_scalar (self#member_type expr) ->
-          self#write_instruction1 SH_STRUCTREF member_no
-      | Member (e, _, ClassVariable member_no) ->
+          | _ -> self#compile_dereference expr.ty)
+      | Member ({ node = This; _ }, _, ClassVariable v)
+        when ctx.version < 630 && is_scalar v.type_spec.ty ->
+          self#write_instruction1 SH_STRUCTREF (var_index v)
+      | Member (e, _, ClassVariable v) ->
           self#compile_lvalue e;
-          self#write_instruction1 PUSH member_no;
-          self#compile_dereference (self#member_type expr)
+          self#write_instruction1 PUSH (var_index v);
+          self#compile_dereference v.type_spec.ty
       | Member (_, _, ClassConst _) ->
           compiler_bug "class constant not eliminated"
             (Some (ASTExpression expr))
-      | Member (e, _, ClassMethod (_, no)) ->
+      | Member (e, _, ClassMethod f) ->
           self#compile_lvalue e;
-          self#write_instruction1 PUSH no
+          self#write_instruction1 PUSH (fun_index f)
       | Member (_, _, HLLFunction (_, _)) ->
           compiler_bug "tried to compile HLL member expression"
             (Some (ASTExpression expr))
@@ -871,25 +839,23 @@ class jaf_compiler ctx debug_info =
           compiler_bug "member expression has no member_type"
             (Some (ASTExpression expr))
       (* regular function call *)
-      | Call (_, args, FunctionCall function_no) ->
-          let f = Ain.get_function_by_index ctx.ain function_no in
+      | Call (_, args, FunctionCall f) ->
           self#compile_function_arguments args f;
-          self#write_instruction1 CALLFUNC function_no
+          self#write_instruction1 CALLFUNC (fun_index f)
       (* method call *)
-      | Call ({ node = Member (e, _, _); _ }, args, MethodCall (_, method_no))
-        ->
+      | Call ({ node = Member (e, _, _); _ }, args, MethodCall f) ->
           self#compile_lvalue e;
-          self#compile_method_call args method_no
+          self#compile_method_call args f
       (* HLL function call *)
-      | Call (_, args, HLLCall (lib_no, fun_no)) ->
-          let f = Ain.function_of_hll_function_index ctx.ain lib_no fun_no in
+      | Call (_, args, HLLCall (lib, f)) ->
           self#compile_function_arguments args f;
-          self#write_instruction2 CALLHLL lib_no fun_no
+          self#write_instruction2 CALLHLL
+            (Option.value_exn lib.index)
+            (fun_index f)
       (* system call *)
       | Call (_, args, SystemCall sys) ->
-          let f = Builtin.function_of_syscall sys in
-          self#compile_function_arguments args f;
-          self#write_instruction1 CALLSYS f.index
+          self#compile_function_arguments args (Builtin.fundecl_of_syscall sys);
+          self#write_instruction1 CALLSYS (int_of_syscall sys)
       (* built-in method call *)
       | Call ({ node = Member (e, _, _); _ }, args, BuiltinCall builtin) -> (
           let receiver_ty = ref Void in
@@ -911,7 +877,7 @@ class jaf_compiler ctx debug_info =
           | Assert ->
               compiler_bug "invalid assert expression"
                 (Some (ASTExpression expr)));
-          let f = Builtin.function_of_builtin ctx builtin !receiver_ty in
+          let f = Builtin.fundecl_of_builtin ctx builtin !receiver_ty None in
           self#compile_function_arguments args f;
           match builtin with
           | IntString -> self#write_instruction0 I_STRING
@@ -960,7 +926,7 @@ class jaf_compiler ctx debug_info =
                 (Some (ASTExpression expr)))
       (* built-in function call *)
       | Call ({ node = Ident _; _ }, args, BuiltinCall builtin) -> (
-          let f = Builtin.function_of_builtin ctx builtin Void in
+          let f = Builtin.fundecl_of_builtin ctx builtin Void None in
           self#compile_function_arguments args f;
           match builtin with
           | Assert -> self#write_instruction0 ASSERT
@@ -968,24 +934,21 @@ class jaf_compiler ctx debug_info =
               compiler_bug "invalid built-in function call"
                 (Some (ASTExpression expr)))
       (* functype call *)
-      | Call (e, args, FuncTypeCall no) ->
-          let compile_arg arg (var : Ain.Variable.t) =
-            self#compile_argument arg var.value_type;
-            if Ain.Type.is_ref_scalar var.value_type then (
+      | Call (e, args, FuncTypeCall f) ->
+          let compile_arg arg (param : variable) =
+            self#compile_argument arg param.type_spec.ty;
+            if is_ref_scalar param.type_spec.ty then (
               self#write_instruction0 DUP2_X1;
               self#write_instruction0 POP;
               self#write_instruction0 POP)
             else self#write_instruction0 SWAP
           in
-          let f = Ain.get_functype_by_index ctx.ain no in
           self#compile_expression e;
-          List.iter2_exn args
-            (Ain.FunctionType.logical_parameters f)
-            ~f:compile_arg;
-          self#write_instruction1 PUSH no;
+          List.iter2_exn args f.params ~f:compile_arg;
+          self#write_instruction1 PUSH (fun_index f);
           self#write_instruction0 CALLFUNC2
-      | Call (e, args, DelegateCall no) ->
-          let f = Ain.function_of_delegate_index ctx.ain no in
+      | Call (e, args, DelegateCall f) ->
+          let no = fun_index f in
           self#compile_lvalue e;
           self#compile_function_arguments args f;
           self#write_instruction1 DG_CALLBEGIN no;
@@ -1028,26 +991,26 @@ class jaf_compiler ctx debug_info =
           self#compile_function f;
           self#write_address_at jump_addr current_address;
           self#write_instruction0 PUSHSTRUCTPAGE;
-          self#write_instruction1 PUSH (Option.value_exn f.index)
+          self#write_instruction1 PUSH (fun_index f)
 
     method compile_expr_and_pop (expr : expression) =
       match expr.node with
       | Assign
           ( EqAssign,
-            { node = Ident (_, LocalVariable (i, _)); _ },
+            { node = Ident (_, LocalVariable v); _ },
             { node = ConstInt n; _ } )
         when ctx.version > 100 && ctx.version < 630
-             && not (Ain.Type.is_ref (self#get_local i).value_type) ->
-          self#write_instruction2 SH_LOCALASSIGN i n
+             && not (is_ref v.type_spec.ty) ->
+          self#write_instruction2 SH_LOCALASSIGN (var_index v) n
       | Unary
           ( ((PreInc | PostInc | PreDec | PostDec) as op),
-            { node = Ident (_, LocalVariable (i, _)); _ } )
+            { node = Ident (_, LocalVariable v); _ } )
         when ctx.version > 100 && ctx.version < 630
-             && (not (Ain.Type.is_ref (self#get_local i).value_type))
+             && (not (is_ref v.type_spec.ty))
              && Poly.(expr.ty <> LongInt) ->
           self#write_instruction1
             (match op with PreInc | PostInc -> SH_LOCALINC | _ -> SH_LOCALDEC)
-            i
+            (var_index v)
       | Unary (((PreInc | PreDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
@@ -1117,8 +1080,7 @@ class jaf_compiler ctx debug_info =
     method compile_statement (stmt : statement) =
       DebugInfo.add_loc debug_info current_address stmt.loc;
       (* delete locals that will be out-of-scope after this statement *)
-      List.iter (List.rev stmt.delete_vars) ~f:(fun i ->
-          self#compile_delete_var (self#get_local i));
+      List.iter (List.rev stmt.delete_vars) ~f:self#compile_delete_var;
       match stmt.node with
       | EmptyStatement -> ()
       | Declarations decls ->
@@ -1225,7 +1187,7 @@ class jaf_compiler ctx debug_info =
       | Default -> self#set_switch_default (ASTStatement stmt)
       | Return None -> self#write_instruction0 RETURN
       | Return (Some e) ->
-          (match ((Option.value_exn current_function).return_type, e.node) with
+          (match ((Option.value_exn current_function).return.ty, e.node) with
           | Ref _, Null -> self#compile_lvalue e
           | Ref (Int | Float | Bool | LongInt | FuncType _), _ ->
               self#compile_lvalue e;
@@ -1276,37 +1238,31 @@ class jaf_compiler ctx debug_info =
         && List.is_empty decl.array_dim
       then ()
       else
-        let v = self#get_local (Option.value_exn decl.index) in
-        self#scope_add_var v;
-        match v.value_type with
+        let index = var_index decl in
+        let lhs =
+          {
+            node = Ident (decl.name, LocalVariable decl);
+            ty = decl.type_spec.ty;
+            loc = decl.location;
+          }
+        in
+        self#scope_add_var decl;
+        match decl.type_spec.ty with
         | Ref _ ->
-            let lhs =
-              {
-                node = Ident (decl.name, LocalVariable (v.index, decl.location));
-                ty = decl.type_spec.ty;
-                loc = decl.location;
-              }
-            and rhs =
+            let rhs =
               match decl.initval with
               | Some e -> e
               | None -> make_expr ~ty:decl.type_spec.ty Null
             in
             self#compile_ref_assign ~is_init:true ~parent:(ASTVariable decl) lhs
               rhs
-        | Int | Bool | LongInt | Float | FuncType _ | String ->
-            let lhs =
-              {
-                node = Ident (decl.name, LocalVariable (v.index, decl.location));
-                ty = decl.type_spec.ty;
-                loc = decl.location;
-              }
-            in
+        | (Int | Bool | LongInt | Float | FuncType _ | String) as ty ->
             let rhs =
               match decl.initval with
               | Some e -> e
               | None ->
                   let value =
-                    match v.value_type with
+                    match ty with
                     | Int | Bool | LongInt -> ConstInt 0
                     | Float -> ConstFloat 0.0
                     | FuncType _ | String -> Null
@@ -1320,19 +1276,13 @@ class jaf_compiler ctx debug_info =
                 ty = rhs.ty;
                 loc = decl.location;
               }
-        | Struct sno -> (
+        | Struct (_, sno) -> (
             (* FIXME: use verbose versions *)
-            self#write_instruction1 SH_LOCALDELETE v.index;
-            self#write_instruction2 SH_LOCALCREATE v.index sno;
+            self#write_instruction1 SH_LOCALDELETE index;
+            self#write_instruction2 SH_LOCALCREATE index sno;
             match decl.initval with
             | Some e ->
-                self#compile_lvalue
-                  {
-                    node =
-                      Ident (decl.name, LocalVariable (v.index, decl.location));
-                    ty = decl.type_spec.ty;
-                    loc = decl.location;
-                  };
+                self#compile_lvalue lhs;
                 self#compile_expression e;
                 if not (Ain.version ctx.ain <= 1 || Ain.version ctx.ain >= 11)
                 then self#write_instruction1 PUSH sno;
@@ -1341,14 +1291,14 @@ class jaf_compiler ctx debug_info =
             | None -> ())
         | Array _ ->
             let has_dims = List.length decl.array_dim > 0 in
-            self#compile_local_ref v.index;
+            self#compile_local_ref index;
             if has_dims then (
               List.iter decl.array_dim ~f:self#compile_expression;
               self#write_instruction1 PUSH (List.length decl.array_dim);
               self#write_instruction0 A_ALLOC)
             else self#write_instruction0 A_FREE
         | Delegate _ -> (
-            self#compile_local_ref v.index;
+            self#compile_local_ref index;
             self#write_instruction0 REF;
             match decl.initval with
             | Some ({ ty = String; _ } as e) ->
@@ -1365,10 +1315,7 @@ class jaf_compiler ctx debug_info =
                 compiler_bug "invalid delegate initval"
                   (Some (ASTVariable decl))
             | None -> self#write_instruction0 DG_CLEAR)
-        | Void | IMainSystem | HLLFunc2 | HLLParam | Wrap _ | Option _
-        | Unknown87 _ | IFace _ | Enum2 _ | Enum _ | HLLFunc | Unknown98
-        | IFaceWrap _ | Function | Method | NullType ->
-            compile_error "Unimplemented variable type" (ASTVariable decl)
+        | _ -> compile_error "Unimplemented variable type" (ASTVariable decl)
 
     (** Emit the code for a block of statements. *)
     method compile_block (stmts : statement list) =
@@ -1377,7 +1324,7 @@ class jaf_compiler ctx debug_info =
       self#end_scope
 
     (** Emit the code for a default return value. *)
-    method compile_default_return (t : Ain.Type.t) decl =
+    method compile_default_return (t : jaf_type) decl =
       match t with
       | Ref (String | Struct _ | Array _) -> self#write_instruction1 PUSH (-1)
       | Ref (Int | Float | Bool | LongInt) ->
@@ -1400,7 +1347,7 @@ class jaf_compiler ctx debug_info =
         }
       in
       let prev_function = current_function in
-      current_function <- Some func;
+      current_function <- Some decl;
       let prev_cflow_stmts = cflow_stmts in
       cflow_stmts <- Stack.create ();
       let prev_labels = labels in
@@ -1412,14 +1359,14 @@ class jaf_compiler ctx debug_info =
          body opcodes. FUNC and ENDFUNC are excluded. *)
       crc_state <- Crc32.start;
       let int_of_data_type t =
-        Ain.Type.int_of_data_type (Ain.version ctx.ain) t
+        Ain.Type.int_of_data_type (Ain.version ctx.ain) (jaf_to_ain_type t)
       in
-      self#crc_push_word (int_of_data_type func.return_type);
-      List.iter (Ain.Function.logical_parameters func) ~f:(fun v ->
-          self#crc_push_word (int_of_data_type v.value_type));
+      self#crc_push_word (int_of_data_type decl.return.ty);
+      List.iter decl.params ~f:(fun v ->
+          self#crc_push_word (int_of_data_type v.type_spec.ty));
       self#compile_block (Option.value_exn decl.body);
-      if not (func.is_label || String.equal func.name "NULL") then (
-        self#compile_default_return func.return_type
+      if not (decl.is_label || String.equal (mangled_name decl) "NULL") then (
+        self#compile_default_return decl.return.ty
           (ASTDeclaration (Function decl));
         self#write_instruction0 RETURN);
       let crc = Crc32.finalize crc_state in

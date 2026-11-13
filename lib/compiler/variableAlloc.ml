@@ -20,7 +20,21 @@ open Jaf
 open CompileError
 
 type scope_kind = ScopeAnon | ScopeLoop | ScopeSwitch
-type var_set = (int, Int.comparator_witness) Set.t
+
+(* Local variables of a function, ordered by index. *)
+module Var = struct
+  module T = struct
+    type t = variable
+
+    let compare (a : t) (b : t) = Option.compare Int.compare a.index b.index
+    let sexp_of_t (v : t) = Sexp.Atom v.name
+  end
+
+  include T
+  include Comparator.Make (T)
+end
+
+type var_set = (variable, Var.comparator_witness) Set.t
 
 type scope = {
   (* variables allocated before entering the scope *)
@@ -104,8 +118,8 @@ class variable_alloc_visitor ctx =
 
     method current_var_set =
       Set.of_list
-        (module Int)
-        (List.filter_map self#env#var_list ~f:(fun v -> v.index))
+        (module Var)
+        (List.filter self#env#var_list ~f:(fun v -> Option.is_some v.index))
 
     method add_continue stmt =
       let scope = Stack.top_exn scopes in
@@ -128,11 +142,6 @@ class variable_alloc_visitor ctx =
             { live_vars = None; gotos = [] })
       in
       d.gotos <- (stmt, self#current_var_set) :: d.gotos
-
-    method get_var_no name =
-      match self#env#get_local name with
-      | Some v -> Option.value_exn v.index
-      | None -> compiler_bug ("Undefined variable: " ^ name) None
 
     method add_var (v : variable) =
       let vars = Stack.pop_exn func_vars in
@@ -174,25 +183,17 @@ class variable_alloc_visitor ctx =
       self#add_var v;
       self#env#push_var v;
       dummy_var_seqno := !dummy_var_seqno + 1;
-      Option.value_exn v.index
+      v
 
     method! visit_expression expr =
       super#visit_expression expr;
       match expr.node with
-      | Ident (name, t) -> (
-          (* save local variable number at identifier nodes *)
-          match t with
-          | LocalVariable (_, loc) ->
-              expr.node <-
-                Ident (name, LocalVariable (self#get_var_no name, loc))
-          | _ -> ())
       | Call (_, _, calltype) -> (
           match expr.ty with
           | Ref _ ->
               let varname =
                 match calltype with
-                | FunctionCall fno | MethodCall (_, fno) ->
-                    (Ain.get_function_by_index ctx.ain fno).name
+                | FunctionCall f | MethodCall f -> mangled_name f
                 | _ ->
                     compiler_bug "variable_alloc_visitor: unexpected call type"
                       (Some (ASTExpression expr))

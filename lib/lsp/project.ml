@@ -131,16 +131,21 @@ let get_hover proj ~path pos =
              ~range:(to_lsp_range doc.lexbuf.lex_buffer location)
              ())
       in
+      let hover_function loc name =
+        Option.bind (Hashtbl.find proj.ctx.functions name) ~f:(fun decl ->
+            make_hover loc
+              (Jaf.decl_to_string (Function { decl with body = None })))
+      in
       match get_nodes_for_pos doc pos with
       | Jaf.ASTExpression { node = Member (_, _, SystemFunction sys); loc; _ }
         :: _ ->
           let f = Builtin.fundecl_of_syscall sys in
           make_hover loc (Jaf.decl_to_string (Function f))
       | Jaf.ASTExpression
-          { node = Member (_, _, HLLFunction (lib_name, fun_name)); loc; _ }
+          { node = Member (_, _, HLLFunction (lib, fun_name)); loc; _ }
         :: _ ->
-          Option.bind (Jaf.find_hll_function proj.ctx lib_name fun_name)
-            ~f:(fun decl -> make_hover loc (Jaf.decl_to_string (Function decl)))
+          Option.bind (Hashtbl.find lib.functions fun_name) ~f:(fun decl ->
+              make_hover loc (Jaf.decl_to_string (Function decl)))
       | (Jaf.ASTExpression
            { node = Member (obj, _, BuiltinMethod builtin); loc; _ } as ast_node)
         :: _ ->
@@ -148,14 +153,12 @@ let get_hover proj ~path pos =
             Builtin.fundecl_of_builtin proj.ctx builtin obj.ty (Some ast_node)
           in
           make_hover loc (Jaf.decl_to_string (Function f))
-      | Jaf.ASTExpression
-          { node = Member (_, _, ClassMethod (name, _)); loc; _ }
-        :: _
+      | Jaf.ASTExpression { node = Member (_, _, ClassMethod f); loc; _ } :: _
+        ->
+          hover_function loc (Jaf.mangled_name f)
       | Jaf.ASTExpression { node = Ident (_, FunctionName name); loc; _ } :: _
         ->
-          Option.bind (Hashtbl.find proj.ctx.functions name) ~f:(fun decl ->
-              make_hover loc
-                (Jaf.decl_to_string (Function { decl with body = None })))
+          hover_function loc name
       | Jaf.ASTExpression { ty; loc; _ } :: _ ->
           make_hover loc (Jaf.jaf_type_to_string ty)
       | Jaf.ASTType { ty; location } :: _ -> (
@@ -215,23 +218,22 @@ let find_location proj path pos f =
 
 let get_definition proj ~path pos =
   find_location proj path pos (function
-    | Jaf.ASTExpression { node = Ident (_, LocalVariable (_, loc)); _ } :: _ ->
-        Some loc
+    | Jaf.ASTExpression { node = Ident (_, LocalVariable v); _ } :: _ ->
+        Some v.location
     | Jaf.ASTExpression
-        { node = Ident (name, (GlobalVariable _ | GlobalConstant)); _ }
+        { node = Ident (name, (GlobalVariable _ | GlobalConstant _)); _ }
       :: _ -> (
         match Hashtbl.find proj.ctx.globals name with
         | Some v -> Some v.location
         | None -> None)
-    | Jaf.ASTExpression { node = Ident (_, FunctionName name); _ } :: _
-    | Jaf.ASTExpression { node = Member (_, _, ClassMethod (name, _)); _ } :: _
-      ->
+    | Jaf.ASTExpression { node = Ident (_, FunctionName name); _ } :: _ ->
         location_of_func proj name
-    | Jaf.ASTExpression
-        { node = Member (_, _, HLLFunction (lib_name, fun_name)); _ }
+    | Jaf.ASTExpression { node = Member (_, _, ClassMethod f); _ } :: _ ->
+        location_of_func proj (Jaf.mangled_name f)
+    | Jaf.ASTExpression { node = Member (_, _, HLLFunction (lib, fun_name)); _ }
       :: _ ->
-        Option.map (Jaf.find_hll_function proj.ctx lib_name fun_name)
-          ~f:(fun decl -> decl.loc)
+        Option.map (Hashtbl.find lib.functions fun_name) ~f:(fun decl ->
+            decl.loc)
     | Jaf.ASTExpression
         {
           node = Member ({ ty = Struct (s_name, _); _ }, m_name, ClassVariable _);
@@ -285,16 +287,17 @@ let symbol_at_nodes nodes =
     | [] -> None
   in
   match nodes with
-  | Jaf.ASTExpression { node = Ident (_, LocalVariable (_, loc)); _ } :: _ ->
-      Some (RefLocalVar loc)
+  | Jaf.ASTExpression { node = Ident (_, LocalVariable v); _ } :: _ ->
+      Some (RefLocalVar v.location)
   | Jaf.ASTExpression
-      { node = Ident (name, (GlobalVariable _ | GlobalConstant)); _ }
+      { node = Ident (name, (GlobalVariable _ | GlobalConstant _)); _ }
     :: _ ->
       Some (RefGlobal name)
   | Jaf.ASTExpression { node = Ident (_, FunctionName name); _ } :: _
-  | Jaf.ASTExpression { node = Member (_, _, ClassMethod (name, _)); _ } :: _
   | Jaf.ASTExpression { node = FuncAddr (name, _); _ } :: _ ->
       Some (RefFunction name)
+  | Jaf.ASTExpression { node = Member (_, _, ClassMethod f); _ } :: _ ->
+      Some (RefFunction (Jaf.mangled_name f))
   | Jaf.ASTExpression
       {
         node = Member ({ ty = Struct (s_name, _); _ }, m_name, ClassVariable _);
@@ -302,8 +305,8 @@ let symbol_at_nodes nodes =
       }
     :: _ ->
       Some (RefStructMember (s_name, m_name))
-  | Jaf.ASTExpression { node = MemberAddr (s_name, m_name, _); _ } :: _ ->
-      Some (RefStructMember (s_name, m_name))
+  | Jaf.ASTExpression { node = MemberAddr (s_name, v); _ } :: _ ->
+      Some (RefStructMember (s_name, v.name))
   | Jaf.ASTType { ty; _ } :: _ -> (
       match jaf_base_type ty with
       | Struct (name, _) -> Some (RefStruct name)
@@ -339,17 +342,17 @@ class reference_collector ctx target ~include_declaration =
 
     method! visit_expression expr =
       (match (expr.node, target) with
-      | Ident (_, LocalVariable (_, loc)), RefLocalVar tgt
-        when loc_equal loc tgt ->
+      | Ident (_, LocalVariable v), RefLocalVar tgt
+        when loc_equal v.location tgt ->
           self#add expr.loc
-      | Ident (name, (GlobalVariable _ | GlobalConstant)), RefGlobal tgt
+      | Ident (name, (GlobalVariable _ | GlobalConstant _)), RefGlobal tgt
         when String.equal name tgt ->
           self#add expr.loc
       | Ident (_, FunctionName name), RefFunction tgt when String.equal name tgt
         ->
           self#add expr.loc
-      | Member (_, _, ClassMethod (name, _)), RefFunction tgt
-        when String.equal name tgt ->
+      | Member (_, _, ClassMethod f), RefFunction tgt
+        when String.equal (Jaf.mangled_name f) tgt ->
           self#add expr.loc
       | FuncAddr (name, _), RefFunction tgt when String.equal name tgt ->
           self#add expr.loc
@@ -357,8 +360,8 @@ class reference_collector ctx target ~include_declaration =
           RefStructMember (ts, tm) )
         when String.equal s ts && String.equal m tm ->
           self#add expr.loc
-      | MemberAddr (s, m, _), RefStructMember (ts, tm)
-        when String.equal s ts && String.equal m tm ->
+      | MemberAddr (s, v), RefStructMember (ts, tm)
+        when String.equal s ts && String.equal v.name tm ->
           self#add expr.loc
       | _ -> ());
       super#visit_expression expr

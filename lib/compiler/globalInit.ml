@@ -19,17 +19,14 @@ open Base
 open Jaf
 open CompileError
 
-let initval_of_expression ctx (v : variable) (e : expression) =
+let initval_of_expression (v : variable) (e : expression) =
   match e.node with
   | ConstInt i | Cast (LongInt, { node = ConstInt i; _ }) ->
       Ain.Variable.Int (Int32.of_int_exn i)
   | ConstFloat f -> Ain.Variable.Float f
   | ConstString s -> Ain.Variable.String s
-  | Ident (name, _) -> (
-      match Hashtbl.find ctx.globals name with
-      | Some g when not g.is_const ->
-          Ain.Variable.Int (Int32.of_int_exn (Option.value_exn g.index))
-      | _ -> const_error v)
+  | Ident (_, GlobalVariable g) ->
+      Ain.Variable.Int (Int32.of_int_exn (Option.value_exn g.index))
   | _ -> const_error v
 
 let write_initvals ctx decls =
@@ -38,7 +35,7 @@ let write_initvals ctx decls =
         match (v.is_const, v.initval) with
         | false, Some e ->
             Ain.set_global_initval_by_index ctx.ain (Option.value_exn v.index)
-              (initval_of_expression ctx v e)
+              (initval_of_expression v e)
         | _ -> ())
   in
   List.iter decls ~f:(function

@@ -81,20 +81,28 @@ class const_eval_visitor ctx =
     inherit ivisitor ctx as super
     val mutable in_const_ctx = false
 
+    method private eval_variable expr (v : variable) =
+      if v.is_const then
+        match v.initval with
+        | Some e -> const_replace expr e.node
+        | None -> const_error v
+
     method eval_expression (expr : expression) =
       match expr.node with
       | ConstInt _ -> ()
       | ConstFloat _ -> ()
       | ConstChar _ -> ()
       | ConstString _ -> ()
-      | Ident (name, _) -> (
+      | Ident (_, (LocalVariable v | GlobalVariable v | GlobalConstant v)) ->
+          self#eval_variable expr v
+      | Ident (name, UnresolvedIdent) -> (
+          (* The expression is in a declaration that type analysis has not
+             visited yet. *)
           match self#env#resolve name with
-          | ResolvedLocal v | ResolvedGlobal v | ResolvedMember (_, v) -> (
-              if v.is_const then
-                match v.initval with
-                | Some e -> const_replace expr e.node
-                | None -> const_error v)
+          | ResolvedLocal v | ResolvedGlobal v | ResolvedMember (_, v) ->
+              self#eval_variable expr v
           | _ -> ())
+      | Ident _ -> ()
       | FuncAddr _ -> ()
       | MemberAddr _ -> ()
       | Unary (op, e) -> (
@@ -187,12 +195,7 @@ class const_eval_visitor ctx =
               | _ -> ())
           | _ -> ())
       | Subscript (_, _) -> ()
-      | Member (_, name, ClassConst struct_name) -> (
-          let struc = Hashtbl.find_exn ctx.structs struct_name in
-          let v = Hashtbl.find_exn struc.members name in
-          match v.initval with
-          | Some e -> const_replace expr e.node
-          | None -> const_error v)
+      | Member (_, _, ClassConst v) -> self#eval_variable expr v
       | Member (_, _, _) -> ()
       | Call (_, _, _) -> ()
       | New _ -> ()
@@ -243,7 +246,7 @@ class const_eval_visitor ctx =
         match (v.kind, v.initval) with
         | GlobalVar, Some e ->
             (* Only validate here. GlobalInit.write_initvals writes the value. *)
-            GlobalInit.initval_of_expression ctx v e |> ignore
+            GlobalInit.initval_of_expression v e |> ignore
         | Parameter, Some e -> (
             match e.node with
             | ConstInt _ | ConstFloat _ | ConstChar _ | ConstString _ | Null ->

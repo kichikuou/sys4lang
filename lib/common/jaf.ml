@@ -105,6 +105,8 @@ let is_scalar = function
   | Int | Bool | Float | LongInt | FuncType _ -> true
   | _ -> false
 
+let is_ref = function Ref _ -> true | _ -> false
+
 let is_ref_scalar = function
   | Ref (Int | Bool | Float | LongInt | FuncType _) -> true
   | _ -> false
@@ -118,40 +120,42 @@ let rec array_base_and_rank = function
 let array_rank t = snd (array_base_and_rank t)
 
 type type_specifier = { mutable ty : jaf_type; location : location }
+type variable_type = Parameter | LocalVar | GlobalVar | ClassVar
 
+(* Expressions, statements, and declarations refer to declaration records, and
+   the references can make cycles. Compare these values with phys_equal, not
+   with polymorphic equality or hashing. *)
 type ident_type =
   | UnresolvedIdent
-  | LocalVariable of int * location
-  | GlobalVariable of int
-  | GlobalConstant
+  | LocalVariable of variable
+  | GlobalVariable of variable
+  | GlobalConstant of variable
   | FunctionName of string
-  | HLLName
+  | HLLName of library
   | System
   | BuiltinFunction of Bytecode.builtin
 
-type member_type =
+and member_type =
   | UnresolvedMember
-  | ClassVariable of int
-  | ClassConst of string
-  | ClassMethod of string * int
-  | HLLFunction of string * string
+  | ClassVariable of variable
+  | ClassConst of variable
+  | ClassMethod of fundecl
+  | HLLFunction of library * string
   | SystemFunction of Bytecode.syscall
   | BuiltinMethod of Bytecode.builtin
-  | BuiltinHLL of string
+  | BuiltinHLL of library
 
-type variable_type = Parameter | LocalVar | GlobalVar | ClassVar
-
-type call_type =
+and call_type =
   | UnresolvedCall
-  | FunctionCall of int
-  | MethodCall of int * int
-  | HLLCall of int * int
+  | FunctionCall of fundecl
+  | MethodCall of fundecl
+  | HLLCall of library * fundecl
   | SystemCall of Bytecode.syscall
   | BuiltinCall of Bytecode.builtin
-  | FuncTypeCall of int
-  | DelegateCall of int
+  | FuncTypeCall of fundecl
+  | DelegateCall of fundecl
 
-type expression = {
+and expression = {
   mutable ty : jaf_type;
   mutable node : ast_expression;
   loc : location;
@@ -163,8 +167,8 @@ and ast_expression =
   | ConstChar of string
   | ConstString of string
   | Ident of string * ident_type
-  | FuncAddr of string * int option
-  | MemberAddr of string * string * int
+  | FuncAddr of string * fundecl option
+  | MemberAddr of string * variable
   | Unary of unary_op * expression
   | Binary of binary_op * expression * expression
   | Assign of assign_op * expression * expression
@@ -175,7 +179,7 @@ and ast_expression =
   | Member of expression * string * member_type
   | Call of expression * expression option list * call_type
   | New of type_specifier
-  | DummyRef of int * expression
+  | DummyRef of variable * expression
   | RvalueRef of expression
   | This
   | Null
@@ -183,7 +187,7 @@ and ast_expression =
 
 and statement = {
   mutable node : ast_statement;
-  mutable delete_vars : int list;
+  mutable delete_vars : variable list;
   loc : location;
 }
 
@@ -241,6 +245,13 @@ and fundecl = {
   mutable index : int option;
   mutable class_name : string option;
   mutable class_index : int option;
+}
+
+(* The index of an HLL function is its position in the library. *)
+and library = {
+  hll_name : string;
+  mutable index : int option;
+  functions : (string, fundecl) Hashtbl.t;
 }
 
 let make_expr ?(ty = Untyped) ?(loc = dummy_location) node = { ty; node; loc }
@@ -340,8 +351,6 @@ type jaf_struct = {
 let new_jaf_struct name loc index =
   { name; loc; index; members = Hashtbl.create (module String) }
 
-type library = { hll_name : string; functions : (string, fundecl) Hashtbl.t }
-
 type context = {
   ain : Ain.t;
   version : int; (* ain_major_version * 100 + ain_minor_version *)
@@ -352,11 +361,6 @@ type context = {
   delegates : (string, fundecl) Hashtbl.t;
   libraries : (string, library) Hashtbl.t;
 }
-
-let find_hll_function ctx lib func =
-  match Hashtbl.find ctx.libraries lib with
-  | Some l -> Hashtbl.find l.functions func
-  | None -> None
 
 type resolved_name =
   | ResolvedLocal of variable
@@ -674,7 +678,7 @@ let rec expr_to_string (e : expression) =
   | ConstString s -> sprintf "\"%s\"" s
   | Ident (s, _) -> s
   | FuncAddr (s, _) -> "&" ^ s
-  | MemberAddr (sname, name, _) -> sprintf "&%s::%s" sname name
+  | MemberAddr (sname, v) -> sprintf "&%s::%s" sname v.name
   | Unary (op, e) -> (
       match op with
       | PostInc | PostDec -> expr_to_string e ^ unary_op_to_string op

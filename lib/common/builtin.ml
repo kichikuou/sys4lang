@@ -113,9 +113,24 @@ let fundecl_of_syscall sys =
   | CopySaveFile ->
       make Int [ ("szDestFileName", String); ("szSourceFileName", String) ]
 
+let null_function =
+  {
+    name = "NULL";
+    loc = dummy_location;
+    return = { ty = Void; location = dummy_location };
+    params = [];
+    body = None;
+    is_label = false;
+    is_lambda = false;
+    is_private = false;
+    index = Some 0;
+    class_name = None;
+    class_index = None;
+  }
+
 (* `&NULL` expression (used as default value for callback functions) *)
 let addr_null =
-  make_expr ~ty:(TyFunction ([], Void)) (FuncAddr ("NULL", Some 0))
+  make_expr ~ty:(TyFunction ([], Void)) (FuncAddr ("NULL", Some null_function))
 
 let method_null =
   let ty = TyMethod ([], Void) in
@@ -239,27 +254,3 @@ let fundecl_of_builtin ctx builtin receiver_ty node_opt =
   | DelegateExist -> make Int "Exist" [ ("func", delegate_ft receiver_ty) ]
   | DelegateErase -> make Void "Erase" [ ("func", delegate_ft receiver_ty) ]
   | DelegateClear -> make Void "Clear" []
-
-let default_function : Ain.Function.t =
-  {
-    index = -1;
-    name = "";
-    address = 0;
-    nr_args = 0;
-    vars = [];
-    return_type = Void;
-    is_label = false;
-    is_lambda = false;
-    crc = 0l;
-    struct_type = None;
-    enum_type = None;
-  }
-
-let function_of_syscall sys =
-  jaf_to_ain_function (fundecl_of_syscall sys)
-    { default_function with index = int_of_syscall sys }
-
-let function_of_builtin ctx sys receiver_ty =
-  jaf_to_ain_function
-    (fundecl_of_builtin ctx sys receiver_ty None)
-    default_function
