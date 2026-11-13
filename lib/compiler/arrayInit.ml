@@ -55,9 +55,7 @@ let make_initializer ?class_name ?class_index name index body =
 
 class visitor ?allocator ?(generate = `All) ctx =
   let allocator =
-    match allocator with
-    | Some a -> a
-    | None -> Declarations.build_allocator ctx.ain
+    match allocator with Some a -> a | None -> Layout.build_allocator ctx.ain
   in
   object (self)
     inherit ivisitor ctx as _super

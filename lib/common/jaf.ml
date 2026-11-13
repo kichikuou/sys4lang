@@ -370,11 +370,27 @@ type function_entry = {
   mutable def : fundecl option;
 }
 
+(* Gives a number to each name, in the order of first use. A name keeps its
+   number while the table exists. *)
+type numbering = { numbers : (string, int) Hashtbl.t; mutable next : int }
+
+let new_numbering () = { numbers = Hashtbl.create (module String); next = 0 }
+
+let number_of_name numbering name =
+  Hashtbl.find_or_add numbering.numbers name ~default:(fun () ->
+      let n = numbering.next in
+      numbering.next <- n + 1;
+      n)
+
 type context = {
   ain : Ain.t;
   version : int; (* ain_major_version * 100 + ain_minor_version *)
   globals : (string, variable) Hashtbl.t;
   structs : (string, jaf_struct) Hashtbl.t;
+  (* The indices of the types in the AIN tables. *)
+  struct_numbers : numbering;
+  functype_numbers : numbering;
+  delegate_numbers : numbering;
   (* Maps a mangled name to its overloads. *)
   functions : (string, function_entry list) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
@@ -996,6 +1012,9 @@ let create_context ?(constants : variable list = []) ain =
     version = (Ain.version ain * 100) + Ain.minor_version ain;
     globals;
     structs = Hashtbl.create (module String);
+    struct_numbers = new_numbering ();
+    functype_numbers = new_numbering ();
+    delegate_numbers = new_numbering ();
     functions = Hashtbl.create (module String);
     functypes = Hashtbl.create (module String);
     delegates = Hashtbl.create (module String);

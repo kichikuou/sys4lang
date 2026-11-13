@@ -390,25 +390,10 @@ let check_v1_restrictions (ctx : context) (sel : selection) =
           (ASTDeclaration (Function fd));
       (new jump_check_visitor ctx)#visit_fundecl fd)
 
-(* The number of entries in each table of the base AIN before the patch. An
-   index below this number refers to an existing entry, and other indices refer
-   to entries that the patch adds. *)
-type base_info = {
-  nr_functions : int;
-  nr_globals : int;
-  nr_structs : int;
-  nr_functypes : int;
-  nr_delegates : int;
-}
-
-let base_info ain =
-  {
-    nr_functions = Ain.nr_functions ain;
-    nr_globals = Ain.nr_globals ain;
-    nr_structs = Ain.nr_structs ain;
-    nr_functypes = Ain.nr_functypes ain;
-    nr_delegates = Ain.nr_delegates ain;
-  }
+(* The table sizes of the base AIN before the patch. An index below the size
+   refers to an existing entry, and other indices refer to entries that the
+   patch adds. *)
+type base_info = Layout.table_sizes
 
 let in_base nr i = Option.filter i ~f:(fun i -> i < nr)
 
@@ -419,8 +404,8 @@ let find_base_function ain (base : base_info) name =
 
 (* Binds declarations to the base AIN entries of the same name, and adds new
    entries only for selected declarations. *)
-let patch_allocator ain (base : base_info) (sel : selection) :
-    Declarations.allocator =
+let patch_allocator ain (base : base_info) (sel : selection) : Layout.allocator
+    =
   let next_global = ref 0 in
   let added = Hashtbl.create (module String) in
   let memoize name f =
@@ -431,13 +416,6 @@ let patch_allocator ain (base : base_info) (sel : selection) :
         Hashtbl.set added ~key:name ~data:i;
         i
   in
-  let type_index kind base_index selected name node add =
-    match base_index with
-    | Some i -> i
-    | None ->
-        if selected then add ()
-        else compile_error (sprintf "New %s %s must be selected" kind name) node
-  in
   object
     method function_index _ name =
       match find_base_function ain base name with
@@ -447,8 +425,7 @@ let patch_allocator ain (base : base_info) (sel : selection) :
             Some (memoize name (fun () -> (Ain.add_function ain name).index))
           else None
 
-    (* Lambda names are sequence numbers, so a base AIN function with the same
-       name is a different function. *)
+    (* A lambda is always a new function. *)
     method lambda_index name = (Ain.add_function ain name).index
 
     method generated_function_index name =
@@ -483,28 +460,42 @@ let patch_allocator ain (base : base_info) (sel : selection) :
             compile_error
               (sprintf "New global group %s requires --globals" gg.name)
               (ASTDeclaration (GlobalGroup gg))
-
-    method struct_index (s : structdecl) =
-      type_index "struct"
-        (in_base base.nr_structs (Ain.get_struct_index ain s.name))
-        (Hash_set.mem sel.structs s.name)
-        s.name (ASTDeclaration (StructDef s))
-        (fun () -> (Ain.add_struct ain s.name).index)
-
-    method functype_index (f : fundecl) =
-      type_index "functype"
-        (in_base base.nr_functypes (Ain.get_functype_index ain f.name))
-        (Hash_set.mem sel.functypes f.name)
-        f.name (ASTDeclaration (FuncTypeDef f))
-        (fun () -> (Ain.add_functype ain f.name).index)
-
-    method delegate_index (f : fundecl) =
-      type_index "delegate"
-        (in_base base.nr_delegates (Ain.get_delegate_index ain f.name))
-        (Hash_set.mem sel.delegates f.name)
-        f.name (ASTDeclaration (DelegateDef f))
-        (fun () -> (Ain.add_delegate ain f.name).index)
   end
+
+(* Gives the types of the base AIN their indices. *)
+let number_base_types (ctx : context) (base : base_info) =
+  let number (numbering : numbering) nr name_of_index =
+    for i = 0 to nr - 1 do
+      Hashtbl.add_exn numbering.numbers ~key:(name_of_index i) ~data:i
+    done;
+    numbering.next <- nr
+  in
+  number ctx.struct_numbers base.nr_structs (fun i ->
+      (Ain.get_struct_by_index ctx.ain i).name);
+  number ctx.functype_numbers base.nr_functypes (fun i ->
+      (Ain.get_functype_by_index ctx.ain i).name);
+  number ctx.delegate_numbers base.nr_delegates (fun i ->
+      (Ain.get_delegate_by_index ctx.ain i).name)
+
+(* A type that is not in the base AIN must be selected. *)
+let check_new_types (ctx : context) (base : base_info) (sel : selection) decls =
+  let check kind index nr selected name decl =
+    if index >= nr && not (Hash_set.mem selected name) then
+      compile_error
+        (sprintf "New %s %s must be selected" kind name)
+        (ASTDeclaration decl)
+  in
+  List.iter decls ~f:(function
+    | StructDef s as d ->
+        check "struct" (Hashtbl.find_exn ctx.structs s.name).index
+          base.nr_structs sel.structs s.name d
+    | FuncTypeDef f as d ->
+        check "functype" (Option.value_exn f.index) base.nr_functypes
+          sel.functypes f.name d
+    | DelegateDef f as d ->
+        check "delegate" (Option.value_exn f.index) base.nr_delegates
+          sel.delegates f.name d
+    | _ -> ())
 
 (* Removes the functions that have no index, and records in [unavailable] the
    hints that [add_hints] adds to errors about them. The functions are also
@@ -534,7 +525,7 @@ let remove_unbound (ctx : context) unavailable decls =
   Hashtbl.filter_map_inplace ctx.functions ~f:(fun entries ->
       match List.filter entries ~f:is_bound with [] -> None | es -> Some es);
   List.filter decls ~f:(function
-    | Function { index = None | Some -1; _ } -> false
+    | Function { index = None; _ } -> false
     | _ -> true)
 
 let rec add_hints unavailable = function
@@ -549,14 +540,12 @@ let rec add_hints unavailable = function
   | ErrorList es -> ErrorList (List.map es ~f:(add_hints unavailable))
 
 let bind_library (ctx : context) decls hll_name import_name =
-  let functions =
-    List.map decls ~f:(function
-      | Function f -> f
-      | decl ->
-          compiler_bug "unexpected declaration in .hll file"
-            (Some (ASTDeclaration decl)))
+  let library =
+    Declarations.register_library ctx decls ~hll_name ~import_name
   in
-  Declarations.check_library ctx import_name functions;
+  let functions =
+    List.filter_map decls ~f:(function Function f -> Some f | _ -> None)
+  in
   let lib_no =
     match Ain.get_library_index ctx.ain hll_name with
     | Some i -> i
@@ -586,8 +575,7 @@ let bind_library (ctx : context) decls hll_name import_name =
             compile_error
               (sprintf "Signature of %s does not match the base AIN" display)
               (ASTDeclaration (Function f)));
-  Hashtbl.add_exn ctx.libraries ~key:import_name
-    ~data:(new_library hll_name (Some lib_no) functions)
+  library.index <- Some lib_no
 
 (* The base AIN can record a function type or delegate type without its
    index. Such a type matches any function type or delegate type. *)
@@ -624,10 +612,10 @@ let verify_functions (ctx : context) (base : base_info) struct_names entries =
               (ASTDeclaration (Function fd))
       | _ -> ())
 
-let define_functypes (ctx : context) (base : base_info) decls =
-  let define get nr write (f : fundecl) node =
+let verify_functypes (ctx : context) (base : base_info) decls =
+  let verify get nr (f : fundecl) node =
     let p = jaf_to_ain_functype f in
-    if p.index < nr then (
+    if p.index < nr then
       let b : Ain.FunctionType.t = get ctx.ain p.index in
       if
         not
@@ -637,19 +625,16 @@ let define_functypes (ctx : context) (base : base_info) decls =
       then
         compile_error
           (sprintf "Signature of %s does not match the base AIN" f.name)
-          node)
-    else write ctx.ain p
+          node
   in
   List.iter decls ~f:(function
     | FuncTypeDef f as d ->
-        define Ain.get_functype_by_index base.nr_functypes Ain.write_functype f
-          (ASTDeclaration d)
+        verify Ain.get_functype_by_index base.nr_functypes f (ASTDeclaration d)
     | DelegateDef f as d ->
-        define Ain.get_delegate_by_index base.nr_delegates Ain.write_delegate f
-          (ASTDeclaration d)
+        verify Ain.get_delegate_by_index base.nr_delegates f (ASTDeclaration d)
     | _ -> ())
 
-let define_structs (ctx : context) (base : base_info) (sel : selection) decls =
+let update_structs (ctx : context) (base : base_info) (sel : selection) decls =
   let selected_function name =
     Option.map (Hashtbl.find sel.functions name) ~f:(fun (fd, _) ->
         Option.value_exn fd.index)
@@ -663,62 +648,53 @@ let define_structs (ctx : context) (base : base_info) (sel : selection) decls =
         in
         let ctor_selected = Hashtbl.mem sel.functions (s.name ^ "@0") in
         let struct_selected = Hash_set.mem sel.structs s.name in
-        (if index >= base.nr_structs then (
-           List.iter s.decls ~f:(function
-             | Method f | Constructor f | Destructor f ->
-                 if Option.is_none f.index then
-                   compile_error
-                     (sprintf "No definition of %s::%s found" s.name f.name)
-                     (ASTDeclaration (Function f))
-             | _ -> ());
-           jaf_to_ain_struct s b |> Ain.write_struct ctx.ain)
-         else
-           let project_members =
-             List.concat_map s.decls ~f:(function
-               | MemberDecl ds when not ds.is_const_decls -> ds.vars
-               | _ -> [])
-             |> jaf_to_ain_variables
-           in
-           let nb = List.length b.members in
-           let keeps_base_members =
-             List.length project_members >= nb
-             && List.for_all2_exn (List.take project_members nb) b.members
-                  ~f:(fun (x : Ain.Variable.t) y ->
-                    String.equal x.name y.name
-                    && type_matches ~base:y.value_type x.value_type)
-           in
-           if not keeps_base_members then
-             compile_error
-               (sprintf
-                  "Existing members of %s must keep their name, type, and order"
-                  s.name)
-               (ASTDeclaration (StructDef s));
-           if List.length project_members > nb && not struct_selected then
-             compile_error
-               (sprintf "New members of %s require selecting %s" s.name s.name)
-               (ASTDeclaration (StructDef s));
-           let members = b.members @ List.drop project_members nb in
-           (* AIN version 1 has no S@2. The constructor body allocates the
+        if index < base.nr_structs then (
+          let project_members =
+            List.concat_map s.decls ~f:(function
+              | MemberDecl ds when not ds.is_const_decls -> ds.vars
+              | _ -> [])
+            |> jaf_to_ain_variables
+          in
+          let nb = List.length b.members in
+          let keeps_base_members =
+            List.length project_members >= nb
+            && List.for_all2_exn (List.take project_members nb) b.members
+                 ~f:(fun (x : Ain.Variable.t) y ->
+                   String.equal x.name y.name
+                   && type_matches ~base:y.value_type x.value_type)
+          in
+          if not keeps_base_members then
+            compile_error
+              (sprintf
+                 "Existing members of %s must keep their name, type, and order"
+                 s.name)
+              (ASTDeclaration (StructDef s));
+          if List.length project_members > nb && not struct_selected then
+            compile_error
+              (sprintf "New members of %s require selecting %s" s.name s.name)
+              (ASTDeclaration (StructDef s));
+          let members = b.members @ List.drop project_members nb in
+          (* AIN version 1 has no S@2. The constructor body allocates the
               member arrays. *)
-           if
-             Ain.version ctx.ain >= 2
-             && Option.is_some (find_base_function ctx.ain base (s.name ^ "@2"))
-             && not has_ctor
-           then
-             compile_error
-               (sprintf "Constructor of %s cannot be removed" s.name)
-               (ASTDeclaration (StructDef s));
-           let constructor =
-             Option.value
-               (selected_function (s.name ^ "@0"))
-               ~default:b.constructor
-           in
-           let destructor =
-             Option.value
-               (selected_function (s.name ^ "@1"))
-               ~default:b.destructor
-           in
-           Ain.write_struct ctx.ain { b with members; constructor; destructor });
+          if
+            Ain.version ctx.ain >= 2
+            && Option.is_some (find_base_function ctx.ain base (s.name ^ "@2"))
+            && not has_ctor
+          then
+            compile_error
+              (sprintf "Constructor of %s cannot be removed" s.name)
+              (ASTDeclaration (StructDef s));
+          let constructor =
+            Option.value
+              (selected_function (s.name ^ "@0"))
+              ~default:b.constructor
+          in
+          let destructor =
+            Option.value
+              (selected_function (s.name ^ "@1"))
+              ~default:b.destructor
+          in
+          Ain.write_struct ctx.ain { b with members; constructor; destructor });
         (* Without S@2 in the base AIN, the new S@2 and the call to it in the
            constructor must be compiled together. *)
         if
@@ -737,7 +713,7 @@ let base_group_name ain (g : Ain.Global.t) =
   if Ain.version ain < 5 || g.group_index < 0 then None
   else Some (Ain.get_global_group_name ain g.group_index)
 
-let define_globals (ctx : context) (base : base_info) (sel : selection) decls =
+let verify_globals (ctx : context) (base : base_info) decls =
   let project_globals =
     List.concat_map decls ~f:global_vars_with_group
     |> List.filter ~f:(fun ((v : variable), _) -> not v.is_const)
@@ -758,18 +734,7 @@ let define_globals (ctx : context) (base : base_info) (sel : selection) decls =
             (ASTVariable v));
   if List.length project_globals < base.nr_globals then
     raise_message
-      "Existing globals must keep their name, type, order, and group";
-  if sel.rebuild_globals then
-    List.iter project_globals ~f:(fun (v, _) ->
-        let i = Option.value_exn v.index in
-        if i >= base.nr_globals then
-          let g = Ain.get_global_entry ctx.ain i in
-          Ain.write_global ctx.ain
-            {
-              g with
-              variable =
-                { g.variable with value_type = jaf_to_ain_type v.type_spec.ty };
-            })
+      "Existing globals must keep their name, type, order, and group"
 
 (* The code generator selects instructions by the minor version, and the base
    AIN gives only its lower limit. *)
@@ -827,7 +792,7 @@ let apply ~base ~pje ~sources ~targets ~globals ~keep_crc ~read_file ~debug_info
             "debug_info.json has mappings past the end of the base AIN code"
       | _ -> ());
   let ctx = create_context base in
-  let base_info = base_info base in
+  let base_info = Layout.table_sizes base in
   (* Parse the sources. *)
   let jafs, hlls =
     List.partition_map
@@ -872,27 +837,26 @@ let apply ~base ~pje ~sources ~targets ~globals ~keep_crc ~read_file ~debug_info
   (* Remove the bodies that are not selected. *)
   let entries = strip_bodies sel struct_names entries in
   if version = 1 then check_v1_restrictions ctx sel;
-  (* Bind the declarations to the base AIN entries. *)
+  (* Register the declarations. The types get the indices of the base AIN. *)
+  number_base_types ctx base_info;
+  let decls = List.map entries ~f:(fun e -> e.decl) in
+  Declarations.register ctx decls;
+  check_new_types ctx base_info sel decls;
+  Declarations.resolve ctx decls;
+  (* Bind the declarations to the base AIN entries, and write the new
+     entries. *)
   let unavailable = Hashtbl.create (module String) in
   let allocator = patch_allocator base base_info sel in
-  Declarations.register_type_declarations ~allocator ctx
-    (List.map entries ~f:(fun e -> e.decl));
-  let decls =
-    remove_unbound ctx unavailable (List.map entries ~f:(fun e -> e.decl))
-  in
-  Declarations.resolve_types ctx decls;
-  List.iter decls ~f:(function
-    | Function f -> Declarations.write_entry_point ctx f
-    | _ -> ());
-  (* Verify the declarations against the base AIN and write the new entries. *)
+  Layout.layout ~allocator ctx decls;
+  let decls = remove_unbound ctx unavailable decls in
   List.iter hlls ~f:(fun (hll_name, import_name, hll) ->
-      Declarations.resolve_hll_types ctx hll;
-      Declarations.resolve_types ctx hll;
+      Declarations.resolve_hll ctx hll;
       bind_library ctx hll hll_name import_name);
+  (* Verify the declarations against the base AIN. *)
   verify_functions ctx base_info struct_names entries;
-  define_functypes ctx base_info decls;
-  define_structs ctx base_info sel decls;
-  define_globals ctx base_info sel decls;
+  verify_functypes ctx base_info decls;
+  update_structs ctx base_info sel decls;
+  verify_globals ctx base_info decls;
   (* Generate the initializers and analyze the declarations. *)
   let array_init =
     new ArrayInit.visitor
