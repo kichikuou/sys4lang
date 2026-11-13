@@ -1457,7 +1457,8 @@ let argtype_of_int = function
   | 14 -> Switch
   | _ -> failwith "invalid argument type"
 
-let args_of_opcode = function
+(* The operands of the instructions in AIN v8 and earlier. *)
+let args_of_opcode_v8 = function
   | PUSH -> [ Int ]
   | POP -> []
   | REF -> []
@@ -1548,8 +1549,7 @@ let args_of_opcode = function
   | C_REF -> []
   | C_ASSIGN -> []
   | MSG -> [ Message ]
-  | CALLHLL ->
-      [ Library; LibraryFunction (* FIXME: ain >8 has one more argument *) ]
+  | CALLHLL -> [ Library; LibraryFunction ]
   | PUSHSTRUCTPAGE -> []
   | CALLMETHOD -> [ Function ]
   | SH_GLOBALREF -> [ Global ]
@@ -1577,7 +1577,7 @@ let args_of_opcode = function
   | S_GTE -> []
   | S_LENGTH2 -> []
   | S_LENGTHBYTE2 -> []
-  | NEW -> [ (* FIXME: ain >8 has two arguments *) ]
+  | NEW -> []
   | DELETE -> []
   | CHECKUDO -> []
   | A_REF -> []
@@ -1607,9 +1607,9 @@ let args_of_opcode = function
   | S_PUSHBACK -> []
   | S_POPBACK -> []
   | FTOS -> []
-  | S_MOD -> [ (* FIXME: ain >8 has one argument *) ]
+  | S_MOD -> []
   | S_PLUSA2 -> []
-  | OBJSWAP -> [ (* FIXME: ain >8 has one argument *) ]
+  | OBJSWAP -> []
   | S_ERASE -> []
   | SR_REF2 -> [ Struct ]
   | S_ERASE2 -> []
@@ -1717,7 +1717,7 @@ let args_of_opcode = function
   | DG_MINUSA -> []
   | DG_CALLBEGIN -> [ Delegate ]
   | DG_NEW -> []
-  | DG_STR_TO_METHOD -> [ (* FIXME: ain >8 has one argument *) ]
+  | DG_STR_TO_METHOD -> []
   | OP_0X102 -> []
   | X_GETENV -> []
   | X_SET -> []
@@ -1733,3 +1733,12 @@ let args_of_opcode = function
   | X_A_INIT -> [ Int ]
   | X_A_SIZE -> []
   | X_TO_STR -> [ Int ]
+
+let args_of_opcode major_version op =
+  match op with
+  | CALLHLL when major_version >= 9 -> [ Library; LibraryFunction; Int ]
+  | NEW when major_version >= 9 -> [ Struct; Function ]
+  | (S_MOD | OBJSWAP) when major_version >= 9 -> [ Int ]
+  | DG_STR_TO_METHOD when major_version >= 9 -> [ Delegate ]
+  | CALLMETHOD when major_version >= 11 -> [ Int ]
+  | _ -> args_of_opcode_v8 op

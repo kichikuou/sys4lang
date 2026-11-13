@@ -571,7 +571,8 @@ let bind_library (ctx : context) decls hll_name import_name =
 let rec type_matches ~(base : Ain.Type.t) (t : Ain.Type.t) =
   match (base, t) with
   | FuncType -1, FuncType _ | Delegate -1, Delegate _ -> true
-  | Ref b, Ref t | Array b, Array t | Wrap b, Wrap t -> type_matches ~base:b t
+  | Ref b, Ref t | Array b, Array t | VarRef b, VarRef t ->
+      type_matches ~base:b t
   | _ -> Poly.equal base t
 
 let types_match ~(base : Ain.Variable.t list) (vars : Ain.Variable.t list) =

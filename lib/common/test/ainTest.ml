@@ -70,6 +70,86 @@ let%expect_test "duplicate names" =
     function f has multiple entries
     |}]
 
+let%expect_test "function overloads and two-slot globals in v11" =
+  let ain = Ain.create 11 0 in
+  let f = Ain.add_function ain "f" in
+  let f' = Ain.add_function ain "f" in
+  ignore (Ain.add_global ain "g" 0 : int);
+  ignore (Ain.add_global ain "<void>" 0 : int);
+  ignore (Ain.add_global ain "h" 0 : int);
+  ignore (Ain.add_global ain "<void>" 0 : int);
+  let _, loaded = write_and_read ain in
+  Stdio.printf "%d %d, f is %d\n" f.index f'.index
+    (Option.value_exn (Ain.get_function loaded "f")).index;
+  [%expect {| 1 2, f is 1 |}]
+
+(* The data type, struct type, and rank of each variable type, followed by
+   those of the subtype. *)
+let%expect_test "variable types in v11 and v12" =
+  let types : Ain.Type.t list =
+    [
+      Array (Struct 0);
+      Ref (Array String);
+      VarRef (Enum 0);
+      Option (Enum2 0);
+      Array (Enum 0);
+      HLLFunc;
+    ]
+  in
+  List.iter [ 11; 12 ] ~f:(fun version ->
+      let ain = Ain.create version 0 in
+      Ain.set_format ain Raw;
+      Ain.write_function ain
+        {
+          (Ain.add_function ain "f") with
+          vars = List.map types ~f:(Ain.Variable.make "v");
+        };
+      let data, loaded = write_and_read ain in
+      let vars = (Option.value_exn (Ain.get_function loaded "f")).vars in
+      let pos =
+        String.substr_index_exn data ~pattern:"f\000" + 2 + (7 * 4)
+        (* void return type, nr_args, nr_vars, is_closure, crc *)
+      in
+      let pos = ref pos in
+      let read_int () =
+        let i = Stdlib.String.get_int32_le data !pos |> Int32.to_int_exn in
+        pos := !pos + 4;
+        i
+      in
+      Stdio.printf "v%d\n" version;
+      List.iter vars ~f:(fun v ->
+          pos := !pos + 2 (* name *);
+          if version >= 12 then pos := !pos + 1 (* name2 *);
+          let rec read_type () =
+            let data = read_int () in
+            let struc = read_int () in
+            let rank = read_int () in
+            Printf.sprintf "%d %d %d" data struc rank
+            :: (if rank > 0 then read_type () else [])
+          in
+          let layout = read_type () in
+          ignore (read_int () : int) (* no initial value *);
+          Stdio.printf "  %s: %s\n"
+            (Ain.Type.to_string v.value_type)
+            (String.concat ~sep:", " layout)));
+  [%expect
+    {|
+    v11
+      array<struct<0>>: 79 0 1, 13 0 0
+      ref<array<string>>: 80 -1 1, 12 -1 0
+      varref<enum<0>>: 82 0 1, 92 0 0
+      option<enum2<0>>: 86 0 1, 91 0 0
+      array<enum<0>>: 79 0 1, 92 0 0
+      hll_func: 71 -1 0
+    v12
+      array<struct<0>>: 79 0 1, 13 0 0
+      ref<array<string>>: 80 -1 1, 12 -1 0
+      varref<enum<0>>: 82 0 1, 92 0 0
+      option<enum2<0>>: 86 -1 1, 91 0 0
+      array<enum<0>>: 79 -1 1, 92 0 0
+      hll_func: 95 -1 0
+    |}]
+
 let%expect_test "duplicate library names" =
   let ain = Ain.create 4 0 in
   ignore (Ain.add_library ain "L" : Ain.Library.t);

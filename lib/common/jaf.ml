@@ -892,7 +892,7 @@ let rec jaf_to_ain_type = function
   | Struct (_, i) -> Ain.Type.Struct i
   | Array t -> Ain.Type.Array (jaf_to_ain_type t)
   | Ref t -> Ain.Type.Ref (jaf_to_ain_type t)
-  | Wrap t -> Ain.Type.Wrap (jaf_to_ain_type t)
+  | Wrap t -> Ain.Type.VarRef (jaf_to_ain_type t)
   | HLLParam -> Ain.Type.HLLParam
   | HLLFunc -> Ain.Type.HLLFunc
   | Delegate (Some (_, i)) -> Ain.Type.Delegate i

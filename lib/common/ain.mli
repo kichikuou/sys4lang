@@ -21,11 +21,10 @@ module Type : sig
     | Bool
     | LongInt
     | Delegate of int
-    | HLLFunc2
     | HLLParam
     | Array of t
     | Ref of t
-    | Wrap of t
+    | VarRef of t
     | Option of t
     | Unknown87 of t
     | IFace of int
@@ -33,7 +32,7 @@ module Type : sig
     | Enum of int
     | HLLFunc
     | Unknown98
-    | IFaceWrap of int
+    | IFaceVarRef of int
     | Function
     | Method
     | NullType
@@ -72,7 +71,9 @@ module Function : sig
     vars : Variable.t list;
     return_type : Type.t;
     is_label : bool;
-    is_lambda : bool;
+    is_closure : bool;
+        (** True if the function refers to the local variables of the enclosing
+            function. AIN v11+. *)
     crc : int32;
     struct_type : int option;
     enum_type : int option;
@@ -161,7 +162,10 @@ val add_global : t -> string -> int -> int
 val add_global_group : t -> string -> int
 val nr_global_groups : t -> int
 val get_global_group_name : t -> int -> string
+
+(** In AIN v11+, returns the first of the functions with the name. *)
 val get_function : t -> string -> Function.t option
+
 val get_function_by_index : t -> int -> Function.t
 val write_function : t -> Function.t -> unit
 val write_new_function : t -> Function.t -> int

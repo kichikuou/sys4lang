@@ -18,11 +18,10 @@ module Type = struct
     | Bool
     | LongInt
     | Delegate of int
-    | HLLFunc2
     | HLLParam
     | Array of t
     | Ref of t
-    | Wrap of t
+    | VarRef of t
     | Option of t
     | Unknown87 of t
     | IFace of int
@@ -31,7 +30,7 @@ module Type = struct
     | HLLFunc
     (* only used in delegates, type name has "T" prefix (e.g., TValueType, TResult) *)
     | Unknown98
-    | IFaceWrap of int
+    | IFaceVarRef of int
     (* internal compiler use *)
     | Function
     | Method
@@ -49,7 +48,6 @@ module Type = struct
     | Ref Bool -> 51
     | Ref LongInt -> 59
     | Ref (Delegate _) -> 67
-    | Ref HLLFunc2 -> failwith "tried to create ref hll_func2" (* FIXME: 73? *)
     | Ref HLLParam -> 75
     | Ref (Array arrtype) -> (
         if version >= 11 then 80
@@ -65,11 +63,10 @@ module Type = struct
           | Bool -> 52
           | LongInt -> 60
           | Delegate _ -> 69
-          | HLLFunc2 -> failwith "tried to create ref array<hll_func2>"
           | HLLParam -> failwith "tried to create ref array<hll_param>"
           | Array t -> int_of_data_type version (Ref (Array t))
           | Ref _ -> failwith "tried to create ref array<ref<...>>"
-          | Wrap _ -> failwith "tried to create ref array<wrap<...>>"
+          | VarRef _ -> failwith "tried to create ref array<varref<...>>"
           | Option _ -> failwith "tried to create ref array<option<...>>"
           | Unknown87 _ -> failwith "tried to create ref array<unknown_87>"
           | IFace _ -> failwith "tried to create ref array<interface>"
@@ -77,11 +74,12 @@ module Type = struct
           | Enum _ -> failwith "tried to create ref array<enum>"
           | HLLFunc -> failwith "tried to create ref array<hll_func>"
           | Unknown98 -> failwith "tried to create ref array<unknown_98>"
-          | IFaceWrap _ -> failwith "tried to create ref array<iface_wrap<...>>"
+          | IFaceVarRef _ ->
+              failwith "tried to create ref array<iface_varref<...>>"
           | Function -> failwith "tried to create ref array<function>"
           | Method -> failwith "tried to create ref array<method>"
           | NullType -> failwith "tried to create ref array<null>")
-    | Ref (Wrap _) -> failwith "tried to create ref wrap<...>"
+    | Ref (VarRef _) -> failwith "tried to create ref varref<...>"
     | Ref (Option _) -> failwith "tried to create ref option<...>"
     | Ref (Unknown87 _) -> failwith "tried to create ref unknown_87"
     | Ref (IFace _) -> failwith "tried to create ref interface"
@@ -89,7 +87,7 @@ module Type = struct
     | Ref (Enum _) -> 93
     | Ref HLLFunc -> failwith "tried to create ref hll_func"
     | Ref Unknown98 -> failwith "tried to create ref unknown_98"
-    | Ref (IFaceWrap _) -> failwith "tried to create ref iface_wrap<...>"
+    | Ref (IFaceVarRef _) -> failwith "tried to create ref iface_varref<...>"
     | Ref Function -> failwith "tried to create ref function"
     | Ref Method -> failwith "tried to create ref method"
     | Ref NullType -> failwith "tried to create ref null"
@@ -104,7 +102,6 @@ module Type = struct
     | Bool -> 47
     | LongInt -> 55
     | Delegate _ -> 63
-    | HLLFunc2 -> 71
     | HLLParam -> 74
     | Array arrtype -> (
         if version >= 11 then 79
@@ -120,11 +117,10 @@ module Type = struct
           | Bool -> 50
           | LongInt -> 58
           | Delegate _ -> 66
-          | HLLFunc2 -> failwith "tried to create array<hll_func2>"
           | HLLParam -> failwith "tried to create array<hll_param>"
           | Array t -> int_of_data_type version (Array t)
           | Ref _ -> failwith "tried to create array<ref<...>>"
-          | Wrap _ -> failwith "tried to create array<wrap<...>>"
+          | VarRef _ -> failwith "tried to create array<varref<...>>"
           | Option _ -> failwith "tried to create array<option<...>>"
           | Unknown87 _ -> failwith "tried to create array<unknown_87>"
           | IFace _ -> failwith "tried to create array<interface>"
@@ -132,34 +128,33 @@ module Type = struct
           | Enum _ -> failwith "tried to create array<enum>"
           | HLLFunc -> failwith "tried to create array<hll_func>"
           | Unknown98 -> failwith "tried to create array<unknown_98>"
-          | IFaceWrap _ -> failwith "tried to create array<iface_wrap<...>>"
+          | IFaceVarRef _ -> failwith "tried to create array<iface_varref<...>>"
           | Function -> failwith "tried to create array<function>"
           | Method -> failwith "tried to create array<method>"
           | NullType -> failwith "tried to create array<null>")
-    | Wrap _ -> 82
+    | VarRef _ -> 82
     | Option _ -> 86
     | Unknown87 _ -> 87
     | IFace _ -> 89
     | Enum2 _ -> 91
     | Enum _ -> 92
-    | HLLFunc -> 95
+    | HLLFunc -> if version >= 12 then 95 else 71
     | Unknown98 -> 98
-    | IFaceWrap _ -> 100
+    | IFaceVarRef _ -> 100
     | Function -> failwith "tried to create function"
     | Method -> failwith "tried to create method"
     | NullType -> failwith "tried to create null"
 
   let rec int_of_struct_type ?(var = false) version o =
     match o with
-    | Struct no | Enum2 no | Enum no | IFace no | IFaceWrap no -> no
+    | Struct no | Enum2 no | Enum no | IFace no | IFaceVarRef no -> no
     | Delegate no | FuncType no -> if version < 11 then -1 else no
-    | Array t -> (
-        (* XXX: preserve quirk with enum struct type in ain v12 (Rance 10) *)
-        match t with
-        | Enum _ ->
-            if version = 12 then -1 else int_of_struct_type version t ~var
-        | _ -> int_of_struct_type version t ~var)
-    | Ref t | Wrap t | Option t | Unknown87 t ->
+    (* In AIN v12, an array or option of an enum has no struct type, while its
+       subtype has the enum. *)
+    | (Array (Enum _ | Enum2 _) | Option (Enum _ | Enum2 _)) when version = 12
+      ->
+        -1
+    | Ref t | Array t | VarRef t | Option t | Unknown87 t ->
         int_of_struct_type version t ~var
     | Void -> if var && version < 11 then 0 else -1
     | _ -> -1
@@ -169,7 +164,7 @@ module Type = struct
     | _, Ref t -> int_of_rank version t
     | false, Array t -> 1 + int_of_rank version t
     | true, Array _ -> 1
-    | _, (Wrap _ | Option _ | Unknown87 _) -> 1
+    | _, (VarRef _ | Option _ | Unknown87 _) -> 1
     | _ -> 0
 
   (* temporary representation *)
@@ -226,13 +221,13 @@ module Type = struct
     | 66 -> make_array (Delegate struc) rank
     | 67 -> Ref (Delegate struc)
     | 69 -> Ref (make_array (Delegate struc) rank)
-    | 71 -> HLLFunc2
+    | 71 -> HLLFunc
     | 74 -> HLLParam
     | 75 -> Ref HLLParam
     (* XXX: HLL function can have null subtype *)
     | 79 -> Array (unwrap_subtype parsed.subtype)
     | 80 -> Ref (Array (unwrap_subtype parsed.subtype))
-    | 82 -> Wrap (unwrap_subtype parsed.subtype)
+    | 82 -> VarRef (unwrap_subtype parsed.subtype)
     | 86 -> Option (unwrap_subtype parsed.subtype)
     | 87 -> Unknown87 (unwrap_subtype parsed.subtype)
     | 89 -> IFace struc
@@ -241,7 +236,7 @@ module Type = struct
     | 93 -> Ref (Enum struc)
     | 95 -> HLLFunc
     | 98 -> Unknown98
-    | 100 -> IFaceWrap struc
+    | 100 -> IFaceVarRef struc
     | n -> failwith (sprintf "Invalid or unknown data type in ain file: %d" n)
 
   let rec to_string = function
@@ -256,11 +251,10 @@ module Type = struct
     | Bool -> "bool"
     | LongInt -> "lint"
     | Delegate no -> sprintf "delegate<%d>" no (* FIXME *)
-    | HLLFunc2 -> "hll_func2"
     | HLLParam -> "hll_param"
     | Array t -> sprintf "array<%s>" (to_string t)
     | Ref t -> sprintf "ref<%s>" (to_string t)
-    | Wrap t -> sprintf "wrap<%s>" (to_string t)
+    | VarRef t -> sprintf "varref<%s>" (to_string t)
     | Option t -> sprintf "option<%s>" (to_string t)
     | Unknown87 t -> sprintf "unknown87<%s>" (to_string t)
     | IFace no ->
@@ -269,8 +263,9 @@ module Type = struct
     | Enum no -> sprintf "enum<%d>" no (* FIXME *)
     | HLLFunc -> "hll_func"
     | Unknown98 -> "unknown_98"
-    | IFaceWrap no ->
-        sprintf "interface_wrap<%d>" no (* FIXME: look up name in ain object *)
+    | IFaceVarRef no ->
+        sprintf "interface_varref<%d>"
+          no (* FIXME: look up name in ain object *)
     | Function -> "function"
     | Method -> "method"
     | NullType -> "null"
@@ -306,7 +301,7 @@ module Function = struct
     vars : Variable.t list;
     return_type : Type.t;
     is_label : bool;
-    is_lambda : bool;
+    is_closure : bool;
     crc : int32;
     struct_type : int option;
     enum_type : int option;
@@ -321,7 +316,7 @@ module Function = struct
       vars = [];
       return_type = Void;
       is_label = false;
-      is_lambda = false;
+      is_closure = false;
       crc = 0l;
       struct_type = None;
       enum_type = None;
@@ -465,6 +460,19 @@ let add_name_index kind tbl name index =
   match Hashtbl.add tbl ~key:name ~data:index with
   | `Ok -> ()
   | `Duplicate -> failwith (sprintf "%s %s has multiple entries" kind name)
+
+(* AIN v11+ has function overloads, which share a name. The table keeps the
+   first one. *)
+let add_function_name_index ain name index =
+  if ain.major_version >= 11 then
+    Hashtbl.add ain.function_by_name ~key:name ~data:index |> ignore
+  else add_name_index "function" ain.function_by_name name index
+
+(* The second slot of a two-slot global is a global named "<void>", which is
+   not looked up by name. *)
+let add_global_name_index tbl name index =
+  if not (String.equal name "<void>") then
+    add_name_index "global" tbl name index
 
 (* The AIN file of Pascha C++ has two ACXLoader libraries. The first one is
    used. *)
@@ -622,7 +630,7 @@ let read_functions buf count =
       let return_type = read_return_type buf in
       let nr_args = read_int buf in
       let nr_vars = read_int buf in
-      let is_lambda = if_version_gte buf.ain (11, 0) read_bool false buf in
+      let is_closure = if_version_gte buf.ain (11, 0) read_bool false buf in
       let crc = if_version_gte buf.ain (2, 0) read_int32 Int32.zero buf in
       let vars = read_variables buf nr_vars in
       let (f : Function.t) =
@@ -634,7 +642,7 @@ let read_functions buf count =
           vars;
           return_type;
           is_label;
-          is_lambda;
+          is_closure;
           crc;
           struct_type = None;
           enum_type = None;
@@ -927,12 +935,11 @@ let load filename =
     Hashtbl.clear ain.functype_by_name;
     Hashtbl.clear ain.delegate_by_name;
     Dynarray.iteri
-      (fun i (f : Function.t) ->
-        add_name_index "function" ain.function_by_name f.name i)
+      (fun i (f : Function.t) -> add_function_name_index ain f.name i)
       ain.functions;
     Dynarray.iteri
       (fun i (g : Global.t) ->
-        add_name_index "global" ain.global_by_name g.variable.name i)
+        add_global_name_index ain.global_by_name g.variable.name i)
       ain.globals;
     Dynarray.iteri
       (fun i (s : Struct.t) ->
@@ -1036,7 +1043,7 @@ let rec write_variable_type ?(var = true) buf ain (t : Type.t) =
   BinBuffer.add_int buf (Type.int_of_rank ain.major_version t);
   if version_gte ain (11, 0) then
     match t with
-    | Array t | Wrap t | Option t | Unknown87 t ->
+    | Array t | Ref (Array t) | VarRef t | Option t | Unknown87 t ->
         write_variable_type ~var buf ain t
     | _ -> ()
 
@@ -1072,7 +1079,7 @@ let write_function buf ain (f : Function.t) =
   write_return_type buf ain f.return_type;
   BB.add_int buf f.nr_args;
   BB.add_int buf (List.length f.vars);
-  if_version_gte ain (11, 0) (BB.add_bool buf) () f.is_lambda;
+  if_version_gte ain (11, 0) (BB.add_bool buf) () f.is_closure;
   if_version_gte ain (2, 0) (BB.add_int32 buf) () f.crc;
   List.iter f.vars ~f:(write_variable buf ain)
 
@@ -1347,7 +1354,7 @@ let write_new_global ain (v : Variable.t) =
   let index = Dynarray.length ain.globals in
   let g : Global.t = { variable = { v with index }; group_index = 0 } in
   Dynarray.add_last ain.globals g;
-  add_name_index "global" ain.global_by_name v.name index;
+  add_global_name_index ain.global_by_name v.name index;
   index
 
 let add_global ain name group_index =
@@ -1355,7 +1362,7 @@ let add_global ain name group_index =
   let variable = Variable.make ~index name Void in
   let g = Global.create variable group_index in
   Dynarray.add_last ain.globals g;
-  add_name_index "global" ain.global_by_name name index;
+  add_global_name_index ain.global_by_name name index;
   index
 
 let add_global_group ain name =
@@ -1387,7 +1394,7 @@ let write_new_function ain (f : Function.t) =
   let index = Dynarray.length ain.functions in
   let f = { f with index } in
   Dynarray.add_last ain.functions f;
-  add_name_index "function" ain.function_by_name f.name index;
+  add_function_name_index ain f.name index;
   index
 
 let add_function ain name =
@@ -1487,7 +1494,7 @@ let function_of_hll_function_index ain lib_no fun_no : Function.t =
     vars = List.mapi lib_fun.arguments ~f:var_of_hll_arg;
     return_type = lib_fun.return_type;
     is_label = false;
-    is_lambda = false;
+    is_closure = false;
     crc = 0l;
     struct_type = None;
     enum_type = None;
@@ -1526,7 +1533,7 @@ let function_of_functype (ft : FunctionType.t) no : Function.t =
     vars = ft.variables;
     return_type = ft.return_type;
     is_label = false;
-    is_lambda = false;
+    is_closure = false;
     crc = 0l;
     struct_type = None;
     enum_type = None;

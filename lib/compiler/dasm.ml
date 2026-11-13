@@ -4,6 +4,7 @@ open Base
 type instruction = { op_i : int; args : Bytecode.argtype list }
 
 type t = {
+  version : int;
   code : bytes;
   mutable addr : int;
   mutable instruction : instruction option;
@@ -11,7 +12,13 @@ type t = {
 }
 
 let create ain =
-  { code = Ain.get_code ain; addr = 0; instruction = None; current_func = None }
+  {
+    version = Ain.version ain;
+    code = Ain.get_code ain;
+    addr = 0;
+    instruction = None;
+    current_func = None;
+  }
 
 let arg dasm i = Stdlib.Bytes.get_int32_le dasm.code (dasm.addr + (2 + (i * 4)))
 
@@ -21,7 +28,7 @@ let get_instruction dasm =
   | None ->
       let op_i = Stdlib.Bytes.get_int16_le dasm.code dasm.addr in
       let opcode = Bytecode.opcode_of_int op_i in
-      let args = Bytecode.args_of_opcode opcode in
+      let args = Bytecode.args_of_opcode dasm.version opcode in
       let instr = { op_i; args } in
       (match opcode with
       | Bytecode.FUNC ->
