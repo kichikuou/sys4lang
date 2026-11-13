@@ -44,272 +44,238 @@ class type_analyze_visitor ctx =
           expr.node <- Member (obj, name, ClassMethod f);
           expr.ty <- TyMethod (ft_of_fundecl f)
 
-    method! visit_expression expr =
-      super#visit_expression expr;
-      (* convenience functions which always pass parent expression *)
-      let check = type_check (ASTExpression expr) in
-      let check_numeric = type_check_numeric (ASTExpression expr) in
-      let coerce_numerics = type_coerce_numerics (ASTExpression expr) in
-      let check_member_lhs = type_check_member_lhs (ASTExpression expr) in
-      let check_expr (a : expression) b = check a.ty b in
-      (* check function call arguments *)
-      let check_call name params args =
-        let nr_params = List.length params in
-        let nr_args = List.length args in
-        if nr_args > nr_params then
-          arity_error name nr_params args (ASTExpression expr);
-        let check_arg i a v =
-          match (a, v.initval) with
-          | Some a, _ ->
-              (match v.type_spec.ty with
-              | Ref ty ->
-                  check_referenceable a (ASTExpression a);
-                  ref_type_check (ASTExpression a) ty a
-              | _ ->
-                  check_funarg_or_return ctx (ASTExpression a) v.type_spec.ty a);
-              Some a
-          | None, Some e ->
-              (* NOTE: `e` may be from another file that has not yet been type-checked. *)
-              Some e
-          | None, None ->
-              if i < nr_args then
-                compile_error
-                  (sprintf "Missing argument #%d" i)
-                  (ASTExpression expr)
-              else arity_error name nr_params args (ASTExpression expr)
-        in
-        let args = args @ List.init (nr_params - nr_args) ~f:(fun _ -> None) in
-        List.map3_exn
-          (List.init nr_params ~f:(fun i -> i))
-          args params ~f:check_arg
+    (* Checks the arguments of a call of the function [name], and returns
+       them with the default values of the omitted arguments. *)
+    method private check_arguments (expr : expression) name params args =
+      let node = ASTExpression expr in
+      let nr_params = List.length params in
+      let nr_args = List.length args in
+      if nr_args > nr_params then arity_error name nr_params args node;
+      let check_arg i a v =
+        match (a, v.initval) with
+        | Some a, _ ->
+            (match v.type_spec.ty with
+            | Ref ty ->
+                check_referenceable a (ASTExpression a);
+                ref_type_check (ASTExpression a) ty a
+            | _ -> check_funarg_or_return ctx (ASTExpression a) v.type_spec.ty a);
+            Some a
+        | None, Some e ->
+            (* NOTE: `e` may be from another file that has not yet been type-checked. *)
+            Some e
+        | None, None ->
+            if i < nr_args then
+              compile_error (sprintf "Missing argument #%d" i) node
+            else arity_error name nr_params args node
       in
-      match expr.node with
-      | ConstInt _ -> expr.ty <- Int
-      | ConstFloat _ -> expr.ty <- Float
-      | ConstChar _ -> expr.ty <- Int
-      | ConstString _ -> expr.ty <- String
-      | Ident (name, _) -> (
-          match resolve ctx self#env name with
-          | ResolvedLocal v ->
-              expr.node <- Ident (name, LocalVariable v);
-              expr.ty <- v.type_spec.ty
-          | ResolvedGlobal g ->
-              let ident_type =
-                if g.is_const then GlobalConstant g else GlobalVariable g
-              in
-              expr.node <- Ident (name, ident_type);
-              expr.ty <- g.type_spec.ty
-          | ResolvedFunction f ->
-              expr.node <- Ident (name, FunctionName name);
-              expr.ty <- TyFunction (ft_of_fundecl f)
-          | ResolvedMember (s, m) ->
-              let this = make_expr ~ty:(Struct (s.name, s.index)) This in
-              self#set_member expr this name m
-          | ResolvedLibrary l ->
-              expr.node <- Ident (name, HLLName l);
-              expr.ty <- Void
-          | ResolvedSystem ->
-              expr.node <- Ident ("system", System);
-              expr.ty <- Void
-          | ResolvedBuiltin builtin ->
-              expr.node <- Ident (name, BuiltinFunction builtin);
-              expr.ty <- Void
-          | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
-          )
-      | FuncAddr (name, _) -> (
-          match find_function ctx name with
-          | Some f ->
-              expr.node <- FuncAddr (name, Some f);
-              expr.ty <- TyFunction (ft_of_fundecl f)
-          | None -> (
-              match Util.parse_qualified_name name with
-              | None, name -> undefined_variable_error name (ASTExpression expr)
-              | Some sname, name -> (
-                  match
-                    Option.bind (Hashtbl.find ctx.structs sname) ~f:(fun s ->
-                        find_member ctx s name)
-                  with
-                  | Some (MemberVar v) ->
-                      expr.node <- MemberAddr (sname, v);
-                      expr.ty <- MemberPtr (sname, v.type_spec.ty)
-                  | Some (MemberFunctions _) | None ->
-                      undefined_variable_error
-                        (sname ^ "::" ^ name)
-                        (ASTExpression expr))))
-      | MemberAddr _ ->
-          compiler_bug "unexpected MemberAddr" (Some (ASTExpression expr))
-      | Unary (op, e) -> (
-          match op with
-          | UPlus | UMinus | PreInc | PreDec | PostInc | PostDec ->
-              check_numeric e;
-              expr.ty <- e.ty
-          | LogNot | BitNot ->
-              check Int e;
-              expr.ty <- Int)
-      | Binary (op, a, b) -> (
-          match op with
-          | Plus -> (
-              maybe_deref a;
-              maybe_deref b;
+      let args = args @ List.init (nr_params - nr_args) ~f:(fun _ -> None) in
+      List.map3_exn
+        (List.init nr_params ~f:(fun i -> i))
+        args params ~f:check_arg
+
+    method private type_ident (expr : expression) name =
+      match resolve ctx self#env name with
+      | ResolvedLocal v ->
+          expr.node <- Ident (name, LocalVariable v);
+          expr.ty <- v.type_spec.ty
+      | ResolvedGlobal g ->
+          let ident_type =
+            if g.is_const then GlobalConstant g else GlobalVariable g
+          in
+          expr.node <- Ident (name, ident_type);
+          expr.ty <- g.type_spec.ty
+      | ResolvedFunction f ->
+          expr.node <- Ident (name, FunctionName name);
+          expr.ty <- TyFunction (ft_of_fundecl f)
+      | ResolvedMember (s, m) ->
+          let this = make_expr ~ty:(Struct (s.name, s.index)) This in
+          self#set_member expr this name m
+      | ResolvedLibrary l ->
+          expr.node <- Ident (name, HLLName l);
+          expr.ty <- Void
+      | ResolvedSystem ->
+          expr.node <- Ident ("system", System);
+          expr.ty <- Void
+      | ResolvedBuiltin builtin ->
+          expr.node <- Ident (name, BuiltinFunction builtin);
+          expr.ty <- Void
+      | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
+
+    method private type_func_addr (expr : expression) name =
+      match find_function ctx name with
+      | Some f ->
+          expr.node <- FuncAddr (name, Some f);
+          expr.ty <- TyFunction (ft_of_fundecl f)
+      | None -> (
+          match Util.parse_qualified_name name with
+          | None, name -> undefined_variable_error name (ASTExpression expr)
+          | Some sname, name -> (
+              match
+                Option.bind (Hashtbl.find ctx.structs sname) ~f:(fun s ->
+                    find_member ctx s name)
+              with
+              | Some (MemberVar v) ->
+                  expr.node <- MemberAddr (sname, v);
+                  expr.ty <- MemberPtr (sname, v.type_spec.ty)
+              | Some (MemberFunctions _) | None ->
+                  undefined_variable_error
+                    (sname ^ "::" ^ name)
+                    (ASTExpression expr)))
+
+    method private type_unary (expr : expression) op (e : expression) =
+      match op with
+      | UPlus | UMinus | PreInc | PreDec | PostInc | PostDec ->
+          type_check_numeric (ASTExpression expr) e;
+          expr.ty <- e.ty
+      | LogNot | BitNot ->
+          type_check (ASTExpression expr) Int e;
+          expr.ty <- Int
+
+    method private type_binary (expr : expression) op (a : expression)
+        (b : expression) =
+      let node = ASTExpression expr in
+      let check = type_check node in
+      let coerce_numerics = type_coerce_numerics node in
+      match op with
+      | Plus -> (
+          maybe_deref a;
+          maybe_deref b;
+          match a.ty with
+          | String ->
+              check String b;
+              expr.ty <- a.ty
+          | _ -> expr.ty <- coerce_numerics op a b)
+      | Minus | Times | Divide -> expr.ty <- coerce_numerics op a b
+      | LogOr | LogAnd | BitOr | BitXor | BitAnd | LShift | RShift ->
+          maybe_deref a;
+          maybe_deref b;
+          check Int a;
+          check Int b;
+          expr.ty <- a.ty
+      | Modulo ->
+          maybe_deref a;
+          maybe_deref b;
+          (match a.ty with
+          | String -> (
+              (* TODO: check type matches format specifier if format string is a literal *)
+              match b.ty with
+              | Int | Float | Bool | LongInt | String -> ()
+              | _ -> type_error Int (Some b) node)
+          | Int | Bool | LongInt -> check Int b
+          | _ -> type_error Int (Some a) node);
+          expr.ty <- a.ty
+      | Equal | NEqual ->
+          maybe_deref a;
+          maybe_deref b;
+          (* NOTE: NULL is not allowed on lhs *)
+          (match (a.ty, b.ty) with
+          | String, _ -> check String b
+          | FuncType (Some (_, ft_i)), FuncType (Some (_, ft_j)) ->
+              if ft_i <> ft_j then type_error a.ty (Some b) node
+          | FuncType (Some (ft_name, _)), TyFunction f ->
+              let ft = Hashtbl.find_exn ctx.functypes ft_name in
+              if not (ft_compatible (ft_of_fundecl ft) f) then
+                type_error a.ty (Some b) node
+          | FuncType _, NullType -> b.ty <- a.ty
+          | _ -> coerce_numerics op a b |> ignore);
+          expr.ty <- Int
+      | LT | GT | LTE | GTE ->
+          maybe_deref a;
+          maybe_deref b;
+          (match a.ty with
+          | String -> check String b
+          | _ -> coerce_numerics op a b |> ignore);
+          expr.ty <- Int
+      | RefEqual | RefNEqual ->
+          (match a.node with
+          | Ident _ | Member (_, _, ClassVariable _) ->
+              check_ref_assign node a b
+          | This -> not_an_lvalue_error a node
+          | _ -> (
+              check_referenceable b node;
               match a.ty with
-              | String ->
-                  check String b;
-                  expr.ty <- a.ty
-              | _ -> expr.ty <- coerce_numerics op a b)
-          | Minus | Times | Divide -> expr.ty <- coerce_numerics op a b
-          | LogOr | LogAnd | BitOr | BitXor | BitAnd | LShift | RShift ->
-              maybe_deref a;
-              maybe_deref b;
-              check Int a;
-              check Int b;
-              expr.ty <- a.ty
-          | Modulo ->
-              maybe_deref a;
-              maybe_deref b;
-              (match a.ty with
-              | String -> (
-                  (* TODO: check type matches format specifier if format string is a literal *)
-                  match b.ty with
-                  | Int | Float | Bool | LongInt | String -> ()
-                  | _ -> type_error Int (Some b) (ASTExpression expr))
-              | Int | Bool | LongInt -> check Int b
-              | _ -> type_error Int (Some a) (ASTExpression expr));
-              expr.ty <- a.ty
-          | Equal | NEqual ->
-              maybe_deref a;
-              maybe_deref b;
-              (* NOTE: NULL is not allowed on lhs *)
-              (match (a.ty, b.ty) with
-              | String, _ -> check String b
-              | FuncType (Some (_, ft_i)), FuncType (Some (_, ft_j)) ->
-                  if ft_i <> ft_j then
-                    type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType (Some (ft_name, _)), TyFunction f ->
-                  let ft = Hashtbl.find_exn ctx.functypes ft_name in
-                  if not (ft_compatible (ft_of_fundecl ft) f) then
-                    type_error a.ty (Some b) (ASTExpression expr)
-              | FuncType _, NullType -> b.ty <- a.ty
-              | _ -> coerce_numerics op a b |> ignore);
-              expr.ty <- Int
-          | LT | GT | LTE | GTE ->
-              maybe_deref a;
-              maybe_deref b;
-              (match a.ty with
-              | String -> check String b
-              | _ -> coerce_numerics op a b |> ignore);
-              expr.ty <- Int
-          | RefEqual | RefNEqual ->
-              (match a.node with
-              | Ident _ | Member (_, _, ClassVariable _) ->
-                  check_ref_assign (ASTExpression expr) a b
-              | This -> not_an_lvalue_error a (ASTExpression expr)
-              | _ -> (
-                  check_referenceable b (ASTExpression expr);
-                  match a.ty with
-                  | Ref t -> ref_type_check (ASTExpression expr) t b
-                  | _ -> not_an_lvalue_error a (ASTExpression expr)));
-              expr.ty <- Int)
-      | Assign (op, lhs, rhs) -> (
-          check_lvalue lhs (ASTExpression expr);
-          maybe_deref lhs;
-          maybe_deref rhs;
-          (match (lhs.ty, op) with
-          | _, EqAssign -> (
-              check_assign ctx (ASTExpression expr) lhs.ty rhs;
-              (* If lhs is a string subscript access, change the operator to CharAssign *)
-              match lhs.node with
-              | Subscript ({ ty = String; _ }, _) ->
-                  expr.node <- Assign (CharAssign, lhs, rhs)
-              | _ -> ())
-          | String, PlusAssign -> check String rhs
-          | Delegate dg, (PlusAssign | MinusAssign) ->
-              check_delegate_compatible ctx (ASTExpression expr) dg rhs
-          | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
-              check_numeric lhs;
-              check_numeric rhs;
-              insert_cast lhs.ty rhs;
-              check_expr lhs rhs
-          | ( _,
-              ( ModuloAssign | OrAssign | XorAssign | AndAssign | LShiftAssign
-              | RShiftAssign ) ) ->
-              check Int lhs;
-              check Int rhs
-          | _, CharAssign ->
-              compiler_bug "unexpected CharAssign" (Some (ASTExpression expr)));
-          (* XXX: Nothing is left on stack after assigning method to delegate *)
-          match (lhs.ty, rhs.ty) with
-          | Delegate _, (TyMethod _ | String) -> expr.ty <- Void
-          | _ -> expr.ty <- rhs.ty)
-      | Seq (e1, e2) ->
-          check_not_array e1;
-          expr.ty <- e2.ty
-      | Ternary (test, con, alt) ->
-          check Int test;
-          (match (con.ty, alt.ty) with
-          | Ref _, Ref _ -> ()
-          | Ref _, _ -> maybe_deref con
-          | _, Ref _ -> maybe_deref alt
-          | _, _ -> ());
-          check_expr con alt;
-          expr.ty <- con.ty
-      | Cast (t, e) ->
-          maybe_deref e;
-          if not (type_castable t e.ty) then
-            type_error t (Some e) (ASTExpression expr);
-          expr.ty <- t
-      | Subscript (obj, i) -> (
-          maybe_deref obj;
-          check Int i;
-          match obj.ty with
-          | Array t -> expr.ty <- t
-          | String -> expr.ty <- Int
-          | _ ->
-              (* FIXME: Expected type here is array<?>|string *)
-              let expected = Array Void in
-              type_error expected (Some obj) (ASTExpression expr))
+              | Ref t -> ref_type_check node t b
+              | _ -> not_an_lvalue_error a node));
+          expr.ty <- Int
+
+    method private type_assign (expr : expression) op (lhs : expression)
+        (rhs : expression) =
+      let node = ASTExpression expr in
+      let check = type_check node in
+      check_lvalue lhs node;
+      maybe_deref lhs;
+      maybe_deref rhs;
+      (match (lhs.ty, op) with
+      | _, EqAssign -> (
+          check_assign ctx node lhs.ty rhs;
+          (* If lhs is a string subscript access, change the operator to CharAssign *)
+          match lhs.node with
+          | Subscript ({ ty = String; _ }, _) ->
+              expr.node <- Assign (CharAssign, lhs, rhs)
+          | _ -> ())
+      | String, PlusAssign -> check String rhs
+      | Delegate dg, (PlusAssign | MinusAssign) ->
+          check_delegate_compatible ctx node dg rhs
+      | _, (PlusAssign | MinusAssign | TimesAssign | DivideAssign) ->
+          type_check_numeric node lhs;
+          type_check_numeric node rhs;
+          insert_cast lhs.ty rhs;
+          check lhs.ty rhs
+      | ( _,
+          ( ModuloAssign | OrAssign | XorAssign | AndAssign | LShiftAssign
+          | RShiftAssign ) ) ->
+          check Int lhs;
+          check Int rhs
+      | _, CharAssign -> compiler_bug "unexpected CharAssign" (Some node));
+      (* XXX: Nothing is left on stack after assigning method to delegate *)
+      match (lhs.ty, rhs.ty) with
+      | Delegate _, (TyMethod _ | String) -> expr.ty <- Void
+      | _ -> expr.ty <- rhs.ty
+
+    method private type_member (expr : expression) (obj : expression) name =
+      let node = ASTExpression expr in
+      match obj.node with
       (* system function *)
-      | Member (({ node = Ident (_, System); _ } as e), syscall_name, _) -> (
-          match Bytecode.syscall_of_string syscall_name with
+      | Ident (_, System) -> (
+          match Bytecode.syscall_of_string name with
           | Some sys ->
-              expr.node <- Member (e, syscall_name, SystemFunction sys);
+              expr.node <- Member (obj, name, SystemFunction sys);
               expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
-              undefined_variable_error ("system." ^ syscall_name)
-                (ASTExpression expr))
+              undefined_variable_error ("system." ^ name) node)
       (* HLL function *)
-      | Member (({ node = Ident (lib_name, HLLName lib); _ } as e), fun_name, _)
-        -> (
-          match find_hll_function lib fun_name with
+      | Ident (lib_name, HLLName lib) -> (
+          match find_hll_function lib name with
           | Some _ ->
-              expr.node <- Member (e, fun_name, HLLFunction (lib, fun_name));
+              expr.node <- Member (obj, name, HLLFunction (lib, name));
               expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
-              undefined_variable_error
-                (lib_name ^ "." ^ fun_name)
-                (ASTExpression expr))
+              undefined_variable_error (lib_name ^ "." ^ name) node)
       (* built-in methods *)
-      | Member (e, name, _) when is_builtin e.ty -> (
-          match resolve_builtin ctx e name with
+      | _ when is_builtin obj.ty -> (
+          match resolve_builtin ctx obj name with
           | Some builtin ->
-              expr.node <- Member (e, name, builtin);
+              expr.node <- Member (obj, name, builtin);
               expr.ty <- TyFunction ([], Void)
           | None ->
               (* TODO: separate error type for this? *)
-              undefined_variable_error name (ASTExpression expr))
+              undefined_variable_error name node)
       (* member variable OR method *)
-      | Member (obj, member_name, _) -> (
-          let struc = Hashtbl.find_exn ctx.structs (check_member_lhs obj) in
+      | _ -> (
+          let struc =
+            Hashtbl.find_exn ctx.structs (type_check_member_lhs node obj)
+          in
           let access_check () =
             match self#env#current_class with
             | Some (Struct (_, i)) when i = struc.index -> ()
             | _ ->
                 compile_error
-                  (sprintf "%s::%s is not public" struc.name member_name)
-                  (ASTExpression expr)
+                  (sprintf "%s::%s is not public" struc.name name)
+                  node
           in
-          match find_member ctx struc member_name with
+          match find_member ctx struc name with
           | Some m ->
               let is_private =
                 match m with
@@ -317,97 +283,117 @@ class type_analyze_visitor ctx =
                 | MemberFunctions fs -> (List.hd_exn fs).is_private
               in
               if is_private then access_check ();
-              self#set_member expr obj member_name m
+              self#set_member expr obj name m
           | None ->
               (* TODO: separate error type for this? *)
-              undefined_variable_error
-                (struc.name ^ "." ^ member_name)
-                (ASTExpression expr))
-      (* regular function call *)
-      | Call (({ node = Ident (_, FunctionName name); _ } as e), args, _) ->
-          let f = Option.value_exn (find_function ctx name) in
-          let args = check_call f.name f.params args in
-          expr.node <- Call (e, args, FunctionCall f);
-          expr.ty <- f.return.ty
-      (* built-in function call *)
-      | Call (({ node = Ident (_, BuiltinFunction builtin); _ } as e), args, _)
-        ->
-          let f =
-            Builtin.fundecl_of_builtin ctx builtin Void
-              (Some (ASTExpression expr))
-          in
-          let args = check_call f.name f.params args in
-          expr.node <- Call (e, args, BuiltinCall builtin);
-          expr.ty <- f.return.ty
-      (* method call *)
-      | Call (({ node = Member (_, _, ClassMethod f); _ } as e), args, _) ->
-          let args = check_call f.name f.params args in
-          expr.node <- Call (e, args, MethodCall f);
-          expr.ty <- f.return.ty
-      (* HLL call *)
-      | Call
-          ( ({ node = Member (_, _, HLLFunction (lib, fun_name)); _ } as e),
-            args,
-            _ ) ->
-          let f = Option.value_exn (find_hll_function lib fun_name) in
-          let args = check_call f.name f.params args in
-          expr.node <- Call (e, args, HLLCall (lib, f));
-          expr.ty <- f.return.ty
-      (* system call *)
-      | Call (({ node = Member (_, _, SystemFunction sys); _ } as e), args, _)
-        ->
-          let f = Builtin.fundecl_of_syscall sys in
-          let args = check_call f.name f.params args in
-          expr.node <- Call (e, args, SystemCall sys);
-          expr.ty <- f.return.ty
-      (* built-in method call *)
-      | Call
-          (({ node = Member (obj, _, BuiltinMethod builtin); _ } as e), args, _)
-        ->
-          let f =
-            Builtin.fundecl_of_builtin ctx builtin obj.ty
-              (Some (ASTExpression expr))
-          in
-          let args = check_call f.name f.params args in
-          expr.node <- Call (e, args, BuiltinCall builtin);
-          expr.ty <- f.return.ty
-      (* built-in method call via HLL *)
-      | Call
-          (({ node = Member (obj, fun_name, BuiltinHLL lib); _ } as e), args, _)
-        ->
-          let f = Option.value_exn (find_hll_function lib fun_name) in
-          let args = check_call f.name (List.tl_exn f.params) args in
-          insert_rvalue_ref obj;
-          expr.node <- Call (e, Some obj :: args, HLLCall (lib, f));
-          expr.ty <- f.return.ty
-      (* functype/delegate call *)
-      | Call (e, args, _) -> (
-          match e.ty with
-          | FuncType (Some (name, _)) ->
-              let f = Hashtbl.find_exn ctx.functypes name in
-              let args = check_call f.name f.params args in
-              expr.node <- Call (e, args, FuncTypeCall f);
-              expr.ty <- f.return.ty
-          | Delegate (Some (name, _)) ->
-              let f = Hashtbl.find_exn ctx.delegates name in
-              let args = check_call f.name f.params args in
-              expr.node <- Call (e, args, DelegateCall f);
-              expr.ty <- f.return.ty
-          | _ -> type_error (FuncType None) (Some e) (ASTExpression expr))
+              undefined_variable_error (struc.name ^ "." ^ name) node)
+
+    method private type_call (expr : expression) (e : expression) args =
+      let node = ASTExpression expr in
+      let set_call (f : fundecl) params call_type =
+        let args = self#check_arguments expr f.name params args in
+        (args, call_type, f.return.ty)
+      in
+      let args, call_type, ty =
+        match e.node with
+        (* regular function call *)
+        | Ident (_, FunctionName name) ->
+            let f = Option.value_exn (find_function ctx name) in
+            set_call f f.params (FunctionCall f)
+        (* built-in function call *)
+        | Ident (_, BuiltinFunction builtin) ->
+            let f = Builtin.fundecl_of_builtin ctx builtin Void (Some node) in
+            set_call f f.params (BuiltinCall builtin)
+        (* method call *)
+        | Member (_, _, ClassMethod f) -> set_call f f.params (MethodCall f)
+        (* HLL call *)
+        | Member (_, _, HLLFunction (lib, fun_name)) ->
+            let f = Option.value_exn (find_hll_function lib fun_name) in
+            set_call f f.params (HLLCall (lib, f))
+        (* system call *)
+        | Member (_, _, SystemFunction sys) ->
+            let f = Builtin.fundecl_of_syscall sys in
+            set_call f f.params (SystemCall sys)
+        (* built-in method call *)
+        | Member (obj, _, BuiltinMethod builtin) ->
+            let f = Builtin.fundecl_of_builtin ctx builtin obj.ty (Some node) in
+            set_call f f.params (BuiltinCall builtin)
+        (* built-in method call via HLL *)
+        | Member (obj, fun_name, BuiltinHLL lib) ->
+            let f = Option.value_exn (find_hll_function lib fun_name) in
+            let args, call_type, ty =
+              set_call f (List.tl_exn f.params) (HLLCall (lib, f))
+            in
+            insert_rvalue_ref obj;
+            (Some obj :: args, call_type, ty)
+        (* functype/delegate call *)
+        | _ -> (
+            match e.ty with
+            | FuncType (Some (name, _)) ->
+                let f = Hashtbl.find_exn ctx.functypes name in
+                set_call f f.params (FuncTypeCall f)
+            | Delegate (Some (name, _)) ->
+                let f = Hashtbl.find_exn ctx.delegates name in
+                set_call f f.params (DelegateCall f)
+            | _ -> type_error (FuncType None) (Some e) node)
+      in
+      expr.node <- Call (e, args, call_type);
+      expr.ty <- ty
+
+    method! visit_expression expr =
+      super#visit_expression expr;
+      let node = ASTExpression expr in
+      match expr.node with
+      | ConstInt _ -> expr.ty <- Int
+      | ConstFloat _ -> expr.ty <- Float
+      | ConstChar _ -> expr.ty <- Int
+      | ConstString _ -> expr.ty <- String
+      | Ident (name, _) -> self#type_ident expr name
+      | FuncAddr (name, _) -> self#type_func_addr expr name
+      | MemberAddr _ -> compiler_bug "unexpected MemberAddr" (Some node)
+      | Unary (op, e) -> self#type_unary expr op e
+      | Binary (op, a, b) -> self#type_binary expr op a b
+      | Assign (op, lhs, rhs) -> self#type_assign expr op lhs rhs
+      | Seq (e1, e2) ->
+          check_not_array e1;
+          expr.ty <- e2.ty
+      | Ternary (test, con, alt) ->
+          type_check node Int test;
+          (match (con.ty, alt.ty) with
+          | Ref _, Ref _ -> ()
+          | Ref _, _ -> maybe_deref con
+          | _, Ref _ -> maybe_deref alt
+          | _, _ -> ());
+          type_check node con.ty alt;
+          expr.ty <- con.ty
+      | Cast (t, e) ->
+          maybe_deref e;
+          if not (type_castable t e.ty) then type_error t (Some e) node;
+          expr.ty <- t
+      | Subscript (obj, i) -> (
+          maybe_deref obj;
+          type_check node Int i;
+          match obj.ty with
+          | Array t -> expr.ty <- t
+          | String -> expr.ty <- Int
+          | _ ->
+              (* FIXME: Expected type here is array<?>|string *)
+              let expected = Array Void in
+              type_error expected (Some obj) node)
+      | Member (obj, name, _) -> self#type_member expr obj name
+      | Call (e, args, _) -> self#type_call expr e args
       | New { ty; _ } -> (
           match ty with
           | Struct _ -> expr.ty <- Ref ty
-          | _ -> type_error (Struct ("", -1)) None (ASTExpression expr))
-      | DummyRef _ ->
-          compiler_bug "DummyRef in type checker" (Some (ASTExpression expr))
-      | RvalueRef _ ->
-          compiler_bug "RvalueRef in type checker" (Some (ASTExpression expr))
+          | _ -> type_error (Struct ("", -1)) None node)
+      | DummyRef _ -> compiler_bug "DummyRef in type checker" (Some node)
+      | RvalueRef _ -> compiler_bug "RvalueRef in type checker" (Some node)
       | This -> (
           match self#env#current_class with
           | Some ty -> expr.ty <- ty
           | None ->
               (* TODO: separate error type for this? *)
-              undefined_variable_error "this" (ASTExpression expr))
+              undefined_variable_error "this" node)
       | Null -> expr.ty <- NullType
       | Lambda f -> expr.ty <- TyMethod (ft_of_fundecl f)
 
