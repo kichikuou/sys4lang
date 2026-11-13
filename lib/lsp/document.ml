@@ -193,7 +193,7 @@ let create ctx ~fname ?hll_import_name ?(decl_only = false) ?previous
 
 class ast_locator (doc : t) (pos : Lsp.Types.Position.t) =
   object
-    inherit Jaf.ivisitor doc.ctx as super
+    inherit Jaf.ivisitor as super
     val mutable nodes : Jaf.ast_node list = []
     method nodes = nodes
 

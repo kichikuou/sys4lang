@@ -155,12 +155,9 @@ let member_variables (s : structdecl) =
 (* The declaration and the definition of a function have the same index. *)
 let set_function_index ctx (f : fundecl) index =
   f.index <- index;
-  List.iter
-    (Hashtbl.find_multi ctx.functions (mangled_name f))
-    ~f:(function
-      | { def = Some def; decl = Some decl } when phys_equal def f ->
-          decl.index <- index
-      | _ -> ())
+  match function_entry_of ctx f with
+  | Some { decl = Some decl; _ } -> decl.index <- index
+  | _ -> ()
 
 let check_methods_defined ctx (s : structdecl) =
   let has_index f =
@@ -180,7 +177,7 @@ let check_methods_defined ctx (s : structdecl) =
    that follows the index of the enclosing function. *)
 class index_visitor ctx (allocator : allocator) (base : table_sizes) =
   object (self)
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
     val mutable gg_index = -1
     val mutable nr_lambdas = 0
 

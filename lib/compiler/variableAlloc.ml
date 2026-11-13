@@ -56,7 +56,7 @@ let dummy_var_seqno = ref 0
 
 class variable_alloc_visitor ctx =
   object (self)
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
     val func_vars : variable list Stack.t = Stack.create ()
     val scopes = Stack.create ()
     val mutable labels = Hashtbl.create (module String)

@@ -123,9 +123,9 @@ type scope_snapshot = {
 let empty_snapshot =
   { locals = []; enclosing_class = None; enclosing_function = None }
 
-class scope_collector (ctx : Jaf.context) text pos =
+class scope_collector text pos =
   object (self)
-    inherit Jaf.ivisitor ctx as super
+    inherit Jaf.ivisitor as super
     val mutable snapshot : scope_snapshot = empty_snapshot
     val mutable snapshot_taken : bool = false
     method snapshot = snapshot
@@ -147,7 +147,7 @@ class scope_collector (ctx : Jaf.context) text pos =
         self#visit_type_specifier f.return;
         List.iter f.params ~f:self#visit_variable;
         Option.iter f.body ~f:(fun body ->
-            Stack.push env_stack (new Jaf.environment ctx (Some f));
+            Stack.push env_stack (new Jaf.environment (Some f));
             List.iter body ~f:self#visit_statement;
             self#take_snapshot ();
             Stack.pop_exn env_stack |> ignore))
@@ -183,8 +183,8 @@ class scope_collector (ctx : Jaf.context) text pos =
     (* else: statement starts after the cursor - skip. *)
   end
 
-let collect_scope ctx text pos toplevel =
-  let v = new scope_collector ctx text pos in
+let collect_scope text pos toplevel =
+  let v = new scope_collector text pos in
   v#visit_toplevel toplevel;
   v#snapshot
 
@@ -255,7 +255,10 @@ let class_member_candidates (ctx : Jaf.context) ?(include_private = false)
       in
       let visible_fn (f : Jaf.fundecl) = include_private || not f.is_private in
       let field_items =
-        Hashtbl.data s.members |> List.filter ~f:visible_var
+        Hashtbl.data s.members
+        |> List.filter_map ~f:(function
+          | Jaf.MemberVariable v when visible_var v -> Some v
+          | _ -> None)
         |> List.map ~f:(fun (v : Jaf.variable) ->
             item ~label:v.name ~kind:Field
               ~detail:(Jaf.jaf_type_to_string v.type_spec.ty)
@@ -334,7 +337,7 @@ let type_analyze_receiver ctx (snapshot : scope_snapshot) text =
   match parse_receiver text with
   | None -> None
   | Some expr -> (
-      let env = new Jaf.environment ctx snapshot.enclosing_function in
+      let env = new Jaf.environment snapshot.enclosing_function in
       List.iter snapshot.locals ~f:(fun v -> env#push_var v);
       let v = new scoped_type_analyzer ctx env in
       try
@@ -411,7 +414,7 @@ let get_completion ctx ~text ~scope (pos : Lsp.Types.Position.t) =
   let snapshot () =
     match scope with
     | None -> empty_snapshot
-    | Some (toplevel, scope_text) -> collect_scope ctx scope_text pos toplevel
+    | Some (toplevel, scope_text) -> collect_scope scope_text pos toplevel
   in
   let result items =
     Some
@@ -661,7 +664,7 @@ let get_signature_help ctx ~text ~scope (pos : Lsp.Types.Position.t) =
               match scope with
               | None -> empty_snapshot
               | Some (toplevel, scope_text) ->
-                  collect_scope ctx scope_text pos toplevel
+                  collect_scope scope_text pos toplevel
             in
             match type_analyze_receiver ctx snap callee_text with
             | None -> None

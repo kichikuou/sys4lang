@@ -52,12 +52,6 @@ type entry = { decl : declaration; src : source; src_no : int; ord : int }
 let is_selected_source src =
   match src.origin with `Extra | `Project_selected -> true | `Project -> false
 
-let method_mangled_name class_name name =
-  let _, s = Util.parse_qualified_name class_name in
-  if String.equal name s then class_name ^ "@0"
-  else if String.equal name ("~" ^ s) then class_name ^ "@1"
-  else class_name ^ "@" ^ name
-
 let function_mangled_name struct_names (fd : fundecl) =
   match Util.parse_qualified_name fd.name with
   | Some qual, name when Hash_set.mem struct_names qual ->
@@ -368,9 +362,9 @@ let strip_bodies (sel : selection) struct_names entries =
           Option.is_some fd.body || not (is_out_of_class_method struct_names fd)
       | _ -> true)
 
-class jump_check_visitor ctx =
+class jump_check_visitor =
   object
-    inherit ivisitor ctx as super
+    inherit ivisitor as super
 
     method! visit_statement stmt =
       (match stmt.node with
@@ -383,12 +377,12 @@ class jump_check_visitor ctx =
 
 (* In AIN version 1, scenario labels are in SLBL instead of FUNC, and jump uses
    the SLBL address. Appended code cannot change these addresses. *)
-let check_v1_restrictions (ctx : context) (sel : selection) =
+let check_v1_restrictions (sel : selection) =
   Hashtbl.iter sel.functions ~f:(fun (fd, _) ->
       if fd.is_label then
         compile_error "Scenario labels cannot be patched in AIN version 1"
           (ASTDeclaration (Function fd));
-      (new jump_check_visitor ctx)#visit_fundecl fd)
+      (new jump_check_visitor)#visit_fundecl fd)
 
 (* The table sizes of the base AIN before the patch. An index below the size
    refers to an existing entry, and other indices refer to entries that the
@@ -831,7 +825,7 @@ let apply ~base ~pje ~sources ~targets ~globals ~keep_crc ~read_file ~debug_info
   List.iter targets ~f:(select_target sel idx);
   (* Remove the bodies that are not selected. *)
   let entries = strip_bodies sel struct_names entries in
-  if version = 1 then check_v1_restrictions ctx sel;
+  if version = 1 then check_v1_restrictions sel;
   (* Register the declarations. The types get the indices of the base AIN. *)
   number_base_types ctx base_info;
   let decls = List.map entries ~f:(fun e -> e.decl) in
