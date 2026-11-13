@@ -491,6 +491,15 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
       | Struct n | IFace n ->
           print_string out (if n < 0 then "struct" else Ain.ain.strt.(n).name)
       | Array Any -> print_string out "array"
+      | Array t when Ain.ain.vers >= 11 ->
+          let elem = Buffer.create 16 in
+          self#pr_type elem t;
+          (* ">>" is a shift operator. *)
+          let sep =
+            if String.is_suffix (Buffer.contents elem) ~suffix:">" then " "
+            else ""
+          in
+          bprintf out "array<%s%s>" (Buffer.contents elem) sep
       | Array _ as t ->
           print_string out "array@";
           let base, rank = Type.array_base_and_rank t in
