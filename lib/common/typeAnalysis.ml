@@ -175,7 +175,7 @@ let resolve_builtin ctx e name =
   in
   match Hashtbl.find ctx.libraries lib_name with
   | Some l when ctx.version >= 800 -> (
-      match Hashtbl.find l.functions name with
+      match find_hll_function l name with
       | Some _ -> Some (BuiltinHLL l)
       | None -> None)
   | _ -> (
@@ -420,7 +420,7 @@ class type_analyze_visitor ctx =
           | UnresolvedName -> undefined_variable_error name (ASTExpression expr)
           )
       | FuncAddr (name, _) -> (
-          match Hashtbl.find ctx.functions name with
+          match find_function ctx name with
           | Some f ->
               expr.node <- FuncAddr (name, Some f);
               expr.ty <- TyFunction (ft_of_fundecl f)
@@ -584,7 +584,7 @@ class type_analyze_visitor ctx =
       (* HLL function *)
       | Member (({ node = Ident (lib_name, HLLName lib); _ } as e), fun_name, _)
         -> (
-          match Hashtbl.find lib.functions fun_name with
+          match find_hll_function lib fun_name with
           | Some _ ->
               expr.node <- Member (e, fun_name, HLLFunction (lib, fun_name));
               expr.ty <- TyFunction ([], Void)
@@ -625,7 +625,7 @@ class type_analyze_visitor ctx =
               expr.ty <- member.type_spec.ty
           | None -> (
               let fun_name = struc.name ^ "@" ^ member_name in
-              match Hashtbl.find ctx.functions fun_name with
+              match find_function ctx fun_name with
               | Some f ->
                   if f.is_private then access_check ();
                   expr.node <- Member (obj, member_name, ClassMethod f);
@@ -637,7 +637,7 @@ class type_analyze_visitor ctx =
                     (ASTExpression expr)))
       (* regular function call *)
       | Call (({ node = Ident (_, FunctionName name); _ } as e), args, _) ->
-          let f = Hashtbl.find_exn ctx.functions name in
+          let f = Option.value_exn (find_function ctx name) in
           let args = check_call f.name f.params args in
           expr.node <- Call (e, args, FunctionCall f);
           expr.ty <- f.return.ty
@@ -661,7 +661,7 @@ class type_analyze_visitor ctx =
           ( ({ node = Member (_, _, HLLFunction (lib, fun_name)); _ } as e),
             args,
             _ ) ->
-          let f = Hashtbl.find_exn lib.functions fun_name in
+          let f = Option.value_exn (find_hll_function lib fun_name) in
           let args = check_call f.name f.params args in
           expr.node <- Call (e, args, HLLCall (lib, f));
           expr.ty <- f.return.ty
@@ -687,7 +687,7 @@ class type_analyze_visitor ctx =
       | Call
           (({ node = Member (obj, fun_name, BuiltinHLL lib); _ } as e), args, _)
         ->
-          let f = Hashtbl.find_exn lib.functions fun_name in
+          let f = Option.value_exn (find_hll_function lib fun_name) in
           let args = check_call f.name (List.tl_exn f.params) args in
           insert_rvalue_ref obj;
           expr.node <- Call (e, Some obj :: args, HLLCall (lib, f));
@@ -786,7 +786,7 @@ class type_analyze_visitor ctx =
                   | Void -> ()
                   | _ -> type_error f.return.ty None (ASTStatement stmt)))
           | Jump name -> (
-              match Hashtbl.find ctx.functions name with
+              match find_function ctx name with
               | Some f when f.is_label -> ()
               | _ ->
                   compile_error

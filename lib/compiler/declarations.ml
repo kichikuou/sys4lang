@@ -76,39 +76,43 @@ class type_declare_visitor ctx (allocator : allocator) =
         else if not is_v1_scenario_label then
           decl.index <- allocator#function_index decl name
       in
-      Hashtbl.update ctx.functions name ~f:(function
-        | Some prev_decl ->
-            if
-              not (ft_compatible (ft_of_fundecl decl) (ft_of_fundecl prev_decl))
-            then
-              compile_error "Function signature mismatch"
-                (ASTDeclaration (Function decl))
-            else if Option.is_some prev_decl.body then
-              compile_error "Duplicate function definition"
-                (ASTDeclaration (Function decl))
-            else if Option.is_none decl.body then (
-              (* Duplicate method declaration. Ignore the later one. *)
-              decl.index <- Some (-1);
-              prev_decl)
-            else (
-              assign_index ();
-              prev_decl.index <- decl.index;
-              List.iter decl.params ~f:(fun p ->
-                  if Option.is_some p.initval then
-                    compile_error
-                      "Default argument values must be specified in the \
-                       declaration"
-                      (ASTVariable p));
-              decl.params <-
-                List.map2_exn decl.params prev_decl.params ~f:(fun p prev ->
-                    { p with initval = prev.initval });
-              (* Out-of-class definitions don't carry access modifiers; preserve
-                 the visibility set during struct registration. *)
-              decl.is_private <- prev_decl.is_private;
-              decl)
-        | None ->
+      let entries = Hashtbl.find_multi ctx.functions name in
+      let same_signature entry =
+        ft_compatible (ft_of_fundecl decl) (ft_of_fundecl (entry_fundecl entry))
+      in
+      (match (List.find entries ~f:same_signature, entries) with
+      | None, [] ->
+          assign_index ();
+          Hashtbl.set ctx.functions ~key:name ~data:[ new_function_entry decl ]
+      | None, _ :: _ ->
+          compile_error "Function signature mismatch"
+            (ASTDeclaration (Function decl))
+      | Some { def = Some _; _ }, _ ->
+          compile_error "Duplicate function definition"
+            (ASTDeclaration (Function decl))
+      | Some { decl = None; def = None }, _ ->
+          compiler_bug "empty function entry"
+            (Some (ASTDeclaration (Function decl)))
+      | Some ({ decl = Some prev_decl; def = None } as entry), _ ->
+          if Option.is_none decl.body then
+            (* Duplicate declaration. Ignore the later one. *)
+            decl.index <- Some (-1)
+          else (
             assign_index ();
-            decl);
+            prev_decl.index <- decl.index;
+            List.iter decl.params ~f:(fun p ->
+                if Option.is_some p.initval then
+                  compile_error
+                    "Default argument values must be specified in the \
+                     declaration"
+                    (ASTVariable p));
+            decl.params <-
+              List.map2_exn decl.params prev_decl.params ~f:(fun p prev ->
+                  { p with initval = prev.initval });
+            (* Out-of-class definitions don't carry access modifiers; preserve
+               the visibility set during struct registration. *)
+            decl.is_private <- prev_decl.is_private;
+            entry.def <- Some decl));
       super#visit_fundecl decl
 
     method! visit_declaration decl =
@@ -371,7 +375,16 @@ let check_builtin_params builtin_type =
                  (jaf_type_to_string builtin_type))
               (ASTVariable param))
 
-let check_builtin_library ctx import_name functions =
+let check_library ctx import_name (functions : fundecl list) =
+  (match
+     List.find_a_dup functions ~compare:(fun a b ->
+         String.compare a.name b.name)
+   with
+  | Some f ->
+      compile_error
+        ("Duplicate HLL function: " ^ f.name)
+        (ASTDeclaration (Function f))
+  | None -> ());
   if ctx.version >= 800 then
     match import_name with
     | "Int" -> check_builtin_params Int functions
@@ -389,7 +402,7 @@ let define_library ctx decls hll_name import_name =
           compiler_bug "unexpected declaration in .hll file"
             (Some (ASTDeclaration decl)))
   in
-  check_builtin_library ctx import_name functions;
+  check_library ctx import_name functions;
   let lib = Ain.add_library ctx.ain hll_name in
   Ain.write_library ctx.ain
     {
@@ -397,11 +410,5 @@ let define_library ctx decls hll_name import_name =
       functions = Array.of_list_map functions ~f:jaf_to_ain_hll_function;
     };
   List.iteri functions ~f:(fun i f -> f.index <- Some i);
-  let functions =
-    Hashtbl.create_with_key_exn
-      (module String)
-      ~get_key:(fun (d : fundecl) -> d.name)
-      functions
-  in
   Hashtbl.add_exn ctx.libraries ~key:import_name
-    ~data:{ hll_name; index = Some lib.index; functions }
+    ~data:(new_library hll_name (Some lib.index) functions)

@@ -247,11 +247,12 @@ and fundecl = {
   mutable class_index : int option;
 }
 
-(* The index of an HLL function is its position in the library. *)
+(* [functions] maps a name to its overloads. The index of an HLL function is
+   its position in the library. *)
 and library = {
   hll_name : string;
   mutable index : int option;
-  functions : (string, fundecl) Hashtbl.t;
+  functions : (string, fundecl list) Hashtbl.t;
 }
 
 let make_expr ?(ty = Untyped) ?(loc = dummy_location) node = { ty; node; loc }
@@ -351,16 +352,55 @@ type jaf_struct = {
 let new_jaf_struct name loc index =
   { name; loc; index; members = Hashtbl.create (module String) }
 
+let new_library hll_name index (functions : fundecl list) =
+  let table = Hashtbl.create (module String) in
+  List.iter functions ~f:(fun f -> Hashtbl.add_multi table ~key:f.name ~data:f);
+  Hashtbl.map_inplace table ~f:List.rev;
+  { hll_name; index; functions = table }
+
+(* The function of [lib] with the given name. If the name is overloaded, this
+   is the first overload. *)
+let find_hll_function lib name = List.hd (Hashtbl.find_multi lib.functions name)
+
+(* One function of an overload set. [decl] is a declaration without a body: a
+   prototype, or a method declaration in a class. [def] is the definition. An
+   entry has at least one of them, and both have the same index. *)
+type function_entry = {
+  mutable decl : fundecl option;
+  mutable def : fundecl option;
+}
+
 type context = {
   ain : Ain.t;
   version : int; (* ain_major_version * 100 + ain_minor_version *)
   globals : (string, variable) Hashtbl.t;
   structs : (string, jaf_struct) Hashtbl.t;
-  functions : (string, fundecl) Hashtbl.t;
+  (* Maps a mangled name to its overloads. *)
+  functions : (string, function_entry list) Hashtbl.t;
   functypes : (string, fundecl) Hashtbl.t;
   delegates : (string, fundecl) Hashtbl.t;
   libraries : (string, library) Hashtbl.t;
 }
+
+let new_function_entry (f : fundecl) =
+  if Option.is_some f.body then { decl = None; def = Some f }
+  else { decl = Some f; def = None }
+
+(* The record that stands for the function in the AST: the definition if it
+   exists, else the declaration. *)
+let entry_fundecl = function
+  | { def = Some f; _ } | { def = None; decl = Some f } -> f
+  | { def = None; decl = None } -> failwith "empty function entry"
+
+let find_functions ctx name =
+  List.map (Hashtbl.find_multi ctx.functions name) ~f:entry_fundecl
+
+(* The function with the given mangled name. If the name is overloaded, this
+   is the first overload. *)
+let find_function ctx name = List.hd (find_functions ctx name)
+
+let all_functions ctx =
+  List.concat_map (Hashtbl.data ctx.functions) ~f:(List.map ~f:entry_fundecl)
 
 type resolved_name =
   | ResolvedLocal of variable
@@ -410,7 +450,7 @@ class environment ctx current_function =
         match Hashtbl.find ctx.globals name with
         | Some g -> ResolvedGlobal g
         | None -> (
-            match Hashtbl.find ctx.functions name with
+            match find_function ctx name with
             | Some f -> ResolvedFunction f
             | None -> (
                 match Hashtbl.find ctx.libraries name with
@@ -432,9 +472,7 @@ class environment ctx current_function =
                   match Hashtbl.find s.members name with
                   | Some v -> ResolvedMember (s, v)
                   | None -> (
-                      match
-                        Hashtbl.find ctx.functions (s_name ^ "@" ^ name)
-                      with
+                      match find_function ctx (s_name ^ "@" ^ name) with
                       | Some f -> ResolvedMethod (s, f)
                       | None -> ctx_resolve ctx))
               | _ -> ctx_resolve ctx))

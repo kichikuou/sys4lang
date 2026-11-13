@@ -511,24 +511,28 @@ let patch_allocator ain (base : base_info) (sel : selection) :
    removed from [decls], so that type analysis does not check their default
    argument values. *)
 let remove_unbound (ctx : context) unavailable decls =
-  Hashtbl.filter_inplace ctx.functions ~f:(fun (f : fundecl) ->
-      match f.index with
-      | Some _ -> true
-      | None ->
-          let display, keys =
-            match f.class_name with
-            | Some c -> (c ^ "::" ^ f.name, [ c ^ "." ^ f.name; f.name ])
-            | None -> (f.name, [ f.name ])
-          in
-          let message =
-            sprintf
-              "%s is declared in the project but is not in the base AIN. \
-               Select it to add it."
-              display
-          in
-          List.iter keys ~f:(fun key ->
-              Hashtbl.set unavailable ~key ~data:message);
-          false);
+  let is_bound entry =
+    let f = entry_fundecl entry in
+    match f.index with
+    | Some _ -> true
+    | None ->
+        let display, keys =
+          match f.class_name with
+          | Some c -> (c ^ "::" ^ f.name, [ c ^ "." ^ f.name; f.name ])
+          | None -> (f.name, [ f.name ])
+        in
+        let message =
+          sprintf
+            "%s is declared in the project but is not in the base AIN. Select \
+             it to add it."
+            display
+        in
+        List.iter keys ~f:(fun key ->
+            Hashtbl.set unavailable ~key ~data:message);
+        false
+  in
+  Hashtbl.filter_map_inplace ctx.functions ~f:(fun entries ->
+      match List.filter entries ~f:is_bound with [] -> None | es -> Some es);
   List.filter decls ~f:(function
     | Function { index = None | Some -1; _ } -> false
     | _ -> true)
@@ -552,7 +556,7 @@ let bind_library (ctx : context) decls hll_name import_name =
           compiler_bug "unexpected declaration in .hll file"
             (Some (ASTDeclaration decl)))
   in
-  Declarations.check_builtin_library ctx import_name functions;
+  Declarations.check_library ctx import_name functions;
   let lib_no =
     match Ain.get_library_index ctx.ain hll_name with
     | Some i -> i
@@ -582,14 +586,8 @@ let bind_library (ctx : context) decls hll_name import_name =
             compile_error
               (sprintf "Signature of %s does not match the base AIN" display)
               (ASTDeclaration (Function f)));
-  let functions =
-    Hashtbl.create_with_key_exn
-      (module String)
-      ~get_key:(fun (d : fundecl) -> d.name)
-      functions
-  in
   Hashtbl.add_exn ctx.libraries ~key:import_name
-    ~data:{ hll_name; index = Some lib_no; functions }
+    ~data:(new_library hll_name (Some lib_no) functions)
 
 (* The base AIN can record a function type or delegate type without its
    index. Such a type matches any function type or delegate type. *)
