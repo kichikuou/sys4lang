@@ -294,4 +294,5 @@ let define_library ctx decls hll_name import_name =
       ~get_key:(fun (d : fundecl) -> d.name)
       functions
   in
-  Hashtbl.set ctx.libraries ~key:import_name ~data:{ hll_name; functions }
+  Hashtbl.set ctx.libraries ~key:import_name
+    ~data:{ hll_name; index = None; functions }

@@ -32,7 +32,7 @@ class sanity_check_visitor ctx =
       | Ident (_, UnresolvedIdent) ->
           compiler_bug "identifier expression has no ident_type"
             (Some (ASTExpression expr))
-      | Ident (_, GlobalConstant) ->
+      | Ident (_, GlobalConstant _) ->
           compiler_bug "global constant not eliminated"
             (Some (ASTExpression expr))
       | Member (_, _, UnresolvedMember) ->

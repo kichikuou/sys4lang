@@ -387,7 +387,7 @@ let with_sort_prefix prefix items =
 let member_candidates ctx ~viewer_class (expr : Jaf.expression) =
   match expr.node with
   | Ident (_, System) -> syscall_candidates ()
-  | Ident (lib_name, HLLName) -> hll_function_candidates ctx lib_name
+  | Ident (lib_name, HLLName _) -> hll_function_candidates ctx lib_name
   | _ -> (
       match strip_ref expr.ty with
       | Struct (name, _) ->
@@ -587,10 +587,11 @@ let format_signature (f : Jaf.fundecl) =
 (* Resolve the typed callee expression to a fundecl. *)
 let fundecl_of_callee (ctx : Jaf.context) (e : Jaf.expression) =
   match e.node with
-  | Ident (_, FunctionName name) | Member (_, _, ClassMethod (name, _)) ->
-      Hashtbl.find ctx.functions name
+  | Ident (_, FunctionName name) -> Hashtbl.find ctx.functions name
+  | Member (_, _, ClassMethod f) ->
+      Hashtbl.find ctx.functions (Jaf.mangled_name f)
   | Member (_, _, SystemFunction sys) -> Some (Builtin.fundecl_of_syscall sys)
-  | Member (_, _, HLLFunction (lib, fn)) -> Jaf.find_hll_function ctx lib fn
+  | Member (_, _, HLLFunction (lib, fn)) -> Hashtbl.find lib.functions fn
   | Member (recv, _, BuiltinMethod b) -> (
       try Some (Builtin.fundecl_of_builtin ctx b (strip_ref recv.ty) None)
       with _ -> None)

@@ -564,11 +564,12 @@ let bind_library (ctx : context) decls hll_name import_name =
   List.iter functions ~f:(fun f ->
       let display = hll_name ^ "." ^ f.name in
       match
-        Array.find lib.functions ~f:(fun (bf : Ain.Library.Function.t) ->
+        Array.findi lib.functions ~f:(fun _ (bf : Ain.Library.Function.t) ->
             String.equal bf.name f.name)
       with
       | None -> raise_message ("HLL functions cannot be added: " ^ display)
-      | Some bf ->
+      | Some (i, bf) ->
+          f.index <- Some i;
           let pf = jaf_to_ain_hll_function f in
           let same_types =
             data_type pf.return_type = data_type bf.return_type
@@ -587,7 +588,8 @@ let bind_library (ctx : context) decls hll_name import_name =
       ~get_key:(fun (d : fundecl) -> d.name)
       functions
   in
-  Hashtbl.add_exn ctx.libraries ~key:import_name ~data:{ hll_name; functions }
+  Hashtbl.add_exn ctx.libraries ~key:import_name
+    ~data:{ hll_name; index = Some lib_no; functions }
 
 (* The base AIN can record a function type or delegate type without its
    index. Such a type matches any function type or delegate type. *)
@@ -881,6 +883,9 @@ let apply ~base ~pje ~sources ~targets ~globals ~keep_crc ~read_file ~debug_info
     remove_unbound ctx unavailable (List.map entries ~f:(fun e -> e.decl))
   in
   Declarations.resolve_types ctx decls;
+  List.iter decls ~f:(function
+    | Function f -> Declarations.write_entry_point ctx f
+    | _ -> ());
   (* Verify the declarations against the base AIN and write the new entries. *)
   List.iter hlls ~f:(fun (hll_name, import_name, hll) ->
       Declarations.resolve_hll_types ctx hll;

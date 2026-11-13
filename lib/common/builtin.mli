@@ -22,8 +22,3 @@ val fundecl_of_builtin :
   Jaf.jaf_type ->
   Jaf.ast_node option ->
   Jaf.fundecl
-
-val function_of_syscall : Bytecode.syscall -> Ain.Function.t
-
-val function_of_builtin :
-  Jaf.context -> Bytecode.builtin -> Jaf.jaf_type -> Ain.Function.t
