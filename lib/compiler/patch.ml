@@ -563,7 +563,7 @@ let bind_library (ctx : context) decls hll_name import_name =
       | None -> raise_message ("HLL functions cannot be added: " ^ display)
       | Some (i, bf) ->
           f.index <- Some i;
-          let pf = jaf_to_ain_hll_function f in
+          let pf = Layout.jaf_to_ain_hll_function f in
           let same_types =
             data_type pf.return_type = data_type bf.return_type
             && List.equal
@@ -599,7 +599,7 @@ let verify_functions (ctx : context) (base : base_info) struct_names entries =
       match fd.index with
       | Some i when i >= 0 && i < base.nr_functions ->
           let b = Ain.get_function_by_index ctx.ain i in
-          let p = jaf_to_ain_function fd b in
+          let p = Layout.jaf_to_ain_function fd b in
           if
             not
               (type_matches ~base:b.return_type p.return_type
@@ -614,7 +614,7 @@ let verify_functions (ctx : context) (base : base_info) struct_names entries =
 
 let verify_functypes (ctx : context) (base : base_info) decls =
   let verify get nr (f : fundecl) node =
-    let p = jaf_to_ain_functype f in
+    let p = Layout.jaf_to_ain_functype f in
     if p.index < nr then
       let b : Ain.FunctionType.t = get ctx.ain p.index in
       if
@@ -653,7 +653,7 @@ let update_structs (ctx : context) (base : base_info) (sel : selection) decls =
             List.concat_map s.decls ~f:(function
               | MemberDecl ds when not ds.is_const_decls -> ds.vars
               | _ -> [])
-            |> jaf_to_ain_variables
+            |> Layout.jaf_to_ain_variables
           in
           let nb = List.length b.members in
           let keeps_base_members =
