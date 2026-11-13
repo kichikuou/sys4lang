@@ -282,8 +282,8 @@ class variable_alloc_visitor ctx =
            match f.index with
            | Some index ->
                Ain.get_function_by_index ctx.ain index
-               |> jaf_to_ain_function f |> add_vars vars
-               |> Ain.write_function ctx.ain
+               |> Layout.jaf_to_ain_function f
+               |> add_vars vars |> Ain.write_function ctx.ain
            | None ->
                compiler_bug "Undefined function"
                  (Some (ASTDeclaration (Function f))));
