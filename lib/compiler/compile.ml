@@ -62,10 +62,20 @@ let layout_pass ctx program =
   in
   Layout.layout ctx jafs;
   List.iter libraries ~f:(fun (lib, hll) -> Layout.add_library ctx lib hll);
-  let array_init_visitor = new ArrayInit.visitor ctx in
-  List.iter jafs ~f:array_init_visitor#visit_declaration;
-  let initializers = array_init_visitor#generate_initializers () in
-  program @ [ Jaf ("", initializers) ]
+  let initializers =
+    List.map (Initializers.generate ctx jafs) ~f:(fun f -> Function f)
+  in
+  Declarations.register ctx initializers;
+  Declarations.resolve ctx initializers;
+  Layout.layout ctx initializers;
+  (* The global initializer has the last index, and its code comes first. *)
+  let global, classes =
+    List.partition_tf initializers ~f:(function
+      | Function { class_name = None; _ } -> true
+      | _ -> false)
+  in
+  let null = Function (Initializers.null_function ()) in
+  program @ [ Jaf ("", global @ classes @ [ null ]) ]
 
 (* pass 3: Type checking. Constant evaluation reads expressions of other
    files, so it runs after the type analysis of all files. *)

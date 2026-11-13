@@ -28,7 +28,6 @@ open CompileError
 class type allocator = object
   method function_index : fundecl -> string -> int option
   method lambda_index : string -> int
-  method generated_function_index : string -> int
   method global_index : variable -> group:int -> int
   method global_group_index : global_group -> int
 end
@@ -42,7 +41,6 @@ let build_allocator ain : allocator =
       else None
 
     method lambda_index name = (Ain.add_function ain name).index
-    method generated_function_index name = (Ain.add_function ain name).index
     method global_index (g : variable) ~group = Ain.add_global ain g.name group
 
     method global_group_index (gg : global_group) =
@@ -278,6 +276,10 @@ let layout ?allocator ctx decls =
           check_methods_defined ctx s;
           Ain.get_struct_by_index ctx.ain index
           |> jaf_to_ain_struct s |> Ain.write_struct ctx.ain)
+    | Function { name = "0"; class_index = Some s; index = Some index; _ } ->
+        (* The generated constructor of a struct that declares none. *)
+        Ain.write_struct ctx.ain
+          { (Ain.get_struct_by_index ctx.ain s) with constructor = index }
     | _ -> ())
 
 (* Adds a library to the AIN. [decls] are the declarations of its .hll

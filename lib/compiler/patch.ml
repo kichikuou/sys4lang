@@ -417,21 +417,16 @@ let patch_allocator ain (base : base_info) (sel : selection) : Layout.allocator
         i
   in
   object
-    method function_index _ name =
+    method function_index (f : fundecl) name =
       match find_base_function ain base name with
       | Some i -> Some i
       | None ->
-          if Hashtbl.mem sel.functions name then
+          if Hashtbl.mem sel.functions name || Option.is_some f.body then
             Some (memoize name (fun () -> (Ain.add_function ain name).index))
           else None
 
     (* A lambda is always a new function. *)
     method lambda_index name = (Ain.add_function ain name).index
-
-    method generated_function_index name =
-      match find_base_function ain base name with
-      | Some i -> i
-      | None -> memoize name (fun () -> (Ain.add_function ain name).index)
 
     (* Globals are bound by declaration order. define_globals checks the
        names. *)
@@ -858,21 +853,43 @@ let apply ~base ~pje ~sources ~targets ~globals ~keep_crc ~read_file ~debug_info
   update_structs ctx base_info sel decls;
   verify_globals ctx base_info decls;
   (* Generate the initializers and analyze the declarations. *)
-  let array_init =
-    new ArrayInit.visitor
-      ~allocator
-      ~generate:
-        (`Patch
-           ArrayInit.
-             {
-               is_struct_selected = Hash_set.mem sel.structs;
-               rebuild_globals = sel.rebuild_globals;
-               find_base_function = find_base_function base base_info;
-             })
-      ctx
+  Initializers.insert_initializer_calls decls;
+  let in_base (f : fundecl) =
+    Option.is_some (find_base_function base base_info (mangled_name f))
   in
-  List.iter decls ~f:array_init#visit_declaration;
-  let initializers = array_init#generate_initializers () in
+  let struct_initializers =
+    List.filter_map decls ~f:(function
+      | StructDef s ->
+          let f = Initializers.struct_initializer ctx s in
+          if
+            Hash_set.mem sel.structs s.name
+            && ((not (Initializers.is_empty_constructor f)) || in_base f)
+          then Some f
+          else if String.equal f.name "2" && in_base f then (
+            (* The constructor calls the S@2 of the base AIN. *)
+            f.body <- None;
+            Some f)
+          else None
+      | _ -> None)
+  in
+  let global_initializer =
+    let f = Initializers.global_initializer decls in
+    if
+      sel.rebuild_globals
+      && ((not (Option.exists f.body ~f:List.is_empty)) || in_base f)
+    then [ f ]
+    else []
+  in
+  let generated =
+    List.map (struct_initializers @ global_initializer) ~f:(fun f -> Function f)
+  in
+  Declarations.register ctx generated;
+  Declarations.resolve ctx generated;
+  Layout.layout ~allocator ctx generated;
+  let initializers =
+    List.filter_map (global_initializer @ struct_initializers) ~f:(fun f ->
+        Option.map f.body ~f:(fun _ -> Function f))
+  in
   let all_decls = decls @ initializers in
   (try TypeAnalysis.check_types_exn ctx all_decls
    with Compile_error e ->
