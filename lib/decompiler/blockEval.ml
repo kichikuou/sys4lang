@@ -449,7 +449,7 @@ let pop_args ctx vartypes =
     | IFace _ :: ts ->
         let obj, vofs = pop2 ctx in
         aux (interface_value obj vofs :: acc) ts
-    | (HllFunc | HllFunc2) :: ts ->
+    | HllFunc :: ts ->
         let obj, func = pop2 ctx in
         aux (delegate_value ctx obj func :: acc) ts
     | _ :: ts ->

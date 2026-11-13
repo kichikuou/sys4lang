@@ -104,11 +104,10 @@ type ain_type =
   | Struct of int
   | Array of ain_type
   | Ref of ain_type
-  | FatRef of ain_type
+  | VarRef of ain_type
   | FuncType of func_type TypeVar.t
   | StructMember of int
   | Delegate of func_type TypeVar.t
-  | HllFunc2
   | HllParam
   | Option of ain_type
   | IFace of int
@@ -124,7 +123,7 @@ let rec ain_type_unify t t' =
   match (t, t') with
   | Array t, Array t'
   | Ref t, Ref t'
-  | FatRef t, FatRef t'
+  | VarRef t, VarRef t'
   | Option t, Option t' ->
       ain_type_unify t t'
   | FuncType tv, FuncType tv' | Delegate tv, Delegate tv' ->
@@ -144,12 +143,10 @@ let is_scalar = function
   | _ -> false
 
 let is_fat_reference = function
-  | FatRef _ | Ref (Int | LongInt | Bool | Float | Enum _ | IFace _) -> true
+  | VarRef _ | Ref (Int | LongInt | Bool | Float | Enum _ | IFace _) -> true
   | _ -> false
 
-let is_fat = function
-  | IFace _ | HllFunc | HllFunc2 -> true
-  | t -> is_fat_reference t
+let is_fat = function IFace _ | HllFunc -> true | t -> is_fat_reference t
 
 let rec make_array base = function
   | 0 -> base
@@ -191,7 +188,7 @@ let create enum ~struc ~rank =
   | 66 -> make_array (Delegate (TypeVar.create Var)) rank
   | 67 -> Ref (Delegate (TypeVar.create Var))
   | 69 -> Ref (make_array (Delegate (TypeVar.create Var)) rank)
-  | 71 -> HllFunc2
+  | 71 -> HllFunc
   | 74 -> HllParam
   | 75 -> Ref HllParam
   | 79 -> make_array Any rank
@@ -218,7 +215,7 @@ let create_ain11 enum ~struc ~subtype =
   | 67 -> Ref (Delegate (TypeVar.create Var))
   | 79 -> Array (Option.value_exn subtype)
   | 80 -> Ref (Array (Option.value_exn subtype))
-  | 82 -> FatRef (Option.value_exn subtype)
+  | 82 -> VarRef (Option.value_exn subtype)
   | 86 -> Option (Option.value_exn subtype)
   | 89 -> IFace struc
   | 91 -> Enum2 struc

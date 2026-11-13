@@ -154,7 +154,7 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | Pointee expr -> (
           let expr', t = self#analyze_expr Any expr in
           match t with
-          | Ref t | FatRef t -> (Pointee expr', t)
+          | Ref t | VarRef t -> (Pointee expr', t)
           (* An interface value is itself the reference entity but is typed
              by its content type. *)
           | IFace _ as t -> (Pointee expr', t)

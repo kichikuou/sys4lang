@@ -496,7 +496,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
           let base, rank = Type.array_base_and_rank t in
           self#pr_type out base;
           pr_array_rank out rank
-      | Ref t | FatRef t ->
+      | Ref t | VarRef t ->
           print_string out "ref ";
           self#pr_type out t
       | IMainSystem -> print_string out "IMainSystem"
@@ -523,7 +523,6 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
               in
               print_string out dt.name
           | Var -> print_string out "unknown_delegate")
-      | HllFunc2 -> print_string out "hll_func2"
       | HllParam -> print_string out "hll_param"
       | Option t -> bprintf out "option<%a>" self#pr_type t
       | Enum n | Enum2 n -> print_string out Ain.ain.enum.(n)

@@ -38,11 +38,10 @@ type ain_type =
   | Struct of int
   | Array of ain_type
   | Ref of ain_type
-  | FatRef of ain_type
+  | VarRef of ain_type
   | FuncType of func_type TypeVar.t
   | StructMember of int
   | Delegate of func_type TypeVar.t
-  | HllFunc2
   | HllParam
   | Option of ain_type
   | IFace of int

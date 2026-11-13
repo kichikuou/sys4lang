@@ -99,7 +99,7 @@ let rec type_to_string (t : Type.ain_type) =
   | Enum n | Enum2 n -> enum_name n
   | Array t -> "array<" ^ type_to_string t ^ ">"
   | Ref t -> "ref " ^ type_to_string t
-  | FatRef t -> "fatref " ^ type_to_string t
+  | VarRef t -> "varref " ^ type_to_string t
   | Option t -> "option<" ^ type_to_string t ^ ">"
   (* Function-type/delegate identities are recovered by the decompiler's type
      inference, which the disassembler does not run; the parsed variable type
@@ -108,7 +108,6 @@ let rec type_to_string (t : Type.ain_type) =
   | FuncType _ -> "functype"
   | Delegate _ -> "delegate"
   | HllFunc -> "hll_func"
-  | HllFunc2 -> "hll_func2"
   | HllParam -> "hll_param"
 
 (* --- operand formatting --- *)
