@@ -43,9 +43,7 @@ let same_signature (a : fundecl) (b : fundecl) =
 (* Default argument values and access modifiers are specified in the
    declaration. The definition gets them from the declaration. *)
 let inherit_declaration (decl : fundecl) (def : fundecl) =
-  def.params <-
-    List.map2_exn def.params decl.params ~f:(fun p d ->
-        { p with initval = d.initval });
+  List.iter2_exn def.params decl.params ~f:(fun p d -> p.initval <- d.initval);
   def.is_private <- decl.is_private
 
 let register_function ctx (f : fundecl) =

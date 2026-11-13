@@ -222,7 +222,7 @@ and variable = {
   mutable is_private : bool;
   kind : variable_type;
   type_spec : type_specifier;
-  initval : expression option;
+  mutable initval : expression option;
   mutable index : int option;
 }
 
