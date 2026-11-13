@@ -32,12 +32,12 @@ let parse_file lexer parser file read_file =
   | Lexer.Error | Parser.Error -> CompileError.syntax_error lexbuf
   | e -> raise e
 
-(* pass 1: Parse jaf/hll files and create symbol table entries *)
+(* pass 1: Parse jaf/hll files and register the declarations *)
 let parse_pass ctx sources read_file =
   List.map sources ~f:(function
     | Pje.Jaf f ->
         let jaf = parse_file Lexer.token Parser.jaf f read_file in
-        Declarations.register_type_declarations ctx jaf;
+        Declarations.register ctx jaf;
         Jaf (f, jaf)
     | Pje.Hll (f, import_name) ->
         let hll = parse_file Lexer.token Parser.hll f read_file in
@@ -45,18 +45,25 @@ let parse_pass ctx sources read_file =
         Hll (hll_name, import_name, hll)
     | _ -> failwith "unreachable")
 
-(* pass 2: Resolve type specifiers *)
-let type_resolve_pass ctx program =
+(* pass 2: Resolve type specifiers, and write the AIN tables *)
+let layout_pass ctx program =
+  let libraries =
+    List.filter_map program ~f:(function
+      | Jaf (_, jaf) ->
+          Declarations.resolve ctx jaf;
+          None
+      | Hll (hll_name, import_name, hll) ->
+          Declarations.resolve_hll ctx hll;
+          Some
+            (Declarations.register_library ctx hll ~hll_name ~import_name, hll))
+  in
+  let jafs =
+    List.concat_map program ~f:(function Jaf (_, jaf) -> jaf | Hll _ -> [])
+  in
+  Layout.layout ctx jafs;
+  List.iter libraries ~f:(fun (lib, hll) -> Layout.add_library ctx lib hll);
   let array_init_visitor = new ArrayInit.visitor ctx in
-  List.iter program ~f:(function
-    | Jaf (_, jaf) ->
-        Declarations.resolve_types ctx jaf;
-        Declarations.define_types ctx jaf;
-        List.iter ~f:array_init_visitor#visit_declaration jaf
-    | Hll (hll_name, import_name, hll) ->
-        Declarations.resolve_hll_types ctx hll;
-        Declarations.resolve_types ctx hll;
-        Declarations.define_library ctx hll hll_name import_name);
+  List.iter jafs ~f:array_init_visitor#visit_declaration;
   let initializers = array_init_visitor#generate_initializers () in
   program @ [ Jaf ("", initializers) ]
 
@@ -84,6 +91,6 @@ let codegen_pass ctx program debug_info =
 
 let compile ctx sources debug_info read_file =
   let program = parse_pass ctx sources read_file in
-  let program = type_resolve_pass ctx program in
+  let program = layout_pass ctx program in
   type_check_pass ctx program;
   codegen_pass ctx program debug_info

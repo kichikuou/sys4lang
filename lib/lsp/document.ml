@@ -86,7 +86,7 @@ let parse ctx ~fname ?hll_import_name ?previous text =
       if Option.is_none hll_import_name then (
         (* .jaf *)
         let decls = Parser.jaf Lexer.token lexbuf in
-        Declarations.register_type_declarations ctx decls;
+        LspDeclarations.register_type_declarations ctx decls;
         decls)
       else
         (* .hll *)
@@ -128,7 +128,7 @@ let resolve ?(decl_only = false) doc =
       (match doc.import_name with
       | None ->
           (* .jaf *)
-          Declarations.resolve_types doc.ctx doc.toplevel ~decl_only;
+          LspDeclarations.resolve_types doc.ctx doc.toplevel ~decl_only;
           if not decl_only then
             doc.errors <-
               TypeAnalysis.check_types doc.ctx doc.toplevel
@@ -137,9 +137,10 @@ let resolve ?(decl_only = false) doc =
       | Some import_name ->
           (* .hll *)
           let hll_name = Stdlib.Filename.(chop_extension (basename doc.path)) in
-          Declarations.resolve_hll_types doc.ctx doc.toplevel;
-          Declarations.resolve_types doc.ctx doc.toplevel;
-          Declarations.define_library doc.ctx doc.toplevel hll_name import_name);
+          LspDeclarations.resolve_hll_types doc.ctx doc.toplevel;
+          LspDeclarations.resolve_types doc.ctx doc.toplevel;
+          LspDeclarations.define_library doc.ctx doc.toplevel hll_name
+            import_name);
       if not decl_only then doc.fully_resolved <- true
     with e -> doc.errors <- [ make_error doc.lexbuf e ]
 
