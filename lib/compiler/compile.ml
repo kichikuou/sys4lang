@@ -60,11 +60,14 @@ let type_resolve_pass ctx program =
   let initializers = array_init_visitor#generate_initializers () in
   program @ [ Jaf ("", initializers) ]
 
-(* pass 3: Type checking *)
+(* pass 3: Type checking. Constant evaluation reads expressions of other
+   files, so it runs after the type analysis of all files. *)
 let type_check_pass ctx program =
   List.iter program ~f:(function
+    | Jaf (_, jaf) -> TypeAnalysis.check_types_exn ctx jaf
+    | Hll _ -> ());
+  List.iter program ~f:(function
     | Jaf (_, jaf) ->
-        TypeAnalysis.check_types_exn ctx jaf;
         ConstEval.evaluate_constant_expressions ctx jaf;
         GlobalInit.write_initvals ctx jaf;
         VariableAlloc.allocate_variables ctx jaf

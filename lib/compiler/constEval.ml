@@ -95,13 +95,6 @@ class const_eval_visitor ctx =
       | ConstString _ -> ()
       | Ident (_, (LocalVariable v | GlobalVariable v | GlobalConstant v)) ->
           self#eval_variable expr v
-      | Ident (name, UnresolvedIdent) -> (
-          (* The expression is in a declaration that type analysis has not
-             visited yet. *)
-          match self#env#resolve name with
-          | ResolvedLocal v | ResolvedGlobal v | ResolvedMember (_, v) ->
-              self#eval_variable expr v
-          | _ -> ())
       | Ident _ -> ()
       | FuncAddr _ -> ()
       | MemberAddr _ -> ()
