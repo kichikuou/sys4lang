@@ -49,23 +49,26 @@ class type_declare_visitor ctx =
         decl.class_name <- parent.class_name);
       decl.index <- Some (-1);
       let name = mangled_name decl in
-      Hashtbl.update ctx.functions name ~f:(function
-        | Some prev_decl
-          when Option.is_some decl.body && Option.is_none prev_decl.body ->
-            (* Make sure the declaration has the default parameters specified
-                in the method declaration (default values cannot be specified
-                in method definition) *)
-            decl.params <- copy_default_params prev_decl.params decl.params;
-            (* Out-of-class definitions don't carry access modifiers; preserve
-               the visibility set during struct registration. *)
-            decl.is_private <- prev_decl.is_private;
-            decl
-        | Some prev_decl
-          when Option.is_none decl.body && Option.is_some prev_decl.body ->
-            prev_decl.params <- copy_default_params decl.params prev_decl.params;
-            prev_decl.is_private <- decl.is_private;
-            prev_decl
-        | _ -> decl);
+      let entry =
+        match Hashtbl.find ctx.functions name with
+        | Some (entry :: _) -> entry
+        | _ ->
+            let entry = { decl = None; def = None } in
+            Hashtbl.set ctx.functions ~key:name ~data:[ entry ];
+            entry
+      in
+      (* Default argument values and access modifiers are specified in the
+         declaration. The definition gets them from the declaration. *)
+      let inherit_declaration (d : fundecl) (def : fundecl) =
+        def.params <- copy_default_params d.params def.params;
+        def.is_private <- d.is_private
+      in
+      if Option.is_some decl.body then (
+        Option.iter entry.decl ~f:(fun d -> inherit_declaration d decl);
+        entry.def <- Some decl)
+      else (
+        Option.iter entry.def ~f:(inherit_declaration decl);
+        entry.decl <- Some decl);
       let prev_lambda_index = lambda_index in
       lambda_index <- 0;
       super#visit_fundecl decl;
@@ -89,19 +92,10 @@ class type_declare_visitor ctx =
               if Hashtbl.mem ctx.structs qual then (
                 f.name <- name;
                 f.class_name <- Some qual;
-                match Hashtbl.find ctx.functions (mangled_name f) with
-                | None ->
-                    compile_error
-                      (f.name ^ " is not declared in class " ^ qual)
-                      (ASTDeclaration decl)
-                | Some prev when Option.is_some prev.body ->
-                    (* The previous version of this definition has the default
-                       values and the visibility of the class declaration. The
-                       class declaration can be in a different document, which
-                       is not parsed again. *)
-                    f.params <- copy_default_params prev.params f.params;
-                    f.is_private <- prev.is_private
-                | Some _ -> ()));
+                if not (Hashtbl.mem ctx.functions (mangled_name f)) then
+                  compile_error
+                    (f.name ^ " is not declared in class " ^ qual)
+                    (ASTDeclaration decl)));
           self#visit_fundecl f
       | FuncTypeDef f ->
           Hashtbl.set ctx.functypes ~key:f.name
@@ -288,11 +282,5 @@ let define_library ctx decls hll_name import_name =
       lib with
       functions = Array.of_list_map functions ~f:jaf_to_ain_hll_function;
     };
-  let functions =
-    Hashtbl.create_with_key_exn
-      (module String)
-      ~get_key:(fun (d : fundecl) -> d.name)
-      functions
-  in
   Hashtbl.set ctx.libraries ~key:import_name
-    ~data:{ hll_name; index = None; functions }
+    ~data:(new_library hll_name None functions)

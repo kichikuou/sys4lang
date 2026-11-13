@@ -102,7 +102,8 @@ class visitor ?allocator ?(generate = `All) ctx =
           make_initializer ~class_name:s.name ~class_index name f_index
             (List.rev !initialize_stmts)
         in
-        Hashtbl.add_exn ctx.functions ~key:full_name ~data:fdecl;
+        Hashtbl.add_exn ctx.functions ~key:full_name
+          ~data:[ new_function_entry fdecl ];
         initializer_funcs <- Function fdecl :: initializer_funcs;
         if not !has_ctor then
           (* register the generated constructor in ain *)
@@ -114,8 +115,11 @@ class visitor ?allocator ?(generate = `All) ctx =
             Option.iter (p.find_base_function full_name) ~f:(fun index ->
                 Hashtbl.set ctx.functions ~key:full_name
                   ~data:
-                    (make_initializer ~class_name:s.name ~class_index name index
-                       []))
+                    [
+                      new_function_entry
+                        (make_initializer ~class_name:s.name ~class_index name
+                           index []);
+                    ])
         | _ -> ()
 
     method! visit_declaration decl =

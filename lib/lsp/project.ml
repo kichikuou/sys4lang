@@ -132,7 +132,7 @@ let get_hover proj ~path pos =
              ())
       in
       let hover_function loc name =
-        Option.bind (Hashtbl.find proj.ctx.functions name) ~f:(fun decl ->
+        Option.bind (Jaf.find_function proj.ctx name) ~f:(fun decl ->
             make_hover loc
               (Jaf.decl_to_string (Function { decl with body = None })))
       in
@@ -144,7 +144,7 @@ let get_hover proj ~path pos =
       | Jaf.ASTExpression
           { node = Member (_, _, HLLFunction (lib, fun_name)); loc; _ }
         :: _ ->
-          Option.bind (Hashtbl.find lib.functions fun_name) ~f:(fun decl ->
+          Option.bind (Jaf.find_hll_function lib fun_name) ~f:(fun decl ->
               make_hover loc (Jaf.decl_to_string (Function decl)))
       | (Jaf.ASTExpression
            { node = Member (obj, _, BuiltinMethod builtin); loc; _ } as ast_node)
@@ -191,7 +191,7 @@ let filename_of_func ain (func : Ain.Function.t) =
   find_eof func.address
 
 let location_of_func proj name =
-  match Hashtbl.find proj.ctx.functions name with
+  match Jaf.find_function proj.ctx name with
   | Some f when Option.is_some f.body -> Some f.loc
   | _ ->
       (* Load .jaf file and try again. *)
@@ -199,7 +199,7 @@ let location_of_func proj name =
         Ain.get_function proj.ctx.ain name >>= fun func ->
         filename_of_func proj.ctx.ain func >>= fun fname ->
         load_document proj (backslash_to_slash fname);
-        Hashtbl.find proj.ctx.functions name >>| fun f -> f.loc)
+        Jaf.find_function proj.ctx name >>| fun f -> f.loc)
 
 let find_location proj path pos f =
   match find_document proj path with
@@ -232,7 +232,7 @@ let get_definition proj ~path pos =
         location_of_func proj (Jaf.mangled_name f)
     | Jaf.ASTExpression { node = Member (_, _, HLLFunction (lib, fun_name)); _ }
       :: _ ->
-        Option.map (Hashtbl.find lib.functions fun_name) ~f:(fun decl ->
+        Option.map (Jaf.find_hll_function lib fun_name) ~f:(fun decl ->
             decl.loc)
     | Jaf.ASTExpression
         {

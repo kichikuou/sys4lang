@@ -220,7 +220,7 @@ let global_identifier_candidates (ctx : Jaf.context) =
   let items = ref [] in
   let add it = items := it :: !items in
   Hashtbl.iter ctx.globals ~f:(fun v -> add (variable_item v));
-  Hashtbl.iter ctx.functions ~f:(fun f ->
+  List.iter (Jaf.all_functions ctx) ~f:(fun f ->
       if not (is_non_global_function f) then
         add (function_item ~kind:Function f));
   Hashtbl.iter_keys ctx.structs ~f:(fun name ->
@@ -262,7 +262,7 @@ let class_member_candidates (ctx : Jaf.context) ?(include_private = false)
               ())
       in
       let method_items =
-        Hashtbl.data ctx.functions
+        Jaf.all_functions ctx
         |> List.filter ~f:(fun (f : Jaf.fundecl) ->
             (match f.class_name with
               | Some cn -> String.equal cn class_name
@@ -366,7 +366,8 @@ let builtin_candidates (ctx : Jaf.context) (ty : Jaf.jaf_type) =
   else
     match Hashtbl.find ctx.libraries lib_name with
     | Some l when ctx.version >= 800 ->
-        Hashtbl.data l.functions |> List.map ~f:(function_item ~kind:Method)
+        List.concat (Hashtbl.data l.functions)
+        |> List.map ~f:(function_item ~kind:Method)
     | _ -> List.filter_map builtins ~f:(builtin_method_item ctx ty)
 
 let syscall_candidates () =
@@ -378,7 +379,8 @@ let hll_function_candidates (ctx : Jaf.context) lib_name =
   match Hashtbl.find ctx.libraries lib_name with
   | None -> []
   | Some lib ->
-      Hashtbl.data lib.functions |> List.map ~f:(function_item ~kind:Function)
+      List.concat (Hashtbl.data lib.functions)
+      |> List.map ~f:(function_item ~kind:Function)
 
 let with_sort_prefix prefix items =
   List.map items ~f:(fun (it : Lsp.Types.CompletionItem.t) ->
@@ -587,11 +589,10 @@ let format_signature (f : Jaf.fundecl) =
 (* Resolve the typed callee expression to a fundecl. *)
 let fundecl_of_callee (ctx : Jaf.context) (e : Jaf.expression) =
   match e.node with
-  | Ident (_, FunctionName name) -> Hashtbl.find ctx.functions name
-  | Member (_, _, ClassMethod f) ->
-      Hashtbl.find ctx.functions (Jaf.mangled_name f)
+  | Ident (_, FunctionName name) -> Jaf.find_function ctx name
+  | Member (_, _, ClassMethod f) -> Jaf.find_function ctx (Jaf.mangled_name f)
   | Member (_, _, SystemFunction sys) -> Some (Builtin.fundecl_of_syscall sys)
-  | Member (_, _, HLLFunction (lib, fn)) -> Hashtbl.find lib.functions fn
+  | Member (_, _, HLLFunction (lib, fn)) -> Jaf.find_hll_function lib fn
   | Member (recv, _, BuiltinMethod b) -> (
       try Some (Builtin.fundecl_of_builtin ctx b (strip_ref recv.ty) None)
       with _ -> None)
