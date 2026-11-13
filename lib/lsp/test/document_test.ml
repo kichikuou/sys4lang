@@ -5,7 +5,7 @@ open System4_lsp
 let analyze source =
   let doc =
     Document.create
-      (Jaf.create_context (Ain.create 4 0))
+      (Jaf.create_context ~loose_functype_check:true (Ain.create 4 0))
       ~fname:"test.jaf" source
   in
   if List.is_empty doc.errors then Stdio.print_endline "ok"
@@ -159,7 +159,7 @@ let print_errors (doc : Document.t) =
   else List.iter doc.errors ~f:(fun (_, message) -> Stdio.print_endline message)
 
 let%expect_test "reparse method definition in another document" =
-  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let ctx = Jaf.create_context ~loose_functype_check:true (Ain.create 4 0) in
   let decls = "class C { public: void f(int a = 1); private: void g(); };" in
   let defs =
     "void C::f(int a) {} void C::g() {} void test() { C c; c.f(); c.g(); }"
@@ -175,7 +175,7 @@ let%expect_test "reparse method definition in another document" =
     |}]
 
 let%expect_test "reparse method definition before class" =
-  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let ctx = Jaf.create_context ~loose_functype_check:true (Ain.create 4 0) in
   let source =
     "void C::g() {} class C { private: void g(); }; void test() { C c; c.g(); }"
   in
@@ -189,7 +189,7 @@ let%expect_test "reparse method definition before class" =
     |}]
 
 let%expect_test "redeclare class after its methods are resolved" =
-  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let ctx = Jaf.create_context ~loose_functype_check:true (Ain.create 4 0) in
   let decls =
     "struct S { int i; }; class C { public: void f(S s, int a = 1); };"
   in
@@ -209,7 +209,7 @@ let%expect_test "redeclare class after its methods are resolved" =
     |}]
 
 let%expect_test "removed declarations are unregistered" =
-  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let ctx = Jaf.create_context ~loose_functype_check:true (Ain.create 4 0) in
   let source = "void test() { f(g); }" in
   let lib = Document.create ctx ~fname:"lib.jaf" "int g; void f(int x) {}" in
   let user = Document.create ctx ~fname:"user.jaf" source in
@@ -227,7 +227,7 @@ let%expect_test "removed declarations are unregistered" =
     |}]
 
 let%expect_test "syntax error keeps the previous declarations" =
-  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let ctx = Jaf.create_context ~loose_functype_check:true (Ain.create 4 0) in
   let doc = Document.create ctx ~fname:"lib.jaf" "void f() {}" in
   let doc = Document.create ctx ~fname:"lib.jaf" ~previous:doc "void f() {" in
   print_errors doc;
@@ -241,7 +241,7 @@ let%expect_test "syntax error keeps the previous declarations" =
     |}]
 
 let%expect_test "registration error does not stop other declarations" =
-  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let ctx = Jaf.create_context ~loose_functype_check:true (Ain.create 4 0) in
   let source = "int g; int g; void f() {} void f() {} void h() { f(); }" in
   let doc = Document.create ctx ~fname:"test.jaf" source in
   print_errors doc;
@@ -271,7 +271,10 @@ let%expect_test "global declaration replaces a predefined constant" =
         };
       ]
   in
-  let ctx = Jaf.create_context ~constants:predefined (Ain.create 4 0) in
+  let ctx =
+    Jaf.create_context ~constants:predefined ~loose_functype_check:true
+      (Ain.create 4 0)
+  in
   let print_type () =
     let v = Hashtbl.find_exn ctx.globals "true" in
     Stdio.print_endline (Jaf.jaf_type_to_string v.type_spec.ty)
@@ -294,6 +297,16 @@ let%expect_test "global declaration replaces a predefined constant" =
     int
     bool
     |}]
+
+let%expect_test "unknown functype accepts any function" =
+  analyze
+    {|
+      void f(unknown_functype cb) {}
+      void g(unknown_delegate cb) {}
+      void h(int x) {}
+      void test() { f(&h); g(&h); }
+    |};
+  [%expect {| ok |}]
 
 let%expect_test "RefAssign operator" =
   analyze

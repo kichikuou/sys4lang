@@ -160,7 +160,6 @@ class lsp_server ~sw ~fs ~default_pje_path =
 
 let run default_pje_path =
   let default_pje_path = Option.value default_pje_path ~default:"" in
-  Common.TypeRules.loose_functype_check := true;
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let fs = Eio.Stdenv.fs env in

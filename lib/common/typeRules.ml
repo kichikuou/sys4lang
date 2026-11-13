@@ -22,10 +22,6 @@ open CompileError
    references, and lvalues. The functions have no state. They report a
    violation as a compile error at [parent]. *)
 
-(* When true, FuncType None and Delegate None will match any function types.
-   This is necessary for the LSP contexts where functype/delegate information
-   read from ain file is incomplete. *)
-let loose_functype_check = ref false
 let sprintf = Printf.sprintf
 
 (* An lvalue is an expression which denotes a location that can be assigned to. *)
@@ -247,7 +243,7 @@ let check_functype_compatible ctx parent functype (expr : expression) =
   | Some _, String -> ()
   | Some _, NullType -> expr.ty <- FuncType functype
   | None, (TyFunction _ | FuncType _ | String | NullType)
-    when !loose_functype_check ->
+    when ctx.loose_functype_check ->
       ()
   | _ -> type_check parent (FuncType functype) expr
 
@@ -278,7 +274,7 @@ let check_delegate_compatible ctx parent delegate (expr : expression) =
       match expr.ty with
       | Delegate None -> ()
       | (TyMethod _ | TyFunction _ | Delegate _ | String | NullType)
-        when !loose_functype_check ->
+        when ctx.loose_functype_check ->
           ()
       | _ -> type_check parent (Delegate delegate) expr)
 
