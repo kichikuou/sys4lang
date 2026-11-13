@@ -20,23 +20,6 @@ open Jaf
 open Bytecode
 open CompileError
 
-type cflow_type =
-  | CFlowLoop of { continue_addr : int (* -1 if it is not yet known *) }
-  | CFlowSwitch of Ain.Switch.t
-
-type cflow_stmt = {
-  kind : cflow_type;
-  mutable break_addrs : int list;
-  mutable continue_addrs : int list;
-}
-
-type scope = { mutable vars : variable list }
-
-type label_data = {
-  mutable address : int option;
-  mutable gotos : (int * statement) list;
-}
-
 let is_variable_ref = function
   | Ident _ | Member (_, _, ClassVariable _) | Subscript _ -> true
   | _ -> false
@@ -44,246 +27,14 @@ let is_variable_ref = function
 let var_index (v : variable) = Option.value_exn v.index
 let fun_index (f : fundecl) = Option.value_exn f.index
 
-let incdec_instruction = function
-  | (PreInc | PostInc), LongInt -> LI_INC
-  | (PreDec | PostDec), LongInt -> LI_DEC
-  | (PreInc | PostInc), _ -> INC
-  | (PreDec | PostDec), _ -> DEC
-  | _ -> compiler_bug "invalid inc/dec expression" None
+let incdec_instruction op ty =
+  match Opcodes.incdec op ty with
+  | Some instruction -> instruction
+  | None -> compiler_bug "invalid inc/dec expression" None
 
 class jaf_compiler ctx debug_info =
   object (self)
-    (* The function currently being compiled. *)
-    val mutable current_function : fundecl option = None
-
-    (* The bytecode output buffer. *)
-    val mutable buffer = CBuffer.create 2048
-
-    (* Address of the start of the current buffer. *)
-    val mutable start_address : int = 0
-
-    (* Current address within the code section. *)
-    val mutable current_address : int = 0
-
-    (* The currently active control flow constructs. *)
-    val mutable cflow_stmts = Stack.create ()
-
-    (* The currentl active scopes. *)
-    val scopes = Stack.create ()
-
-    (* Labels/gotos record for the current function. *)
-    val mutable labels = Hashtbl.create (module String)
-
-    (* Running CRC-32 of the current function. *)
-    val mutable crc_state : Crc32.t = Crc32.Inactive
-
-    (** Begin a scope. Variables created within a scope are deleted when the
-        scope ends. *)
-    method start_scope = Stack.push scopes { vars = [] }
-
-    (** End a scope. Deletes variable created within the scope. *)
-    method end_scope =
-      let scope = Stack.pop_exn scopes in
-      (* delete scope-local variables *)
-      (* NOTE: Variables are deleted automatically by the VM upon function
-               return. This code is emitted only to ensure that destructors are
-               called at the correct time; hence function-scoped variables need
-               not be deleted here. *)
-      match Stack.top scopes with
-      | None -> ()
-      | Some _ -> List.iter scope.vars ~f:self#compile_delete_var
-
-    (** Add a variable to the current scope. *)
-    method scope_add_var v =
-      match Stack.top scopes with
-      | Some scope -> scope.vars <- v :: scope.vars
-      | None -> compiler_bug "tried to add variable to null scope" None
-
-    (** Add a label for the current function. *)
-    method add_label name stmt =
-      Hashtbl.update labels name ~f:(function
-        | None -> { address = Some current_address; gotos = [] }
-        | Some { address = None; gotos } ->
-            { address = Some current_address; gotos }
-        | Some _ -> compile_error "Duplicate label" (ASTStatement stmt))
-
-    (** Add a goto address location for the current function *)
-    method add_goto name addr_loc stmt =
-      let d =
-        Hashtbl.find_or_add labels name ~default:(fun _ ->
-            { address = None; gotos = [] })
-      in
-      d.gotos <- (addr_loc, stmt) :: d.gotos
-
-    (** Resolve all goto addresses in the current function. *)
-    method resolve_gotos =
-      Hashtbl.iter labels ~f:(fun { address; gotos } ->
-          match address with
-          | Some addr ->
-              List.iter gotos ~f:(fun (addr_loc, _) ->
-                  self#write_address_at addr_loc addr)
-          | None ->
-              compile_error "Unresolved label"
-                (ASTStatement (snd (List.last_exn gotos))));
-      Hashtbl.clear labels
-
-    (** Begin a loop. *)
-    method start_loop continue_addr =
-      Stack.push cflow_stmts
-        {
-          kind = CFlowLoop { continue_addr };
-          break_addrs = [];
-          continue_addrs = [];
-        }
-
-    (** Begin a switch statement. *)
-    method start_switch ty node =
-      let op, case_type =
-        match ty with
-        | Jaf.Bool | Int | LongInt -> (SWITCH, Ain.Switch.IntCase)
-        | String -> (STRSWITCH, Ain.Switch.StringCase)
-        | _ -> compiler_bug "invalid switch type" (Some node)
-      in
-      let switch = Ain.add_switch ctx.ain case_type in
-      Stack.push cflow_stmts
-        { kind = CFlowSwitch switch; break_addrs = []; continue_addrs = [] };
-      self#write_instruction1 op switch.index
-
-    (** End the current control flow construct. Updates 'break' addresses. *)
-    method end_cflow_stmt =
-      let stmt = Stack.pop_exn cflow_stmts in
-      List.iter stmt.break_addrs ~f:(fun addr ->
-          self#write_address_at addr current_address)
-
-    (** End the current loop. Updates 'break' addresses. *)
-    method end_loop =
-      (match Stack.top cflow_stmts with
-      | Some { kind = CFlowLoop _; _ } -> ()
-      | _ -> compiler_bug "Mismatched start/end of control flow construct" None);
-      self#end_cflow_stmt
-
-    (** End the current switch statement. Updates 'break' addresses. *)
-    method end_switch =
-      (match Stack.top cflow_stmts with
-      | Some { kind = CFlowSwitch switch; _ } -> Ain.write_switch ctx.ain switch
-      | _ -> compiler_bug "Mismatched start/end of control flow construct" None);
-      self#end_cflow_stmt
-
-    method add_switch_case expr node =
-      let (switch : Ain.Switch.t) = self#current_switch node in
-      let value =
-        match expr with
-        | ConstInt n -> (
-            match switch.case_type with
-            | Ain.Switch.IntCase -> n
-            | Ain.Switch.StringCase ->
-                compile_error "int case in string switch" node)
-        | ConstString s -> (
-            match switch.case_type with
-            | Ain.Switch.StringCase -> Ain.add_string ctx.ain s
-            | Ain.Switch.IntCase ->
-                compile_error "string case in int switch" node)
-        | _ -> compile_error "invalid expression in switch case" node
-      in
-      switch.cases <-
-        List.append switch.cases [ (Int32.of_int_exn value, current_address) ]
-
-    method set_switch_default node =
-      let switch = self#current_switch node in
-      switch.default_address <- current_address
-
-    (** Emit a 'continue' jump for the innermost enclosing loop. If the loop's
-        continue target is not yet known (do-while), the jump operand location
-        is recorded for later patching. *)
-    method add_continue node =
-      let nearest_loop =
-        Stack.find cflow_stmts ~f:(function
-          | { kind = CFlowLoop _; _ } -> true
-          | _ -> false)
-      in
-      match nearest_loop with
-      | Some { kind = CFlowLoop { continue_addr }; _ } when continue_addr >= 0
-        ->
-          self#write_instruction1 JUMP continue_addr
-      | Some loop ->
-          loop.continue_addrs <- (current_address + 2) :: loop.continue_addrs;
-          self#write_instruction1 JUMP 0
-      | None -> compile_error "'continue' statement outside of loop" node
-
-    (** Retrieves the index for the current switch statement. *)
-    method current_switch node =
-      match Stack.top cflow_stmts with
-      | Some { kind = CFlowSwitch switch; _ } -> switch
-      | _ -> compile_error "switch case outside of switch statement" node
-
-    (** Push the location of a 32-bit integer that should be updated to the
-        address of the current scope's end point. *)
-    method push_break_addr addr node =
-      match Stack.top cflow_stmts with
-      | Some stmt -> stmt.break_addrs <- addr :: stmt.break_addrs
-      | None -> compile_error "'break' statement outside of loop" node
-
-    (* Feed a 32-bit word into the running CRC. *)
-    method private crc_push_word n = crc_state <- Crc32.feed_word crc_state n
-
-    (* Hash a label/goto's qualified name "FuncName::labelName" into the CRC. *)
-    method private crc_push_label_name label =
-      let name =
-        mangled_name (Option.value_exn current_function) ^ "::" ^ label
-      in
-      crc_state <- Crc32.feed_string crc_state name
-
-    method write_instruction0 op =
-      CBuffer.write_int16 buffer (int_of_opcode op);
-      self#crc_push_word (int_of_opcode op);
-      current_address <- current_address + 2
-
-    method write_instruction1 op arg0 =
-      match op with
-      | SH_STRUCTREF when Ain.version_lt ctx.ain (1, 0) ->
-          (* ain v0 encodes SH_STRUCTREF as 0x62 (which is EOF from v1 on). *)
-          CBuffer.write_int16 buffer 0x62;
-          self#crc_push_word 0x62;
-          CBuffer.write_int32 buffer arg0;
-          current_address <- current_address + 6
-      | S_MOD when Ain.version_lt ctx.ain (11, 0) ->
-          self#write_instruction1 PUSH arg0;
-          self#write_instruction0 S_MOD
-      | _ ->
-          CBuffer.write_int16 buffer (int_of_opcode op);
-          self#crc_push_word (int_of_opcode op);
-          CBuffer.write_int32 buffer arg0;
-          current_address <- current_address + 6
-
-    method write_instruction1_float op arg0 =
-      CBuffer.write_int16 buffer (int_of_opcode op);
-      self#crc_push_word (int_of_opcode op);
-      CBuffer.write_float buffer arg0;
-      current_address <- current_address + 6
-
-    method write_instruction2 op arg0 arg1 =
-      CBuffer.write_int16 buffer (int_of_opcode op);
-      self#crc_push_word (int_of_opcode op);
-      CBuffer.write_int32 buffer arg0;
-      CBuffer.write_int32 buffer arg1;
-      current_address <- current_address + 10
-
-    method write_instruction3 op arg0 arg1 arg2 =
-      CBuffer.write_int16 buffer (int_of_opcode op);
-      self#crc_push_word (int_of_opcode op);
-      CBuffer.write_int32 buffer arg0;
-      CBuffer.write_int32 buffer arg1;
-      CBuffer.write_int32 buffer arg2;
-      current_address <- current_address + 14
-
-    method write_address_at dst addr =
-      CBuffer.write_int32_at buffer (dst - start_address) addr
-
-    method write_buffer =
-      if current_address > start_address then (
-        Ain.append_bytecode ctx.ain buffer;
-        CBuffer.clear buffer;
-        start_address <- current_address)
+    inherit CodeWriter.code_writer ctx debug_info
 
     method compile_lock_peek =
       if Ain.version_lt ctx.ain (6, 0) then (
@@ -510,8 +261,8 @@ class jaf_compiler ctx debug_info =
               compile_error "Invalid character constant" (ASTExpression expr))
       | ConstString s ->
           let no =
-            if Ain.version_lt ctx.ain (1, 0) then Ain.add_message ctx.ain s
-            else Ain.add_string ctx.ain s
+            if Ain.version_lt ctx.ain (1, 0) then self#add_message s
+            else self#add_string s
           in
           self#write_instruction1 S_PUSH no
       | Ident (_, LocalVariable v) -> (
@@ -556,7 +307,7 @@ class jaf_compiler ctx debug_info =
       | Unary (UPlus, e) -> self#compile_expression e
       | Unary (UMinus, e) ->
           self#compile_expression e;
-          self#write_instruction0 (match e.ty with Float -> F_INV | _ -> INV)
+          self#write_instruction0 (Opcodes.negate e.ty)
       | Unary (LogNot, e) ->
           self#compile_expression e;
           self#write_instruction0 NOT
@@ -566,7 +317,7 @@ class jaf_compiler ctx debug_info =
       | Unary (((PreInc | PreDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
-          self#write_instruction0 (incdec_instruction (op, e.ty));
+          self#write_instruction0 (incdec_instruction op e.ty);
           self#write_instruction0 REF
       | Unary (((PostInc | PostDec) as op), e) ->
           self#compile_lvalue e;
@@ -574,7 +325,7 @@ class jaf_compiler ctx debug_info =
           self#write_instruction0 REF;
           self#write_instruction0 DUP_X2;
           self#write_instruction0 POP;
-          self#write_instruction0 (incdec_instruction (op, e.ty))
+          self#write_instruction0 (incdec_instruction op e.ty)
       | Binary (LogOr, a, b) ->
           self#compile_expression a;
           let lhs_true_addr = current_address + 2 in
@@ -611,114 +362,23 @@ class jaf_compiler ctx debug_info =
           | _ ->
               self#compile_expression a;
               self#compile_expression b);
-          match (a.ty, op) with
-          | (Int | LongInt | Bool), Equal -> self#write_instruction0 EQUALE
-          | (Int | LongInt | Bool), NEqual -> self#write_instruction0 NOTE
-          | Int, Plus -> self#write_instruction0 ADD
-          | Int, Minus -> self#write_instruction0 SUB
-          | Int, Times -> self#write_instruction0 MUL
-          | Int, Divide -> self#write_instruction0 DIV
-          | Int, Modulo -> self#write_instruction0 MOD
-          | (Int | LongInt), LT -> self#write_instruction0 LT
-          | (Int | LongInt), GT -> self#write_instruction0 GT
-          | (Int | LongInt), LTE -> self#write_instruction0 LTE
-          | (Int | LongInt), GTE -> self#write_instruction0 GTE
-          | (Int | Bool), BitOr -> self#write_instruction0 OR
-          | (Int | Bool), BitXor -> self#write_instruction0 XOR
-          | (Int | Bool), BitAnd -> self#write_instruction0 AND
-          | (Int | Bool), LShift -> self#write_instruction0 LSHIFT
-          | (Int | Bool), RShift -> self#write_instruction0 RSHIFT
-          | Int, (LogOr | LogAnd) ->
-              compiler_bug "invalid integer operator"
-                (Some (ASTExpression expr))
-          | LongInt, Plus -> self#write_instruction0 LI_ADD
-          | LongInt, Minus -> self#write_instruction0 LI_SUB
-          | LongInt, Times -> self#write_instruction0 LI_MUL
-          | LongInt, Divide -> self#write_instruction0 LI_DIV
-          | LongInt, Modulo -> self#write_instruction0 LI_MOD
-          | Float, Plus -> self#write_instruction0 F_ADD
-          | Float, Minus -> self#write_instruction0 F_SUB
-          | Float, Times -> self#write_instruction0 F_MUL
-          | Float, Divide -> self#write_instruction0 F_DIV
-          | Float, Equal -> self#write_instruction0 F_EQUALE
-          | Float, NEqual -> self#write_instruction0 F_NOTE
-          | Float, LT -> self#write_instruction0 F_LT
-          | Float, GT -> self#write_instruction0 F_GT
-          | Float, LTE -> self#write_instruction0 F_LTE
-          | Float, GTE -> self#write_instruction0 F_GTE
-          | ( Float,
-              ( Modulo | BitOr | BitXor | BitAnd | LShift | RShift | LogOr
-              | LogAnd ) ) ->
-              compiler_bug "invalid floating point operator"
-                (Some (ASTExpression expr))
-          | String, Plus -> self#write_instruction0 S_ADD
-          | String, Equal -> self#write_instruction0 S_EQUALE
-          | String, NEqual -> self#write_instruction0 S_NOTE
-          | String, LT -> self#write_instruction0 S_LT
-          | String, GT -> self#write_instruction0 S_GT
-          | String, LTE -> self#write_instruction0 S_LTE
-          | String, GTE -> self#write_instruction0 S_GTE
-          | String, Modulo ->
-              let int_of_t (t : jaf_type) =
-                match t with
-                | Int -> 2
-                | Float -> 3
-                | String -> 4
-                | Bool -> 48
-                | LongInt -> 56
-                | _ ->
-                    compiler_bug "invalid type for string formatting"
-                      (Some (ASTExpression expr))
-              in
-              self#write_instruction1 S_MOD (int_of_t b.ty)
-          | ( String,
-              ( Minus | Times | Divide | BitOr | BitXor | BitAnd | LShift
-              | RShift | LogOr | LogAnd ) ) ->
-              compiler_bug "invalid string operator" (Some (ASTExpression expr))
-          | Ref t, RefEqual ->
-              self#write_instruction0
-                (if is_numeric t then R_EQUALE else EQUALE)
-          | Ref t, RefNEqual ->
-              self#write_instruction0 (if is_numeric t then R_NOTE else NOTE)
-          | FuncType _, Equal -> self#write_instruction0 EQUALE
-          | FuncType _, NEqual -> self#write_instruction0 NOTE
-          | _ ->
+          match (Opcodes.binary a.ty op, a.ty, op) with
+          | Some instruction, _, _ -> self#write_instruction0 instruction
+          | None, String, Modulo -> (
+              match Opcodes.string_format_type b.ty with
+              | Some t -> self#write_instruction1 S_MOD t
+              | None ->
+                  compiler_bug "invalid type for string formatting"
+                    (Some (ASTExpression expr)))
+          | None, _, _ ->
               compiler_bug "invalid binary expression"
                 (Some (ASTExpression expr)))
       | Assign (op, lhs, rhs) -> (
           self#compile_lvalue lhs;
           self#compile_expression rhs;
-          match (op, rhs.ty) with
-          | EqAssign, (Int | Bool | TyFunction _ | FuncType _) ->
-              self#write_instruction0 ASSIGN
-          | PlusAssign, (Int | Bool) -> self#write_instruction0 PLUSA
-          | MinusAssign, (Int | Bool) -> self#write_instruction0 MINUSA
-          | TimesAssign, (Int | Bool) -> self#write_instruction0 MULA
-          | DivideAssign, (Int | Bool) -> self#write_instruction0 DIVA
-          | ModuloAssign, (Int | Bool) -> self#write_instruction0 MODA
-          | OrAssign, (Int | Bool) -> self#write_instruction0 ORA
-          | XorAssign, (Int | Bool) -> self#write_instruction0 XORA
-          | AndAssign, (Int | Bool) -> self#write_instruction0 ANDA
-          | LShiftAssign, (Int | Bool) -> self#write_instruction0 LSHIFTA
-          | RShiftAssign, (Int | Bool) -> self#write_instruction0 RSHIFTA
-          | CharAssign, Int -> self#write_instruction0 C_ASSIGN
-          | EqAssign, LongInt -> self#write_instruction0 LI_ASSIGN
-          | PlusAssign, LongInt -> self#write_instruction0 LI_PLUSA
-          | MinusAssign, LongInt -> self#write_instruction0 LI_MINUSA
-          | TimesAssign, LongInt -> self#write_instruction0 LI_MULA
-          | DivideAssign, LongInt -> self#write_instruction0 LI_DIVA
-          | ModuloAssign, LongInt -> self#write_instruction0 LI_MODA
-          | AndAssign, LongInt -> self#write_instruction0 LI_ANDA
-          | OrAssign, LongInt -> self#write_instruction0 LI_ORA
-          | XorAssign, LongInt -> self#write_instruction0 LI_XORA
-          | LShiftAssign, LongInt -> self#write_instruction0 LI_LSHIFTA
-          | RShiftAssign, LongInt -> self#write_instruction0 LI_RSHIFTA
-          | EqAssign, Float -> self#write_instruction0 F_ASSIGN
-          | PlusAssign, Float -> self#write_instruction0 F_PLUSA
-          | MinusAssign, Float -> self#write_instruction0 F_MINUSA
-          | TimesAssign, Float -> self#write_instruction0 F_MULA
-          | DivideAssign, Float -> self#write_instruction0 F_DIVA
-          | EqAssign, String -> (
+          match (Opcodes.assign op rhs.ty, op, rhs.ty) with
+          | Some instruction, _, _ -> self#write_instruction0 instruction
+          | None, EqAssign, String -> (
               match lhs.ty with
               | FuncType (Some (_, ft_i)) ->
                   self#write_instruction1 PUSH ft_i;
@@ -733,7 +393,7 @@ class jaf_compiler ctx debug_info =
               | _ ->
                   compiler_bug "invalid string assignment"
                     (Some (ASTExpression expr)))
-          | PlusAssign, String -> (
+          | None, PlusAssign, String -> (
               match lhs.ty with
               | Delegate (Some (_, dg_i)) ->
                   self#write_instruction1 PUSH (-1);
@@ -747,17 +407,17 @@ class jaf_compiler ctx debug_info =
               | _ ->
                   compiler_bug "invalid string assignment"
                     (Some (ASTExpression expr)))
-          | EqAssign, TyMethod _ -> self#write_instruction0 DG_SET
-          | EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
-          | PlusAssign, TyMethod _ -> self#write_instruction0 DG_ADD
-          | PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
-          | MinusAssign, TyMethod _ -> self#write_instruction0 DG_ERASE
-          | MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
-          | EqAssign, Struct (_, sno) | EqAssign, Ref (Struct (_, sno)) ->
+          | None, EqAssign, TyMethod _ -> self#write_instruction0 DG_SET
+          | None, EqAssign, Delegate _ -> self#write_instruction0 DG_ASSIGN
+          | None, PlusAssign, TyMethod _ -> self#write_instruction0 DG_ADD
+          | None, PlusAssign, Delegate _ -> self#write_instruction0 DG_PLUSA
+          | None, MinusAssign, TyMethod _ -> self#write_instruction0 DG_ERASE
+          | None, MinusAssign, Delegate _ -> self#write_instruction0 DG_MINUSA
+          | None, EqAssign, (Struct (_, sno) | Ref (Struct (_, sno))) ->
               if not (Ain.version ctx.ain <= 1 || Ain.version ctx.ain >= 11)
               then self#write_instruction1 PUSH sno;
               self#write_instruction0 SR_ASSIGN
-          | _, _ ->
+          | None, _, _ ->
               compiler_bug "invalid assignment" (Some (ASTExpression expr)))
       | Seq (a, b) ->
           self#compile_expr_and_pop a;
@@ -1014,7 +674,7 @@ class jaf_compiler ctx debug_info =
       | Unary (((PreInc | PreDec) as op), e) ->
           self#compile_lvalue e;
           self#write_instruction0 DUP2;
-          self#write_instruction0 (incdec_instruction (op, e.ty));
+          self#write_instruction0 (incdec_instruction op e.ty);
           self#write_instruction0 POP;
           self#write_instruction0 POP
       | Seq (a, b) ->
@@ -1078,7 +738,7 @@ class jaf_compiler ctx debug_info =
     (** Emit the code for a statement. Statements are stack-neutral, i.e. the
         state of the stack is unchanged after executing a statement. *)
     method compile_statement (stmt : statement) =
-      DebugInfo.add_loc debug_info current_address stmt.loc;
+      self#mark_location stmt.loc;
       (* delete locals that will be out-of-scope after this statement *)
       List.iter (List.rev stmt.delete_vars) ~f:self#compile_delete_var;
       match stmt.node with
@@ -1087,10 +747,7 @@ class jaf_compiler ctx debug_info =
           List.iter decls.vars ~f:self#compile_variable_declaration
       | Expression e -> self#compile_expr_and_pop e
       | Compound stmts -> self#compile_block stmts
-      | Label name ->
-          self#crc_push_word 0x406;
-          self#crc_push_label_name name;
-          self#add_label name stmt
+      | Label name -> self#add_label name stmt
       | If (test, con, alt) ->
           self#compile_expression test;
           let ifz_addr = current_address + 2 in
@@ -1120,8 +777,7 @@ class jaf_compiler ctx debug_info =
           self#start_loop (-1);
           self#compile_statement body;
           (* loop test ('continue' jumps here) *)
-          List.iter (Stack.top_exn cflow_stmts).continue_addrs ~f:(fun addr ->
-              self#write_address_at addr current_address);
+          self#resolve_continues;
           self#compile_expression test;
           self#write_instruction1 IFNZ loop_addr;
           (* loop end *)
@@ -1163,15 +819,7 @@ class jaf_compiler ctx debug_info =
           Option.iter break_addr ~f:(fun break_addr ->
               self#write_address_at break_addr current_address);
           self#end_loop
-      | Goto name ->
-          self#crc_push_word 0x407;
-          self#crc_push_label_name name;
-          (* The 0x407 marker replaces the JUMP, so don't hash the JUMP. *)
-          let saved = crc_state in
-          crc_state <- Crc32.Inactive;
-          self#add_goto name (current_address + 2) stmt;
-          self#write_instruction1 JUMP 0;
-          crc_state <- saved
+      | Goto name -> self#write_goto name stmt
       | Continue -> self#add_continue (ASTStatement stmt)
       | Break ->
           self#push_break_addr (current_address + 2) (ASTStatement stmt);
@@ -1203,7 +851,7 @@ class jaf_compiler ctx debug_info =
           | _ -> self#compile_expression e);
           self#write_instruction0 RETURN
       | Jump funcname ->
-          let no = Ain.add_string ctx.ain funcname in
+          let no = self#add_string funcname in
           self#write_instruction1 S_PUSH no;
           self#write_instruction0 CALLONJUMP;
           self#write_instruction0 SJUMP
@@ -1212,7 +860,7 @@ class jaf_compiler ctx debug_info =
           self#write_instruction0 CALLONJUMP;
           self#write_instruction0 SJUMP
       | Message msg ->
-          let msg_no = Ain.add_message ctx.ain msg in
+          let msg_no = self#add_message msg in
           self#write_instruction1 MSG msg_no
       | RefAssign (lhs, rhs) ->
           self#compile_ref_assign ~is_init:false ~parent:(ASTStatement stmt) lhs
@@ -1339,57 +987,27 @@ class jaf_compiler ctx debug_info =
 
     (** Emit the code for a function. *)
     method compile_function (decl : fundecl) =
-      let index = Option.value_exn decl.index in
-      let func =
-        {
-          (Ain.get_function_by_index ctx.ain index) with
-          address = current_address + 6;
-        }
-      in
-      let prev_function = current_function in
-      current_function <- Some decl;
-      let prev_cflow_stmts = cflow_stmts in
-      cflow_stmts <- Stack.create ();
-      let prev_labels = labels in
-      labels <- Hashtbl.create (module String);
-      (* Freeze the parent's CRC: it stops at this nested FUNC (lambda). *)
-      let prev_crc_state = Crc32.freeze crc_state in
-      self#write_instruction1 FUNC index;
-      (* Accumulate the function CRC over the return/argument type codes and the
-         body opcodes. FUNC and ENDFUNC are excluded. *)
-      crc_state <- Crc32.start;
-      let int_of_data_type t =
-        Ain.Type.int_of_data_type (Ain.version ctx.ain) (jaf_to_ain_type t)
-      in
-      self#crc_push_word (int_of_data_type decl.return.ty);
-      List.iter decl.params ~f:(fun v ->
-          self#crc_push_word (int_of_data_type v.type_spec.ty));
-      self#compile_block (Option.value_exn decl.body);
-      if not (decl.is_label || String.equal (mangled_name decl) "NULL") then (
-        self#compile_default_return decl.return.ty
-          (ASTDeclaration (Function decl));
-        self#write_instruction0 RETURN);
-      let crc = Crc32.finalize crc_state in
-      crc_state <- prev_crc_state;
-      let func = { func with crc } in
       (* ENDFUNC is not generated for the "NULL" function and methods except
          auto-generated array initializers. ain v0/v1 does not have ENDFUNC. *)
-      (match decl with
-      | _ when ctx.version <= 100 -> ()
-      | { name = "NULL"; _ } -> ()
-      | { class_name = None; _ } | { name = "2"; _ } | { is_lambda = true; _ }
-        ->
-          self#write_instruction1 ENDFUNC index
-      | _ -> ());
-      self#resolve_gotos;
-      Ain.write_function ctx.ain func;
-      current_function <- prev_function;
-      cflow_stmts <- prev_cflow_stmts;
-      labels <- prev_labels
+      let endfunc =
+        match decl with
+        | _ when ctx.version <= 100 -> false
+        | { name = "NULL"; _ } -> false
+        | { class_name = None; _ } | { name = "2"; _ } | { is_lambda = true; _ }
+          ->
+            true
+        | _ -> false
+      in
+      self#write_function decl ~endfunc ~body:(fun () ->
+          self#compile_block (Option.value_exn decl.body);
+          if not (decl.is_label || String.equal (mangled_name decl) "NULL") then (
+            self#compile_default_return decl.return.ty
+              (ASTDeclaration (Function decl));
+            self#write_instruction0 RETURN))
 
     (** Emit the code for an ain v1 scenario label. *)
     method compile_scenario_label (decl : fundecl) =
-      Ain.add_scenario_label ctx.ain decl.name current_address;
+      self#add_scenario_label decl.name;
       let body = Option.value_exn decl.body in
       match body with
       | [ { node = Expression { node = Call (_, [], FunctionCall _); _ }; _ } ]
@@ -1403,8 +1021,6 @@ class jaf_compiler ctx debug_info =
 
     (** Compile a list of declarations. *)
     method compile ?(eof = true) jaf_name (decls : declaration list) =
-      start_address <- Ain.code_size ctx.ain;
-      current_address <- start_address;
       let compile_decl = function
         | Jaf.Function f ->
             if f.is_label && Ain.version ctx.ain = 1 then
@@ -1425,9 +1041,7 @@ class jaf_compiler ctx debug_info =
             compile_error "Enums not implemented" (ASTDeclaration (Enum e))
       in
       List.iter decls ~f:compile_decl;
-      (if eof && Ain.version_gte ctx.ain (1, 0) then
-         let jaf_name = String.tr ~target:'/' ~replacement:'\\' jaf_name in
-         self#write_instruction1 EOF (Ain.add_file ctx.ain jaf_name));
+      if eof then self#write_eof jaf_name;
       self#write_buffer
   end
 
