@@ -21,14 +21,28 @@ open CompileError
 (* Registration puts the names of declarations in the tables of the context,
    and gives numbers to types. It does not read function bodies. *)
 
+(* The type as it is written in the source. The declarations of a function are
+   compared in this form, because registration can precede or follow the
+   resolution of the other declaration. *)
+let rec source_type = function
+  | Struct (name, _) | FuncType (Some (name, _)) | Delegate (Some (name, _)) ->
+      Unresolved name
+  | IMainSystem -> Unresolved "IMainSystem"
+  | Ref t -> Ref (source_type t)
+  | Array t -> Array (source_type t)
+  | Wrap t -> Wrap (source_type t)
+  | t -> t
+
+let same_signature (a : fundecl) (b : fundecl) =
+  let source_ft f =
+    let params, return = ft_of_fundecl f in
+    (List.map params ~f:source_type, source_type return)
+  in
+  ft_compatible (source_ft a) (source_ft b)
+
 (* Default argument values and access modifiers are specified in the
    declaration. The definition gets them from the declaration. *)
 let inherit_declaration (decl : fundecl) (def : fundecl) =
-  List.iter def.params ~f:(fun p ->
-      if Option.is_some p.initval then
-        compile_error
-          "Default argument values must be specified in the declaration"
-          (ASTVariable p));
   def.params <-
     List.map2_exn def.params decl.params ~f:(fun p d ->
         { p with initval = d.initval });
@@ -38,10 +52,10 @@ let register_function ctx (f : fundecl) =
   let name = mangled_name f in
   let node = ASTDeclaration (Function f) in
   let entries = Hashtbl.find_multi ctx.functions name in
-  let same_signature entry =
-    ft_compatible (ft_of_fundecl f) (ft_of_fundecl (entry_fundecl entry))
+  let entry =
+    List.find entries ~f:(fun e -> same_signature f (entry_fundecl e))
   in
-  match (List.find entries ~f:same_signature, f.body) with
+  match (entry, f.body) with
   | None, _ ->
       if not (List.is_empty entries) then
         compile_error "Function signature mismatch" node;
@@ -49,7 +63,13 @@ let register_function ctx (f : fundecl) =
   | Some { def = Some _; _ }, Some _ ->
       compile_error "Duplicate function definition" node
   | Some ({ def = None; decl } as entry), Some _ ->
-      Option.iter decl ~f:(fun d -> inherit_declaration d f);
+      Option.iter decl ~f:(fun d ->
+          List.iter f.params ~f:(fun p ->
+              if Option.is_some p.initval then
+                compile_error
+                  "Default argument values must be specified in the declaration"
+                  (ASTVariable p));
+          inherit_declaration d f);
       entry.def <- Some f
   | Some { decl = Some _; _ }, None ->
       (* A repeated declaration adds nothing. *)
@@ -70,6 +90,7 @@ let register_struct ctx (s : structdecl) =
   let unqualified_name = snd (Util.parse_qualified_name s.name) in
   let index = number_of_name ctx.struct_numbers s.name in
   let jaf_s = new_jaf_struct s.name s.loc index in
+  Hashtbl.add_exn ctx.structs ~key:s.name ~data:jaf_s;
   let in_private = ref s.is_class in
   let register_method (f : fundecl) =
     f.class_name <- Some s.name;
@@ -98,8 +119,7 @@ let register_struct ctx (s : structdecl) =
             | `Duplicate ->
                 compile_error "duplicate member variable declaration"
                   (ASTVariable v)
-            | `Ok -> ()));
-  Hashtbl.add_exn ctx.structs ~key:s.name ~data:jaf_s
+            | `Ok -> ()))
 
 let register_declaration ctx decl =
   match decl with
@@ -140,6 +160,48 @@ let register_declaration ctx decl =
   | Enum _ -> compile_error "enum types not yet supported" (ASTDeclaration decl)
 
 let register ctx decls = List.iter decls ~f:(register_declaration ctx)
+
+(* Unregistration removes what the registration of a declaration put in the
+   tables. The numbers of types stay. The other declaration of a function stays
+   in its entry. *)
+
+let remove_if_same table name value =
+  match Hashtbl.find table name with
+  | Some v when phys_equal v value -> Hashtbl.remove table name
+  | _ -> ()
+
+let unregister_function ctx (f : fundecl) =
+  Hashtbl.change ctx.functions (mangled_name f) ~f:(fun entries ->
+      let remove = function Some d when phys_equal d f -> None | d -> d in
+      let entries =
+        List.filter (Option.value entries ~default:[]) ~f:(fun e ->
+            e.decl <- remove e.decl;
+            e.def <- remove e.def;
+            Option.is_some e.decl || Option.is_some e.def)
+      in
+      if List.is_empty entries then None else Some entries)
+
+let unregister_declaration ctx decl =
+  let unregister_globals (ds : vardecls) =
+    List.iter ds.vars ~f:(fun g -> remove_if_same ctx.globals g.name g)
+  in
+  match decl with
+  | Global ds -> unregister_globals ds
+  | GlobalGroup gg -> List.iter gg.vardecls ~f:unregister_globals
+  | Function f -> unregister_function ctx f
+  | FuncTypeDef f -> remove_if_same ctx.functypes f.name f
+  | DelegateDef f -> remove_if_same ctx.delegates f.name f
+  | StructDef s ->
+      (match Hashtbl.find ctx.structs s.name with
+      | Some jaf_s when phys_equal jaf_s.loc s.loc ->
+          Hashtbl.remove ctx.structs s.name
+      | _ -> ());
+      List.iter s.decls ~f:(function
+        | Constructor f | Destructor f | Method f -> unregister_function ctx f
+        | AccessSpecifier _ | MemberDecl _ -> ())
+  | Enum _ -> ()
+
+let unregister ctx decls = List.iter decls ~f:(unregister_declaration ctx)
 
 (*
  * AST pass to resolve HLL-specific type aliases.
@@ -265,3 +327,6 @@ let register_library ctx decls ~hll_name ~import_name =
   | `Duplicate -> raise_message ("Duplicate HLL import name: " ^ import_name)
   | `Ok -> ());
   lib
+
+let unregister_library ctx ~import_name (lib : library) =
+  remove_if_same ctx.libraries import_name lib

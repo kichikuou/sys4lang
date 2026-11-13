@@ -188,6 +188,113 @@ let%expect_test "reparse method definition before class" =
     C::g is not public
     |}]
 
+let%expect_test "redeclare class after its methods are resolved" =
+  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let decls =
+    "struct S { int i; }; class C { public: void f(S s, int a = 1); };"
+  in
+  let defs = "void C::f(S s, int a) {} void test() { C c; S s; c.f(s); }" in
+  let decls_doc = Document.create ctx ~fname:"decls.jaf" decls in
+  let defs_doc = Document.create ctx ~fname:"defs.jaf" defs in
+  print_errors defs_doc;
+  let decls_doc =
+    Document.create ctx ~fname:"decls.jaf" ~previous:decls_doc decls
+  in
+  print_errors decls_doc;
+  print_errors (Document.create ctx ~fname:"defs.jaf" ~previous:defs_doc defs);
+  [%expect {|
+    ok
+    ok
+    ok
+    |}]
+
+let%expect_test "removed declarations are unregistered" =
+  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let source = "void test() { f(g); }" in
+  let lib = Document.create ctx ~fname:"lib.jaf" "int g; void f(int x) {}" in
+  let user = Document.create ctx ~fname:"user.jaf" source in
+  print_errors user;
+  let lib = Document.create ctx ~fname:"lib.jaf" ~previous:lib "int g;" in
+  let user = Document.create ctx ~fname:"user.jaf" ~previous:user source in
+  print_errors user;
+  Document.create ctx ~fname:"lib.jaf" ~previous:lib "void f(int x) {}"
+  |> ignore;
+  print_errors (Document.create ctx ~fname:"user.jaf" ~previous:user source);
+  [%expect {|
+    ok
+    Undefined variable: f
+    Undefined variable: g
+    |}]
+
+let%expect_test "syntax error keeps the previous declarations" =
+  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let doc = Document.create ctx ~fname:"lib.jaf" "void f() {}" in
+  let doc = Document.create ctx ~fname:"lib.jaf" ~previous:doc "void f() {" in
+  print_errors doc;
+  print_errors (Document.create ctx ~fname:"user.jaf" "void test() { f(); }");
+  print_errors
+    (Document.create ctx ~fname:"lib.jaf" ~previous:doc "void f() {}");
+  [%expect {|
+    Syntax error.
+    ok
+    ok
+    |}]
+
+let%expect_test "registration error does not stop other declarations" =
+  let ctx = Jaf.create_context (Ain.create 4 0) in
+  let source = "int g; int g; void f() {} void f() {} void h() { f(); }" in
+  let doc = Document.create ctx ~fname:"test.jaf" source in
+  print_errors doc;
+  print_errors (Document.create ctx ~fname:"test.jaf" ~previous:doc source);
+  [%expect
+    {|
+    duplicate global definition
+    Duplicate function definition
+    duplicate global definition
+    Duplicate function definition
+    |}]
+
+let%expect_test "global declaration replaces a predefined constant" =
+  let predefined =
+    Jaf.
+      [
+        {
+          name = "true";
+          location = dummy_location;
+          array_dim = [];
+          is_const = true;
+          is_private = false;
+          kind = GlobalVar;
+          type_spec = { ty = Bool; location = dummy_location };
+          initval = None;
+          index = None;
+        };
+      ]
+  in
+  let ctx = Jaf.create_context ~constants:predefined (Ain.create 4 0) in
+  let print_type () =
+    let v = Hashtbl.find_exn ctx.globals "true" in
+    Stdio.print_endline (Jaf.jaf_type_to_string v.type_spec.ty)
+  in
+  let create = Document.create ctx ~fname:"consts.jaf" ~predefined in
+  print_type ();
+  let doc = create "const int true = 1;" in
+  print_errors doc;
+  print_type ();
+  let doc = create ~previous:doc "const int true = 1;" in
+  print_errors doc;
+  print_type ();
+  create ~previous:doc "" |> ignore;
+  print_type ();
+  [%expect {|
+    bool
+    ok
+    int
+    ok
+    int
+    bool
+    |}]
+
 let%expect_test "RefAssign operator" =
   analyze
     {|
