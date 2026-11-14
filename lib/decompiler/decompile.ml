@@ -540,7 +540,7 @@ let export ~print_addr decompiled ain_path write_to_file =
   Array.iter Ain.ain.hll0 ~f:(fun hll ->
       generate ~add_to_inc:false
         ("HLL/" ^ hll.name ^ ".hll")
-        (fun pr -> pr#print_hll hll.functions));
+        (fun pr -> pr#print_hll hll));
   generate "HLL\\hll.inc" (fun pr -> pr#print_hll_inc);
   List.iter decompiled.srcs ~f:(fun (fname, funcs) ->
       if not (List.is_empty funcs) then

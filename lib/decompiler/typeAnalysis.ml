@@ -419,11 +419,12 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | _, (Array elem_ty | Ref (Array elem_ty)) ->
               let args =
                 analyze_args
-                  (Ain.HLL.arg_types func
+                  (HllTypes.param_types "Array" func
                   |> List.map ~f:(Type.replace_hll_param elem_ty))
               in
               ( Call (expr, args),
-                Type.replace_hll_param elem_ty func.return_type )
+                Type.replace_hll_param elem_ty
+                  (HllTypes.return_type "Array" func) )
           | _, t ->
               Printf.failwithf "Array expected, got %s" (show_ain_type t) ())
       | HllFunc (lib, func) as expr ->
