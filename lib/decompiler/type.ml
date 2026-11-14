@@ -198,7 +198,7 @@ let create enum ~struc ~rank =
   | 95 -> HllFunc
   | _ as tag -> Printf.failwithf "unknown type enum %d" tag ()
 
-let create_ain11 enum ~struc ~subtype =
+let create_ain11 enum ~struc ~subtype ~delegate =
   match enum with
   | 0 -> Void
   | 10 -> Int
@@ -211,8 +211,8 @@ let create_ain11 enum ~struc ~subtype =
   | 21 -> Ref (Struct struc)
   | 47 -> Bool
   | 51 -> Ref Bool
-  | 63 -> Delegate (TypeVar.create Var)
-  | 67 -> Ref (Delegate (TypeVar.create Var))
+  | 63 -> Delegate (delegate struc)
+  | 67 -> Ref (Delegate (delegate struc))
   | 79 -> Array (Option.value_exn subtype)
   | 80 -> Ref (Array (Option.value_exn subtype))
   | 82 -> VarRef (Option.value_exn subtype)

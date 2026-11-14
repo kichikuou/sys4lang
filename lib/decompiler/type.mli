@@ -54,7 +54,16 @@ and func_type = { return_type : ain_type; arg_types : ain_type list }
 
 val func_type_unify : func_type -> func_type -> bool
 val create : int -> struc:int -> rank:int -> ain_type
-val create_ain11 : int -> struc:int -> subtype:ain_type option -> ain_type
+
+(** [delegate n] returns the type variable of a delegate type with the delegate
+    number [n], or -1 if the type has no number. *)
+val create_ain11 :
+  int ->
+  struc:int ->
+  subtype:ain_type option ->
+  delegate:(int -> func_type TypeVar.t) ->
+  ain_type
+
 val is_scalar : ain_type -> bool
 val is_fat : ain_type -> bool
 val is_fat_reference : ain_type -> bool

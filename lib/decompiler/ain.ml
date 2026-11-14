@@ -17,7 +17,11 @@
 open Base
 module BR = BytesReader
 
-type reader_context = { mutable version : int }
+type reader_context = {
+  mutable version : int;
+  mutable delegate_types : (Type.func_type Type.TypeVar.t * int) list;
+      (* The delegate types read so far that have a delegate number. *)
+}
 
 let read_array (br : reader_context BR.t) n f =
   Array.init n ~f:(function _ -> f br)
@@ -40,7 +44,13 @@ let rec read_variable_type br =
   let struc = BR.int br in
   if br.context.version >= 11 then
     let subtype = if BR.bool br then Some (read_variable_type br) else None in
-    Type.create_ain11 enum ~struc ~subtype
+    let delegate n =
+      let tv = Type.TypeVar.create Var in
+      if n >= 0 then
+        br.context.delegate_types <- (tv, n) :: br.context.delegate_types;
+      tv
+    in
+    Type.create_ain11 enum ~struc ~subtype ~delegate
   else
     let rank = BR.int br in
     Type.create enum ~struc ~rank
@@ -492,7 +502,17 @@ let load_into loaded path =
     Bytes.of_string (Stdio.In_channel.read_all path) |> decode
   in
   loaded.is_ai2 <- is_ai2;
-  readSections loaded (BR.create bytes { version = -1 });
+  let context = { version = -1; delegate_types = [] } in
+  readSections loaded (BR.create bytes context);
+  (* In AIN v11+, a delegate type has the number of the delegate. A type can
+     be read before the delegate table. *)
+  List.iter context.delegate_types ~f:(fun (tv, n) ->
+      match
+        Type.TypeVar.set_id Type.func_type_unify tv n
+          (FuncType.to_type loaded.delg.(n))
+      with
+      | Ok () -> ()
+      | Error _ -> failwith "delegate type mismatch");
   applyGSET loaded
 
 let load path =
