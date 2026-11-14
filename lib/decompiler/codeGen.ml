@@ -884,13 +884,16 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
         self#println "const int false = 0;");
       self#print_newline
 
-    method private print_hll_function lib (func : Ain.HLL.function_t) =
-      bprintf out "%a %s" self#pr_type (HllTypes.return_type lib func) func.name;
-      match HllTypes.params lib func with
+    method private print_hll_function hll_types lib (func : Ain.HLL.function_t)
+        =
+      bprintf out "%a %s" self#pr_type
+        (HllTypes.return_type hll_types lib func)
+        func.name;
+      match HllTypes.params hll_types lib func with
       | [] -> self#println "(void);"
       | args -> self#println "(%a);" (pr_param_list self#pr_vardecl) args
 
-    method print_hll (hll : Ain.HLL.t) =
+    method print_hll hll_types (hll : Ain.HLL.t) =
       (* A function is a duplicate if an earlier function has the same name and
          the same parameter types. Otherwise it is an overload. *)
       let printed = Hashtbl.create (module String) in
@@ -902,7 +905,7 @@ class code_printer ?(print_addr = false) ?(dbginfo = create_debug_info ())
               arg_types ~equal:Poly.equal
           then print_string out "// (duplicated) "
           else Hashtbl.add_multi printed ~key:func.name ~data:arg_types;
-          self#print_hll_function hll.name func)
+          self#print_hll_function hll_types hll.name func)
 
     method print_hll_inc =
       self#println "SystemSource = {";

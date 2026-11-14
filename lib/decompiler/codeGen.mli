@@ -63,7 +63,7 @@ object
   method print_functype_decl : string -> Ain.FuncType.t -> unit
   method print_globals : variable list -> function_t list -> unit
   method print_constants : unit
-  method print_hll : Ain.HLL.t -> unit
+  method print_hll : HllTypes.t -> Ain.HLL.t -> unit
   method print_hll_inc : unit
   method print_inc : string list -> unit
   method print_pje : project_t -> unit

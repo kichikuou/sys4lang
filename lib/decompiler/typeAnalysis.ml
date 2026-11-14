@@ -158,7 +158,8 @@ let tvar_set_type node ft =
   TypeVar.set_type func_type_unify node ft
   |> Result.iter_error ~f:functype_conflict
 
-class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
+class analyzer (hll_types : HllTypes.t) (func : Ain.Function.t)
+  (struc : Ain.Struct.t option) =
   object (self)
     method analyze_lvalue =
       function
@@ -329,7 +330,12 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
       | UnaryOp (insn, e) -> self#analyze_unary_op insn e
       | BinaryOp (insn, lhs, rhs) -> self#analyze_binary_op insn lhs rhs
       | AssignOp (insn, lval, rhs) -> self#analyze_assign_op insn lval rhs
-      | Call (f, args) -> self#analyze_call f args
+      | Call (f, args) ->
+          (match f with
+          | HllFunc (lib, func) ->
+              HllTypes.infer_return hll_types lib func expected
+          | _ -> ());
+          self#analyze_call f args
       | TernaryOp (e1, e2, e3) ->
           let e1', _t1 = self#analyze_expr Bool e1
           and e2', t2 = self#analyze_expr expected e2
@@ -369,10 +375,12 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           (InterfaceCast (struc, e'), IFace struc)
 
     method private analyze_call callable args =
-      let analyze_args ?(overloads = fun () -> []) arg_types =
+      let analyze_args ?(overloads = fun () -> [])
+          ?(on_arg_type = fun _ _ -> ()) arg_types =
         let arg_types = without_void arg_types in
         List.mapi (List.zip_exn args arg_types) ~f:(fun i (arg, t) ->
             let arg', t' = self#analyze_expr t arg in
+            on_arg_type i t';
             unify_if_functype t t';
             match arg' with
             | UnaryOp ((FTOI | ITOF), _)
@@ -419,21 +427,22 @@ class analyzer (func : Ain.Function.t) (struc : Ain.Struct.t option) =
           | _, (Array elem_ty | Ref (Array elem_ty)) ->
               let args =
                 analyze_args
-                  (HllTypes.param_types "Array" func
+                  (HllTypes.param_types hll_types "Array" func
                   |> List.map ~f:(Type.replace_hll_param elem_ty))
               in
               ( Call (expr, args),
                 Type.replace_hll_param elem_ty
-                  (HllTypes.return_type "Array" func) )
+                  (HllTypes.return_type hll_types "Array" func) )
           | _, t ->
               Printf.failwithf "Array expected, got %s" (show_ain_type t) ())
       | HllFunc (lib, func) as expr ->
           let args =
             analyze_args
               ~overloads:(fun () -> hll_overloads lib func)
-              (Ain.HLL.arg_types func)
+              ~on_arg_type:(HllTypes.infer_param hll_types lib func)
+              (HllTypes.param_types hll_types lib func)
           in
-          (Call (expr, args), func.return_type)
+          (Call (expr, args), HllTypes.return_type hll_types lib func)
       | SysCall n as expr ->
           let syscall = Instructions.syscalls.(n) in
           let args = analyze_args syscall.arg_types in

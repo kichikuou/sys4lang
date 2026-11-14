@@ -201,7 +201,8 @@ let rec interface_value obj vofs =
 let resolve_method ctx obj index =
   let fid =
     match
-      (new TypeAnalysis.analyzer ctx.func ctx.struc)#analyze_expr Any obj
+      (new TypeAnalysis.analyzer (HllTypes.create ()) ctx.func ctx.struc)
+        #analyze_expr Any obj
     with
     | _, (Struct s | Ref (Struct s)) -> Ain.ain.strt.(s).vtable.(index)
     | _, (IFace iface | Ref (IFace iface)) -> (

@@ -19,6 +19,7 @@ type decompiled_ain = {
   globals : CodeGen.variable list;
   global_lambdas : CodeGen.function_t list;
   enums : CodeGen.enum_t array;
+  hll_types : HllTypes.t;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
 }

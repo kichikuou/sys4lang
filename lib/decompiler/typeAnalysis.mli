@@ -17,7 +17,7 @@
 open Base
 open Loc
 
-class analyzer : Ain.Function.t -> Ain.Struct.t option -> object
+class analyzer : HllTypes.t -> Ain.Function.t -> Ain.Struct.t option -> object
   method analyze_expr : Ain.type_t -> Ast.expr -> Ast.expr * Ain.type_t
   method analyze_lvalue : Ast.lvalue -> Ast.lvalue * Ain.type_t
   method analyze_statement : Ast.statement loc -> Ast.statement loc

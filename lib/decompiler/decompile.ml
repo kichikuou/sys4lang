@@ -121,7 +121,7 @@ let rewrite_dhr_battle_busho_array (f : CodeSection.function_t) stmt =
         | _ -> stmt)
     | _ -> stmt
 
-let rec decompile_function ~lambdas (f : CodeSection.function_t) =
+let rec decompile_function ~hll_types ~lambdas (f : CodeSection.function_t) =
   let struc = match f.owner with Some (Struct s) -> Some s | _ -> None in
   let body =
     BasicBlock.create f
@@ -129,11 +129,12 @@ let rec decompile_function ~lambdas (f : CodeSection.function_t) =
     |> ControlFlow.analyze
     |> BasicBlock.prepend_var_decls f.func
     |> rewrite_dhr_battle_busho_array f
-    |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
+    |> (new TypeAnalysis.analyzer hll_types f.func struc)#analyze_statement
     |> Transform.apply_all_transforms
   in
   let lambdas =
-    collect_lambdas lambdas f body |> List.map ~f:(decompile_function ~lambdas)
+    collect_lambdas lambdas f body
+    |> List.map ~f:(decompile_function ~hll_types ~lambdas)
   in
   CodeGen.{ func = f.func; struc; name = f.name; body; lambdas }
 
@@ -151,8 +152,8 @@ let rec inspect_function (f : CodeSection.function_t) ~lambdas ~print_addr =
   |> (fun stmt ->
   Stdio.printf "\nAST representation:\n%s\n" ([%show: Ast.statement loc] stmt);
   stmt)
-  |> (new TypeAnalysis.analyzer f.func struc)#analyze_statement
-  |> Transform.apply_all_transforms
+  |> (new TypeAnalysis.analyzer (HllTypes.create ()) f.func struc)
+       #analyze_statement |> Transform.apply_all_transforms
   |> fun body ->
   let printer = new CodeGen.code_printer ~print_addr "" in
   let lambdas =
@@ -259,6 +260,7 @@ type decompiled_ain = {
   globals : CodeGen.variable list;
   global_lambdas : CodeGen.function_t list;
   enums : CodeGen.enum_t array;
+  hll_types : HllTypes.t;
   srcs : (string * CodeGen.function_t list) list;
   ain_minor_version : int;
 }
@@ -290,7 +292,7 @@ let is_rance7_bad_function (f : CodeGen.function_t) =
   | _ -> false
 [@@ocamlformat "disable"]
 
-let process_generated_constructors (structs : CodeGen.struct_t array)
+let process_generated_constructors ~hll_types (structs : CodeGen.struct_t array)
     (parsed : CodeSection.t) =
   {
     parsed with
@@ -305,7 +307,10 @@ let process_generated_constructors (structs : CodeGen.struct_t array)
                  _;
                 } -> (
                     try
-                      let f = decompile_function ~lambdas:parsed.lambdas func in
+                      let f =
+                        decompile_function ~hll_types ~lambdas:parsed.lambdas
+                          func
+                      in
                       let inits =
                         analyze_initializer_function f.body struc.members
                       in
@@ -417,13 +422,14 @@ let decompile ~move_to_original_file ~continue_on_error =
           })
   in
   let global_lambdas = ref [] in
+  let hll_types = HllTypes.create () in
   let CodeSection.{ files; lambdas } =
     let open CodeSection in
     CodeSection.parse code
     |> remove_overridden_functions ~move_to_original_file
     |> fix_or_remove_known_broken_functions
     (* For vtable analysis, generated constructors need to be processed first. *)
-    |> process_generated_constructors structs
+    |> process_generated_constructors ~hll_types structs
   in
   let enums =
     Array.map Ain.ain.enum ~f:(fun name -> CodeGen.{ name; values = [] })
@@ -434,7 +440,7 @@ let decompile ~move_to_original_file ~continue_on_error =
         let decompiled_funcs = ref [] in
         let process_func func =
           try
-            let f = decompile_function ~lambdas func in
+            let f = decompile_function ~hll_types ~lambdas func in
             match func with
             | { owner = Some (Enum id); name = "String"; _ } ->
                 enums.(id).values <- extract_enum_values f.body.txt
@@ -479,6 +485,7 @@ let decompile ~move_to_original_file ~continue_on_error =
     globals = !globals;
     global_lambdas = !global_lambdas;
     enums;
+    hll_types;
     ain_minor_version;
   }
 
@@ -499,7 +506,7 @@ let inspect funcname ~print_addr =
   let CodeSection.{ files; lambdas } =
     CodeSection.parse code
     |> CodeSection.remove_overridden_functions ~move_to_original_file:false
-    |> process_generated_constructors structs
+    |> process_generated_constructors ~hll_types:(HllTypes.create ()) structs
   in
   match
     List.find_map files ~f:(fun (_, funcs) ->
@@ -540,7 +547,7 @@ let export ~print_addr decompiled ain_path write_to_file =
   Array.iter Ain.ain.hll0 ~f:(fun hll ->
       generate ~add_to_inc:false
         ("HLL/" ^ hll.name ^ ".hll")
-        (fun pr -> pr#print_hll hll));
+        (fun pr -> pr#print_hll decompiled.hll_types hll));
   generate "HLL\\hll.inc" (fun pr -> pr#print_hll_inc);
   List.iter decompiled.srcs ~f:(fun (fname, funcs) ->
       if not (List.is_empty funcs) then
